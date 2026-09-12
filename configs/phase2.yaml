@@ -1,0 +1,25 @@
+phase: phase2
+model:
+  id: Qwen/Qwen3.5-9B
+  revision: null
+  dtype: bfloat16
+  trust_remote_code: false
+calibration:
+  path: data/calibration/phase2.jsonl
+  num_samples: 512
+  max_sequence_length: 2048
+  seed: 42
+evaluation:
+  path: data/evaluation/phase2.jsonl
+  max_samples: null
+  max_new_tokens: 256
+  seed: 42
+paths:
+  outputs: outputs/phase2
+  results: results/phase2
+variants:
+  - {name: bf16, method: bf16}
+  - {name: strong_gptq_baseline, method: gptq, scheme: W4A16, bits: 4, group_size: 128}
+  - {name: strong_awq_baseline, method: awq, scheme: W4A16_ASYM, bits: 4, group_size: 128}
+  # Add the selected Phase 1 recipe here only after its evidence is complete.
+

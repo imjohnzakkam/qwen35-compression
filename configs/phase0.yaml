@@ -1,0 +1,42 @@
+phase: phase0
+model:
+  id: Qwen/Qwen3.5-0.8B
+  revision: null
+  dtype: bfloat16
+  trust_remote_code: false
+calibration:
+  path: data/calibration/phase0.jsonl
+  num_samples: 16
+  max_sequence_length: 512
+  seed: 42
+evaluation:
+  path: data/evaluation/phase0.jsonl
+  max_samples: 6
+  max_new_tokens: 24
+  seed: 42
+paths:
+  outputs: outputs/phase0
+  results: results/phase0
+variants:
+  - name: bf16
+    method: bf16
+  - name: int8_w8a8
+    method: int8
+    scheme: W8A8
+    ignore: &smoke_ignore
+      - lm_head
+      - "re:.*visual.*"
+      - "re:.*embed_tokens$"
+  - name: gptq_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *smoke_ignore
+  - name: awq_w4a16_g128
+    method: awq
+    scheme: W4A16_ASYM
+    bits: 4
+    group_size: 128
+    ignore: *smoke_ignore
+

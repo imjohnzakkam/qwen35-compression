@@ -6,23 +6,23 @@ readme = "README.md"
 requires-python = ">=3.12,<3.14"
 
 dependencies = [
-    "torch>=2.10",
-    "torchvision",
-    "transformers>=5.2.0",
-    "accelerate",
-    "datasets",
-    "safetensors",
-    "huggingface-hub",
-    "numpy",
-    "pillow",
-    "tqdm",
-    "pyyaml",
+    "torch>=2.10,<2.11",
+    "torchvision>=0.25,<0.26",
+    "transformers>=5.9,<=5.14.1",
+    "accelerate>=1.12,<2",
+    "datasets>=4.5,<5",
+    "safetensors>=0.7,<0.8",
+    "huggingface-hub>=1.4,<2",
+    "numpy>=2.2,<3",
+    "pillow>=12,<13",
+    "tqdm>=4.67,<5",
+    "pyyaml>=6.0.2,<7",
 
     # Quantization
-    "llmcompressor[qwen]>=0.13.0",
+    "llmcompressor[qwen]==0.13.0; sys_platform == 'linux'",
 
     # Text evaluation
-    "lm-eval[hf]",
+    "lm-eval[hf]>=0.4.11,<0.5",
 ]
 
 [build-system]
@@ -34,8 +34,8 @@ where = ["src"]
 
 [dependency-groups]
 dev = [
-    "ruff",
-    "pytest",
+    "ruff>=0.13,<0.14",
+    "pytest>=8.4,<9",
     "ipykernel",
 ]
 
