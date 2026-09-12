@@ -18,7 +18,8 @@ def test_phase0_fixtures_are_valid_and_sized() -> None:
     assert len(evaluation) >= config.evaluation.max_samples
 
 
-def test_export_manifest_detects_mutation(tmp_path: Path) -> None:
+def test_export_manifest_detects_mutation(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("QWEN35_CODE_REVISION", "abc123")
     config = load_config(ROOT / "configs/phase0.yaml")
     variant = config.variant("gptq_w4a16_g128")
     (tmp_path / "config.json").write_text(
@@ -27,7 +28,8 @@ def test_export_manifest_detects_mutation(tmp_path: Path) -> None:
     )
     (tmp_path / "model.safetensors").write_bytes(b"weights")
     write_export_manifest(tmp_path, config, variant, "revision", 1.0, 100)
-    verify_export(tmp_path, variant)
+    manifest = verify_export(tmp_path, variant)
+    assert manifest["code_revision"] == "abc123"
     (tmp_path / "model.safetensors").write_bytes(b"changed")
     with pytest.raises(ValueError, match="digest mismatch"):
         verify_export(tmp_path, variant)

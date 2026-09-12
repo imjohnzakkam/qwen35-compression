@@ -6,6 +6,7 @@ from typing import Any
 
 from qwen35_compression.config import ExperimentConfig, VariantConfig
 from qwen35_compression.io import inventory, write_json
+from qwen35_compression.provenance import git_revision
 
 MANIFEST_NAME = "compression_manifest.json"
 
@@ -26,6 +27,7 @@ def write_export_manifest(
         "method": variant.method,
         "model_id": config.model.id,
         "model_revision": model_revision,
+        "code_revision": git_revision(config.source_path.parent.parent),
         "config_digest": config.digest,
         "quantization": {
             "scheme": variant.scheme,
@@ -51,6 +53,8 @@ def verify_export(output_dir: Path, expected: VariantConfig | None = None) -> di
         raise ValueError(
             f"manifest variant {manifest['variant']!r} does not match {expected.name!r}"
         )
+    if not manifest.get("code_revision"):
+        raise ValueError("export manifest has no code_revision")
     required = {"config.json"}
     names = {item["path"] for item in manifest["files"]}
     missing = required - names
