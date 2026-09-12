@@ -44,7 +44,7 @@ def main() -> None:
     write_json(result_path, result)
     print(f"result={result_path}")
     print(f"perplexity={metrics['perplexity']:.6f}")
-    print(f"prefix_accuracy={metrics['prefix_accuracy']:.6f}")
+    print(f"reference_containment={metrics['reference_containment']:.6f}")
     del model, processor
     gc.collect()
 

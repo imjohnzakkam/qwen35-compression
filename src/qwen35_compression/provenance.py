@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import platform
 import subprocess
 from pathlib import Path
@@ -15,6 +16,9 @@ def _version(package: str) -> str | None:
 
 
 def git_revision(root: Path) -> str | None:
+    injected = os.environ.get("QWEN35_CODE_REVISION")
+    if injected:
+        return injected
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=root,

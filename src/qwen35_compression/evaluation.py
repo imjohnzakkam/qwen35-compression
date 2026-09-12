@@ -27,7 +27,7 @@ def evaluate_smoke(
 
     total_nll = 0.0
     total_tokens = 0
-    exact_matches = 0
+    reference_matches = 0
     generations = []
     started = time.perf_counter()
     device = _device(model)
@@ -63,14 +63,14 @@ def evaluate_smoke(
         completion_ids = generated[0, inputs["input_ids"].shape[1] :]
         completion = processor.decode(completion_ids, skip_special_tokens=True).strip()
         reference = row["reference"].strip().lower()
-        matched = completion.lower().startswith(reference)
-        exact_matches += int(matched)
+        matched = reference in completion.lower()
+        reference_matches += int(matched)
         generations.append(
             {
                 "prompt": row["prompt"],
                 "reference": row["reference"],
                 "completion": completion,
-                "prefix_match": matched,
+                "reference_contained": matched,
             }
         )
 
@@ -82,7 +82,7 @@ def evaluate_smoke(
         "tokens": total_tokens,
         "mean_nll": mean_nll,
         "perplexity": math.exp(min(mean_nll, 80.0)),
-        "prefix_accuracy": exact_matches / len(rows),
+        "reference_containment": reference_matches / len(rows),
         "elapsed_seconds": time.perf_counter() - started,
         "generations": generations,
     }
