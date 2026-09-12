@@ -18,6 +18,7 @@ from qwen35_compression.feature1 import (
 )
 from qwen35_compression.io import write_json
 from qwen35_compression.models import download_model, resolve_revision
+from qwen35_compression.provenance import git_revision
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -160,7 +161,9 @@ def main() -> None:
         "variant": "bf16",
         "model_id": config.model.id,
         "model_revision": revision,
+        "code_revision": git_revision(ROOT),
         "config_digest": config.digest,
+        "scope": "text_only" if args.text_only else "text_and_vision",
         "limit": args.limit,
         "research_result": args.limit is None,
         "status": "running",
