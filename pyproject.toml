@@ -1,0 +1,47 @@
+[project]
+name = "qwen35-compression"
+version = "0.1.0"
+description = "Compression and quantization experiments for Qwen3.5"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+
+dependencies = [
+    "torch>=2.10",
+    "torchvision",
+    "transformers>=5.2.0",
+    "accelerate",
+    "datasets",
+    "safetensors",
+    "huggingface-hub",
+    "numpy",
+    "pillow",
+    "tqdm",
+    "pyyaml",
+
+    # Quantization
+    "llmcompressor[qwen]>=0.13.0",
+
+    # Text evaluation
+    "lm-eval[hf]",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "pytest",
+    "ipykernel",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
