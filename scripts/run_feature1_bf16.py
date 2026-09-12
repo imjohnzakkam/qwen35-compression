@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -52,10 +53,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("results/feature1/bf16"))
     parser.add_argument("--limit", help="Pilot-only per-task limit")
     parser.add_argument("--text-only", action="store_true")
+    parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.limit and not args.text_only:
         raise ValueError("--limit is text-only pilot mode; also pass --text-only")
+    code_revision = args.code_revision or git_revision(ROOT)
+    if not code_revision:
+        raise ValueError("producer code revision is required")
+    os.environ["QWEN35_CODE_REVISION"] = code_revision
 
     config = load_config(args.config)
     if config.feature != "feature1":
@@ -167,7 +173,7 @@ def main() -> None:
         "variant": "bf16",
         "model_id": config.model.id,
         "model_revision": revision,
-        "code_revision": git_revision(ROOT),
+        "code_revision": code_revision,
         "config_digest": config.digest,
         "scope": "text_only" if args.text_only else "text_and_vision",
         "limit": args.limit,
