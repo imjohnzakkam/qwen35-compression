@@ -5,6 +5,8 @@ import argparse
 import gc
 from pathlib import Path
 
+import _bootstrap  # noqa: F401
+
 from qwen35_compression.config import load_config
 from qwen35_compression.evaluation import evaluate_smoke
 from qwen35_compression.export import verify_export

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 
+import _bootstrap  # noqa: F401
+
 from qwen35_compression.config import load_config
 from qwen35_compression.models import download_model
 

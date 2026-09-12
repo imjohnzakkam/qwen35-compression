@@ -7,6 +7,8 @@ import sys
 import time
 from pathlib import Path
 
+import _bootstrap  # noqa: F401
+
 from qwen35_compression.config import load_config
 from qwen35_compression.io import write_json
 
