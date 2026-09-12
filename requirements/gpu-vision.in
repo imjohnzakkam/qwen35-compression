@@ -1,0 +1,6 @@
+# VLMEvalKit is pinned by configs/toolchains.yaml and installed with --no-deps
+# after this complete dependency graph is synchronized.
+-r ../external/VLMEvalKit/requirements.txt
+vllm==0.1.1.dev70+gdff76bc3e
+datasets==4.8.5
+transformers==5.12.1

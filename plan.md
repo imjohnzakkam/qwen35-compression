@@ -9,15 +9,15 @@ First milestone, and nothing else counts until it is reproducible end to end:
 
 > BF16 vs INT8 vs GPTQ-W4A16 vs AWQ-W4A16, evaluated on identical text and multimodal benchmarks.
 
-Execution is explicitly staged by model size:
+Features are explicitly scoped by model size:
 
-1. Phase 0: prove download, BF16, INT8, GPTQ, AWQ, evaluation, and export on
+1. Feature 0: prove download, BF16, INT8, GPTQ, AWQ, evaluation, and export on
    `Qwen/Qwen3.5-0.8B`.
-2. Phase 1: run the full baseline, group-size, component-sensitivity, and mixed-precision study on
+2. Feature 1: run the full baseline, group-size, component-sensitivity, and mixed-precision study on
    `Qwen/Qwen3.5-4B`.
-3. Phase 2: validate only BF16, strong baselines, and the best recipe on `Qwen/Qwen3.5-9B`.
+3. Feature 2: validate only BF16, strong baselines, and the best recipe on `Qwen/Qwen3.5-9B`.
 
-Do not download or run the 9B checkpoint during Phase 0.
+Do not download or run the 9B checkpoint during Feature 0.
 
 ---
 
@@ -32,8 +32,11 @@ uv export --format requirements-txt > requirements.txt
 
 Qwen3.5 requires Transformers 5.x. `llmcompressor` 0.13.0 requires Transformers 5.9 through
 5.14.1 and exposes a `qwen` extra, so the environment pins that compatible range.
-`lm-eval` deliberately keeps model backends out of its base install, so the Hugging Face backend
-comes from `lm-eval[hf]`.
+Feature 1 text evaluation uses the pinned vLLM nightly because Qwen3.5's optimized DeltaNet kernels
+make the full suite materially cheaper than the Transformers fallback. Compression, text
+evaluation, and vision evaluation use separate environments: their Torch, `compressed-tensors`,
+and ANTLR constraints are incompatible. The complete Linux graphs are frozen in
+`requirements/gpu-text.lock` and `requirements/gpu-vision.lock`.
 
 Setup:
 
@@ -106,24 +109,24 @@ Every quantized checkpoint gets a stable name used consistently across configs, 
 directories, results files, and tables: `bf16`, `int8_w8a8`, `gptq_w4a16_g128`, `gptq_w4a16_g32`,
 `awq_w4a16_g128`, `awq_w4a16_g32`, then the mixed-precision variants.
 
-The Phase 0 working loop:
+The Feature 0 working loop:
 
 ```bash
 uv sync
 
-uv run python scripts/download_model.py --config configs/phase0.yaml
-uv run python scripts/evaluate.py --config configs/phase0.yaml --variant bf16
-uv run python scripts/quantize.py --config configs/phase0.yaml --variant gptq_w4a16_g128
-uv run python scripts/quantize.py --config configs/phase0.yaml --variant awq_w4a16_g128
-uv run python scripts/evaluate.py --config configs/phase0.yaml --variant gptq_w4a16_g128
-uv run python scripts/verify_export.py --config configs/phase0.yaml --variant gptq_w4a16_g128
+uv run python scripts/download_model.py --config configs/feature0.yaml
+uv run python scripts/evaluate.py --config configs/feature0.yaml --variant bf16
+uv run python scripts/quantize.py --config configs/feature0.yaml --variant gptq_w4a16_g128
+uv run python scripts/quantize.py --config configs/feature0.yaml --variant awq_w4a16_g128
+uv run python scripts/evaluate.py --config configs/feature0.yaml --variant gptq_w4a16_g128
+uv run python scripts/verify_export.py --config configs/feature0.yaml --variant gptq_w4a16_g128
 ```
 
 ---
 
 ## Stage 1 — Baseline setup
 
-Download the post-trained checkpoint selected by the active phase and pin its revision hash. Record the hash,
+Download the post-trained checkpoint selected by the active feature and pin its revision hash. Record the hash,
 `transformers` version, torch version, GPU type, and driver in `results/environment.json`. Every
 result file references that environment record so a number can always be traced back to the stack
 that produced it.
@@ -334,7 +337,7 @@ size. If it does not, that is a real result and gets reported as one.
 ## Execution order
 
 ```text
-Phase 0 (0.8B):
+Feature 0 (0.8B):
 
 1. uv sync, verify torch and transformers import
 2. Pin and download Qwen3.5-0.8B
@@ -342,7 +345,7 @@ Phase 0 (0.8B):
 4. Run INT8, GPTQ W4A16 g128, and AWQ W4A16 g128
 5. Verify every compressed export and run the identical smoke evaluation
 
-Phase 1 (4B), only after Phase 0 passes:
+Feature 1 (4B), only after Feature 0 passes:
 
 6. Run the full BF16 text and vision evaluations
 7. Freeze the full calibration set
@@ -350,7 +353,7 @@ Phase 1 (4B), only after Phase 0 passes:
 9. Run component-wise experiments and the sensitivity sweep
 10. Design and evaluate mixed precision
 
-Phase 2 (9B), only after selecting the Phase 1 recipe:
+Feature 2 (9B), only after selecting the Feature 1 recipe:
 
 11. Run BF16, strong baselines, and the best recipe
 12. Produce the final accuracy and size comparison

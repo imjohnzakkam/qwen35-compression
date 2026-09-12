@@ -10,8 +10,8 @@ from qwen35_compression.io import read_jsonl
 ROOT = Path(__file__).parent.parent
 
 
-def test_phase0_fixtures_are_valid_and_sized() -> None:
-    config = load_config(ROOT / "configs/phase0.yaml")
+def test_feature0_fixtures_are_valid_and_sized() -> None:
+    config = load_config(ROOT / "configs/feature0.yaml")
     calibration = read_jsonl(config.calibration.path)
     evaluation = read_jsonl(config.evaluation.path)
     assert len(calibration) == config.calibration.num_samples
@@ -20,7 +20,7 @@ def test_phase0_fixtures_are_valid_and_sized() -> None:
 
 def test_export_manifest_detects_mutation(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("QWEN35_CODE_REVISION", "abc123")
-    config = load_config(ROOT / "configs/phase0.yaml")
+    config = load_config(ROOT / "configs/feature0.yaml")
     variant = config.variant("gptq_w4a16_g128")
     (tmp_path / "config.json").write_text(
         json.dumps({"quantization_config": {"format": "pack-quantized"}}),

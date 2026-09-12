@@ -1,0 +1,6 @@
+# Separate from compression and vision: these stacks require incompatible
+# Torch/compressed-tensors and ANTLR versions.
+lm-eval[ifeval,math]==0.4.13
+vllm==0.1.1.dev70+gdff76bc3e
+datasets==4.8.5
+transformers==5.12.1

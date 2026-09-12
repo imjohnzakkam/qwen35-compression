@@ -1,0 +1,91 @@
+variants:
+  - name: bf16
+    method: bf16
+
+  - name: int8_w8a8
+    method: int8
+    bits: 8
+    scheme: W8A8
+    ignore: &text_calibration_ignore
+      - lm_head
+      - "re:.*visual.*"
+      - "re:.*embed_tokens$"
+
+  - name: gptq_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+
+  - name: gptq_w4a16_g64
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 64
+    ignore: *text_calibration_ignore
+
+  - name: gptq_w4a16_g32
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 32
+    ignore: *text_calibration_ignore
+
+  - name: awq_w4a16_g128
+    method: awq
+    scheme: W4A16_ASYM
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+
+  - name: sensitivity_deltanet_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    targets:
+      - "re:.*linear_attn.*"
+
+  - name: sensitivity_attention_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    targets:
+      - "re:.*self_attn.*"
+
+  - name: sensitivity_ffn_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    targets:
+      - "re:.*mlp.*"
+
+  - name: sensitivity_vision_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    targets:
+      - "re:.*visual.*"
+    requires_multimodal_calibration: true
+
+  - name: mixed_w8_sensitive_w4_standard
+    method: mixed
+    ignore:
+      - lm_head
+      - "re:.*embed_tokens.*"
+    groups:
+      - name: sensitive_w8
+        targets:
+          - "re:.*linear_attn.*"
+        scheme: W8A16
+        group_size: 128
+      - name: standard_w4
+        targets:
+          - "re:.*self_attn.*"
+          - "re:.*mlp.*"
+        scheme: W4A16
+        group_size: 128

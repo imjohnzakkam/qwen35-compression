@@ -7,8 +7,8 @@ from qwen35_compression.config import load_config
 ROOT = Path(__file__).parent.parent
 
 
-def test_phase0_is_locked_to_small_model() -> None:
-    config = load_config(ROOT / "configs/phase0.yaml")
+def test_feature0_is_locked_to_small_model() -> None:
+    config = load_config(ROOT / "configs/feature0.yaml")
     assert config.model.id == "Qwen/Qwen3.5-0.8B"
     assert [variant.name for variant in config.variants] == [
         "bf16",
@@ -19,12 +19,12 @@ def test_phase0_is_locked_to_small_model() -> None:
 
 
 def test_unknown_variant_lists_choices() -> None:
-    config = load_config(ROOT / "configs/phase0.yaml")
+    config = load_config(ROOT / "configs/feature0.yaml")
     with pytest.raises(ValueError, match="unknown variant"):
         config.variant("not-real")
 
 
 def test_config_paths_are_absolute() -> None:
-    config = load_config(ROOT / "configs/phase0.yaml")
+    config = load_config(ROOT / "configs/feature0.yaml")
     assert config.calibration.path.is_absolute()
     assert config.paths.outputs.is_absolute()

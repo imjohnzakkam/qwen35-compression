@@ -1,0 +1,39 @@
+feature: feature1
+variants_path: configs/variants/feature1.yaml
+model:
+  id: Qwen/Qwen3.5-4B
+  revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  dtype: bfloat16
+  trust_remote_code: false
+calibration:
+  path: data/calibration/feature1.jsonl
+  lock_path: data/calibration/feature1.lock.json
+  num_samples: 512
+  max_sequence_length: 2048
+  seed: 42
+  source:
+    dataset_id: HuggingFaceH4/ultrachat_200k
+    revision: 8049631c405ae6576f93f445c6b8166f76f5505a
+    split: train_sft
+    messages_column: messages
+multimodal_calibration:
+  path: data/calibration/feature1_multimodal.jsonl
+  assets_dir: data/calibration/feature1_multimodal/images
+  lock_path: data/calibration/feature1_multimodal.lock.json
+  num_samples: 128
+  seed: 42
+  source:
+    dataset_id: phiyodr/coco2017
+    revision: 036f3f8291db64d17faad9b09e59dd30bb65c4d7
+    split: validation
+    image_url_column: coco_url
+    captions_column: captions
+evaluation:
+  mode: benchmark
+  suite_path: configs/evaluation/feature1.yaml
+  max_samples: null
+  max_new_tokens: 256
+  seed: 42
+paths:
+  outputs: outputs/feature1
+  results: results/feature1

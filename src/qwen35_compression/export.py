@@ -22,7 +22,7 @@ def write_export_manifest(
     files = inventory(output_dir, excluded_names=(MANIFEST_NAME,))
     manifest = {
         "schema_version": 1,
-        "phase": config.phase,
+        "feature": config.feature,
         "variant": variant.name,
         "method": variant.method,
         "model_id": config.model.id,

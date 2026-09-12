@@ -22,7 +22,7 @@ dependencies = [
     "llmcompressor[qwen]==0.13.0; sys_platform == 'linux'",
 
     # Text evaluation
-    "lm-eval[hf]>=0.4.11,<0.5",
+    "lm-eval[hf,ifeval,math]>=0.4.11,<0.5",
 ]
 
 [build-system]
@@ -45,3 +45,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

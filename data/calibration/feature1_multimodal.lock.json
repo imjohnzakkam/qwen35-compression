@@ -1,0 +1,1041 @@
+{
+  "captions_column": "captions",
+  "content_sha256": "a52d3f57646ce2b2355a52c5b6f5d9a5284fd435f8717f2606e084ba214a1ef0",
+  "contract_sha256": "fc7a929e1f34eb447870651c9061c902417bfd8d4a686ae5e39c978572fb40f1",
+  "dataset_id": "phiyodr/coco2017",
+  "image_url_column": "coco_url",
+  "images": [
+    {
+      "bytes": 158066,
+      "path": "data/calibration/feature1_multimodal/images/0000.jpg",
+      "sha256": "18a31a6894a29b529e50b472d359bb59417767b43b138d12a01454ebda3f1eb5",
+      "source_index": 912,
+      "source_url": "http://images.cocodataset.org/val2017/000000301061.jpg"
+    },
+    {
+      "bytes": 115752,
+      "path": "data/calibration/feature1_multimodal/images/0001.jpg",
+      "sha256": "a89dbf1e93c72e44335247a7f31a93e274c8d065e0b78210068f99feb216299a",
+      "source_index": 204,
+      "source_url": "http://images.cocodataset.org/val2017/000000261982.jpg"
+    },
+    {
+      "bytes": 237862,
+      "path": "data/calibration/feature1_multimodal/images/0002.jpg",
+      "sha256": "535751041007728ef08fac924635e2b76ae7026058d81edca903b4f9785a9d6c",
+      "source_index": 2253,
+      "source_url": "http://images.cocodataset.org/val2017/000000273760.jpg"
+    },
+    {
+      "bytes": 127505,
+      "path": "data/calibration/feature1_multimodal/images/0003.jpg",
+      "sha256": "24c0bc7b1f116d29b446ae5053c587e851e07a639444fb4919d148761062d7fe",
+      "source_index": 2006,
+      "source_url": "http://images.cocodataset.org/val2017/000000248400.jpg"
+    },
+    {
+      "bytes": 121222,
+      "path": "data/calibration/feature1_multimodal/images/0004.jpg",
+      "sha256": "cab3e31ffcf1280eeae580449164bbc659d9e558989be91c5e5a280eda030a4f",
+      "source_index": 1828,
+      "source_url": "http://images.cocodataset.org/val2017/000000382030.jpg"
+    },
+    {
+      "bytes": 212604,
+      "path": "data/calibration/feature1_multimodal/images/0005.jpg",
+      "sha256": "c133de510040fa23bd22cb0960c982e4ee387c654788da07547d5ebe8b8a23e3",
+      "source_index": 1143,
+      "source_url": "http://images.cocodataset.org/val2017/000000405691.jpg"
+    },
+    {
+      "bytes": 177945,
+      "path": "data/calibration/feature1_multimodal/images/0006.jpg",
+      "sha256": "b8e8d8f5fb32fb90cc1c064bbc0fad3846b3a6c1fc6773fe74700a86b184c315",
+      "source_index": 839,
+      "source_url": "http://images.cocodataset.org/val2017/000000029596.jpg"
+    },
+    {
+      "bytes": 247670,
+      "path": "data/calibration/feature1_multimodal/images/0007.jpg",
+      "sha256": "f4f730a011b99aaa7b9ee851b6ba4c77fe2e3c4c81d12d58b7221d0f1b199c01",
+      "source_index": 4467,
+      "source_url": "http://images.cocodataset.org/val2017/000000076547.jpg"
+    },
+    {
+      "bytes": 84587,
+      "path": "data/calibration/feature1_multimodal/images/0008.jpg",
+      "sha256": "2aedd846bfe767e86dc858282c286ff9bcd3f1303ef51dababc4bd459f5a5060",
+      "source_index": 712,
+      "source_url": "http://images.cocodataset.org/val2017/000000056344.jpg"
+    },
+    {
+      "bytes": 290994,
+      "path": "data/calibration/feature1_multimodal/images/0009.jpg",
+      "sha256": "5959931fc8486dec496c32739dbb14666050b5830473dcb68a6796fd0b5fa8ca",
+      "source_index": 4837,
+      "source_url": "http://images.cocodataset.org/val2017/000000080274.jpg"
+    },
+    {
+      "bytes": 97855,
+      "path": "data/calibration/feature1_multimodal/images/0010.jpg",
+      "sha256": "a986b0fa7951f11110d115946fd00cc3b27cb432144556695ed71559bc7e04a5",
+      "source_index": 3456,
+      "source_url": "http://images.cocodataset.org/val2017/000000263474.jpg"
+    },
+    {
+      "bytes": 161723,
+      "path": "data/calibration/feature1_multimodal/images/0011.jpg",
+      "sha256": "39cfdb31443de71adc046b7c8e9680d7eb91726e01e003078d8705cf9291eda1",
+      "source_index": 260,
+      "source_url": "http://images.cocodataset.org/val2017/000000384350.jpg"
+    },
+    {
+      "bytes": 213877,
+      "path": "data/calibration/feature1_multimodal/images/0012.jpg",
+      "sha256": "73f5b0fe070aaec65bbb7263d16d3d717a75304333fe939dcf086bd85d6ff2f9",
+      "source_index": 244,
+      "source_url": "http://images.cocodataset.org/val2017/000000038829.jpg"
+    },
+    {
+      "bytes": 117487,
+      "path": "data/calibration/feature1_multimodal/images/0013.jpg",
+      "sha256": "401a2acc9f34c0a7c34eb51b29285de817f2db3bc799e26aad942f11998c2e36",
+      "source_index": 767,
+      "source_url": "http://images.cocodataset.org/val2017/000000287545.jpg"
+    },
+    {
+      "bytes": 97937,
+      "path": "data/calibration/feature1_multimodal/images/0014.jpg",
+      "sha256": "74a8403ed7515330bca8c58cd1ad16d703507b8d3161fc7dc0d12272152d99fc",
+      "source_index": 1791,
+      "source_url": "http://images.cocodataset.org/val2017/000000365642.jpg"
+    },
+    {
+      "bytes": 387880,
+      "path": "data/calibration/feature1_multimodal/images/0015.jpg",
+      "sha256": "fc59935b296e9b8417ae6900069dfabed05be86b35fd3a0dc137320023fb4f06",
+      "source_index": 1905,
+      "source_url": "http://images.cocodataset.org/val2017/000000525286.jpg"
+    },
+    {
+      "bytes": 118296,
+      "path": "data/calibration/feature1_multimodal/images/0016.jpg",
+      "sha256": "f87552f48714dda9163196051781716d6ae1e26824f214237f604f9f829f9fa5",
+      "source_index": 4139,
+      "source_url": "http://images.cocodataset.org/val2017/000000554595.jpg"
+    },
+    {
+      "bytes": 151477,
+      "path": "data/calibration/feature1_multimodal/images/0017.jpg",
+      "sha256": "3a20a6c0f0c7d33b9c4d9a4fe9023446ce3f92e90b37792cb791c8e3d3ac4cb4",
+      "source_index": 4931,
+      "source_url": "http://images.cocodataset.org/val2017/000000023272.jpg"
+    },
+    {
+      "bytes": 230407,
+      "path": "data/calibration/feature1_multimodal/images/0018.jpg",
+      "sha256": "b07a2456f7eea2f05eb2276a00b174a4fe5863936774f501b2e76308b10bb16e",
+      "source_index": 217,
+      "source_url": "http://images.cocodataset.org/val2017/000000363207.jpg"
+    },
+    {
+      "bytes": 127290,
+      "path": "data/calibration/feature1_multimodal/images/0019.jpg",
+      "sha256": "fafc9091969e90cbabdb665d34d7df7ecd68847076900f82413c5c4014965962",
+      "source_index": 4597,
+      "source_url": "http://images.cocodataset.org/val2017/000000555005.jpg"
+    },
+    {
+      "bytes": 66896,
+      "path": "data/calibration/feature1_multimodal/images/0020.jpg",
+      "sha256": "32f20af72207328ba52ec32400909b1bdae37d55291b7fc4475e56c9e1c3a3b9",
+      "source_index": 1628,
+      "source_url": "http://images.cocodataset.org/val2017/000000190637.jpg"
+    },
+    {
+      "bytes": 209410,
+      "path": "data/calibration/feature1_multimodal/images/0021.jpg",
+      "sha256": "18a930e65771a5c2954229da0b448d2ab74b03a3e6179cae61c212d52f5ff3cd",
+      "source_index": 4464,
+      "source_url": "http://images.cocodataset.org/val2017/000000100274.jpg"
+    },
+    {
+      "bytes": 166801,
+      "path": "data/calibration/feature1_multimodal/images/0022.jpg",
+      "sha256": "27892bc3b96cad9c534ba8cc72dc30f8bb17541b30722d4a60d9541ebfa2b735",
+      "source_index": 3436,
+      "source_url": "http://images.cocodataset.org/val2017/000000375430.jpg"
+    },
+    {
+      "bytes": 266789,
+      "path": "data/calibration/feature1_multimodal/images/0023.jpg",
+      "sha256": "875de71a2c80883bdc8d7fe411a1a0e4e796c76998e15b230430e869d44a1fa3",
+      "source_index": 1805,
+      "source_url": "http://images.cocodataset.org/val2017/000000357501.jpg"
+    },
+    {
+      "bytes": 146909,
+      "path": "data/calibration/feature1_multimodal/images/0024.jpg",
+      "sha256": "fd2ee31aceafdd19a676f309d5ab6c9ff302bf28e494e5793b4481d02c594e52",
+      "source_index": 3679,
+      "source_url": "http://images.cocodataset.org/val2017/000000183049.jpg"
+    },
+    {
+      "bytes": 302213,
+      "path": "data/calibration/feature1_multimodal/images/0025.jpg",
+      "sha256": "fafe4c11d925614bc0ce75e5c9e0eb38b54cb2746f9a37deee657cbe5a2598d2",
+      "source_index": 4827,
+      "source_url": "http://images.cocodataset.org/val2017/000000149622.jpg"
+    },
+    {
+      "bytes": 156805,
+      "path": "data/calibration/feature1_multimodal/images/0026.jpg",
+      "sha256": "7110686f7909d235b993145e33ac6f5ae0baf8b89c308d5a32553aeb1601aed2",
+      "source_index": 2278,
+      "source_url": "http://images.cocodataset.org/val2017/000000484978.jpg"
+    },
+    {
+      "bytes": 243408,
+      "path": "data/calibration/feature1_multimodal/images/0027.jpg",
+      "sha256": "6b92c69bab355b6355112014b745db91f09ecd591e0bf7d9f8da5fe40e1e03d7",
+      "source_index": 53,
+      "source_url": "http://images.cocodataset.org/val2017/000000185250.jpg"
+    },
+    {
+      "bytes": 169679,
+      "path": "data/calibration/feature1_multimodal/images/0028.jpg",
+      "sha256": "7b22757133efa13a919d8e212ce57526a84748addfec32714b8ad06e4c97a463",
+      "source_index": 1307,
+      "source_url": "http://images.cocodataset.org/val2017/000000433774.jpg"
+    },
+    {
+      "bytes": 81731,
+      "path": "data/calibration/feature1_multimodal/images/0029.jpg",
+      "sha256": "0bf182b59b89f534d6f89a2b57c976c47b7f9a95e5e47a7f236b285b9211af14",
+      "source_index": 3462,
+      "source_url": "http://images.cocodataset.org/val2017/000000012667.jpg"
+    },
+    {
+      "bytes": 255569,
+      "path": "data/calibration/feature1_multimodal/images/0030.jpg",
+      "sha256": "59190452476d225d4848c3f874074340a2743456dfb95bc6e749e6b135ce862e",
+      "source_index": 2787,
+      "source_url": "http://images.cocodataset.org/val2017/000000363188.jpg"
+    },
+    {
+      "bytes": 108736,
+      "path": "data/calibration/feature1_multimodal/images/0031.jpg",
+      "sha256": "1bb3ef4577a7c11c55545532c7ec81fe1336105e5f1b9f38e47129eae9365187",
+      "source_index": 2276,
+      "source_url": "http://images.cocodataset.org/val2017/000000007818.jpg"
+    },
+    {
+      "bytes": 195226,
+      "path": "data/calibration/feature1_multimodal/images/0032.jpg",
+      "sha256": "e3e0a05408aa5e2a0a6554a51a4aa8c6707b149e97865ecd11a46be9ca6df16b",
+      "source_index": 1273,
+      "source_url": "http://images.cocodataset.org/val2017/000000054654.jpg"
+    },
+    {
+      "bytes": 154310,
+      "path": "data/calibration/feature1_multimodal/images/0033.jpg",
+      "sha256": "9c4f354219c5cf427d781457569ac068f0cb680185124a1f7b38907c7ae8c060",
+      "source_index": 1763,
+      "source_url": "http://images.cocodataset.org/val2017/000000425925.jpg"
+    },
+    {
+      "bytes": 194502,
+      "path": "data/calibration/feature1_multimodal/images/0034.jpg",
+      "sha256": "ef28348c38bbda4d69058695cc572506741ba6e06caeda31e631f69c4bed8049",
+      "source_index": 2757,
+      "source_url": "http://images.cocodataset.org/val2017/000000429761.jpg"
+    },
+    {
+      "bytes": 96552,
+      "path": "data/calibration/feature1_multimodal/images/0035.jpg",
+      "sha256": "dbc7d9ef1f9e15c8fdc67eeefbb74091b6d489af385bb85137e918e3d1b7e6f8",
+      "source_index": 837,
+      "source_url": "http://images.cocodataset.org/val2017/000000319935.jpg"
+    },
+    {
+      "bytes": 129858,
+      "path": "data/calibration/feature1_multimodal/images/0036.jpg",
+      "sha256": "8ea0f1195969c20030b2a7d90d008643582abeb0b7bff59a2fdd555d79c14ebf",
+      "source_index": 759,
+      "source_url": "http://images.cocodataset.org/val2017/000000017436.jpg"
+    },
+    {
+      "bytes": 131338,
+      "path": "data/calibration/feature1_multimodal/images/0037.jpg",
+      "sha256": "fc83614277d84eafe90c292704f5bc7597a2965c6b394bd36dea92bd481a4058",
+      "source_index": 3112,
+      "source_url": "http://images.cocodataset.org/val2017/000000440171.jpg"
+    },
+    {
+      "bytes": 158241,
+      "path": "data/calibration/feature1_multimodal/images/0038.jpg",
+      "sha256": "2572061c45d8a5928053f6fb64ab672f68967350ee07aaea7279fe0f02c51d33",
+      "source_index": 792,
+      "source_url": "http://images.cocodataset.org/val2017/000000153568.jpg"
+    },
+    {
+      "bytes": 116196,
+      "path": "data/calibration/feature1_multimodal/images/0039.jpg",
+      "sha256": "538c92ac8477d23ca6ada37abbe0bed84afdd5a3bd7af40b13d88a709309625e",
+      "source_index": 2940,
+      "source_url": "http://images.cocodataset.org/val2017/000000262440.jpg"
+    },
+    {
+      "bytes": 148083,
+      "path": "data/calibration/feature1_multimodal/images/0040.jpg",
+      "sha256": "78d97eb62d51e45b115154d82a6e56bf5dcfe4f967c74277f20df5e1532c0fba",
+      "source_index": 2817,
+      "source_url": "http://images.cocodataset.org/val2017/000000478862.jpg"
+    },
+    {
+      "bytes": 126021,
+      "path": "data/calibration/feature1_multimodal/images/0041.jpg",
+      "sha256": "bc9abed26b6569469bf53d051250140b913ca331c185087e640ae0cf9c934b88",
+      "source_index": 4945,
+      "source_url": "http://images.cocodataset.org/val2017/000000394275.jpg"
+    },
+    {
+      "bytes": 64065,
+      "path": "data/calibration/feature1_multimodal/images/0042.jpg",
+      "sha256": "69f89d6052178b9708bb241e0287fc7508cf971c41700414b0358494c648cbce",
+      "source_index": 2166,
+      "source_url": "http://images.cocodataset.org/val2017/000000402473.jpg"
+    },
+    {
+      "bytes": 121255,
+      "path": "data/calibration/feature1_multimodal/images/0043.jpg",
+      "sha256": "29228060eb9d01c28a6ee0f1424e9cdc5935e963e46e077133f538470c9858ac",
+      "source_index": 355,
+      "source_url": "http://images.cocodataset.org/val2017/000000323151.jpg"
+    },
+    {
+      "bytes": 97357,
+      "path": "data/calibration/feature1_multimodal/images/0044.jpg",
+      "sha256": "91b6a7a3f79c32d41c0768a7cc40392c1648944529731694218de0441d03a39b",
+      "source_index": 3763,
+      "source_url": "http://images.cocodataset.org/val2017/000000462728.jpg"
+    },
+    {
+      "bytes": 162551,
+      "path": "data/calibration/feature1_multimodal/images/0045.jpg",
+      "sha256": "8033e21b153383291f443ff8c89459e405441eac88e4ee617825f19182106d5c",
+      "source_index": 4392,
+      "source_url": "http://images.cocodataset.org/val2017/000000009914.jpg"
+    },
+    {
+      "bytes": 144311,
+      "path": "data/calibration/feature1_multimodal/images/0046.jpg",
+      "sha256": "68af357d19364a3f1f8e6a0479d72dc5f2fcf7d65ebf1d0724d39c55e39d8390",
+      "source_index": 1022,
+      "source_url": "http://images.cocodataset.org/val2017/000000177893.jpg"
+    },
+    {
+      "bytes": 195337,
+      "path": "data/calibration/feature1_multimodal/images/0047.jpg",
+      "sha256": "85c263242862fad8952482f70cc64326d067c62e06f5a2aca1300126ba8bd234",
+      "source_index": 3100,
+      "source_url": "http://images.cocodataset.org/val2017/000000368038.jpg"
+    },
+    {
+      "bytes": 153609,
+      "path": "data/calibration/feature1_multimodal/images/0048.jpg",
+      "sha256": "f7f10f095d48750b8a7115ce18c4a140c14f5f22f439963a30674d0ecf26ba86",
+      "source_index": 645,
+      "source_url": "http://images.cocodataset.org/val2017/000000489842.jpg"
+    },
+    {
+      "bytes": 120768,
+      "path": "data/calibration/feature1_multimodal/images/0049.jpg",
+      "sha256": "69c92ac515b372adeecba63f4cd49b12c9bc6f1a1c357f776c7d2985ea179445",
+      "source_index": 4522,
+      "source_url": "http://images.cocodataset.org/val2017/000000397279.jpg"
+    },
+    {
+      "bytes": 125225,
+      "path": "data/calibration/feature1_multimodal/images/0050.jpg",
+      "sha256": "585b9ab944861e297b49d352117de3ab59a5c3bd55f3a298bdf91b7a3a544678",
+      "source_index": 2401,
+      "source_url": "http://images.cocodataset.org/val2017/000000035326.jpg"
+    },
+    {
+      "bytes": 143208,
+      "path": "data/calibration/feature1_multimodal/images/0051.jpg",
+      "sha256": "59fca33672badaf0c9f0006ba0d1bcff367ea3cc25d2ba97af8eaaed3261c282",
+      "source_index": 2962,
+      "source_url": "http://images.cocodataset.org/val2017/000000307074.jpg"
+    },
+    {
+      "bytes": 129165,
+      "path": "data/calibration/feature1_multimodal/images/0052.jpg",
+      "sha256": "09d489992329d2a17186a82781c7d23d8c687ee580567babc7494f9bc8b1220a",
+      "source_index": 4729,
+      "source_url": "http://images.cocodataset.org/val2017/000000013004.jpg"
+    },
+    {
+      "bytes": 64930,
+      "path": "data/calibration/feature1_multimodal/images/0053.jpg",
+      "sha256": "e97a0f235655dc5f949aec21c84e11e743aa72004421d849ea923613e85c5d20",
+      "source_index": 1575,
+      "source_url": "http://images.cocodataset.org/val2017/000000289229.jpg"
+    },
+    {
+      "bytes": 85798,
+      "path": "data/calibration/feature1_multimodal/images/0054.jpg",
+      "sha256": "f6ab07518e0ea90fab0a6d2ecc19bea04bdbd3e35eb2217a88af30c3d1a8a5f9",
+      "source_index": 569,
+      "source_url": "http://images.cocodataset.org/val2017/000000322724.jpg"
+    },
+    {
+      "bytes": 209595,
+      "path": "data/calibration/feature1_multimodal/images/0055.jpg",
+      "sha256": "dbd1f174227e229843e51322fd72d09922a857f728d277261a7cd6cc60c23507",
+      "source_index": 375,
+      "source_url": "http://images.cocodataset.org/val2017/000000221708.jpg"
+    },
+    {
+      "bytes": 36714,
+      "path": "data/calibration/feature1_multimodal/images/0056.jpg",
+      "sha256": "5f4a78725b9f016407a69420d14222ecdc424994be22085318cdb6071c1ad7b7",
+      "source_index": 1866,
+      "source_url": "http://images.cocodataset.org/val2017/000000023359.jpg"
+    },
+    {
+      "bytes": 93740,
+      "path": "data/calibration/feature1_multimodal/images/0057.jpg",
+      "sha256": "9288cbba23a3f1a399f8e6825f6c37e2a24491b8225cd1635a60327c423fbf2f",
+      "source_index": 2370,
+      "source_url": "http://images.cocodataset.org/val2017/000000043581.jpg"
+    },
+    {
+      "bytes": 81320,
+      "path": "data/calibration/feature1_multimodal/images/0058.jpg",
+      "sha256": "062326d314aaea6fc36f5d3c2472bfb4359a8acbff9ce72c866e94687d78f072",
+      "source_index": 653,
+      "source_url": "http://images.cocodataset.org/val2017/000000411665.jpg"
+    },
+    {
+      "bytes": 128939,
+      "path": "data/calibration/feature1_multimodal/images/0059.jpg",
+      "sha256": "aa58c984b17e3a99a06cba95745642566bcb07358b3acc36095604123f5eef06",
+      "source_index": 1907,
+      "source_url": "http://images.cocodataset.org/val2017/000000530457.jpg"
+    },
+    {
+      "bytes": 238187,
+      "path": "data/calibration/feature1_multimodal/images/0060.jpg",
+      "sha256": "25b008f452e77d8618bb1cfb9380eb3c7d2dd43fe5c92c5cbcd949b3d4f9ce4b",
+      "source_index": 827,
+      "source_url": "http://images.cocodataset.org/val2017/000000334483.jpg"
+    },
+    {
+      "bytes": 128054,
+      "path": "data/calibration/feature1_multimodal/images/0061.jpg",
+      "sha256": "40c8b4f9a15f7687b871d3f69964597530b678aaece1fbe4be4a9603d5f6f216",
+      "source_index": 3113,
+      "source_url": "http://images.cocodataset.org/val2017/000000166768.jpg"
+    },
+    {
+      "bytes": 221181,
+      "path": "data/calibration/feature1_multimodal/images/0062.jpg",
+      "sha256": "abb81404f3a6cfcf5ad6bc07bf74127b671ddc3bff462528b9148a43bf7b65d7",
+      "source_index": 2277,
+      "source_url": "http://images.cocodataset.org/val2017/000000216419.jpg"
+    },
+    {
+      "bytes": 104963,
+      "path": "data/calibration/feature1_multimodal/images/0063.jpg",
+      "sha256": "3a994cffa3c30e9066f3083a507fb80bf863ea55075c8707bb8ddbe2dc69d834",
+      "source_index": 3714,
+      "source_url": "http://images.cocodataset.org/val2017/000000541291.jpg"
+    },
+    {
+      "bytes": 186178,
+      "path": "data/calibration/feature1_multimodal/images/0064.jpg",
+      "sha256": "f143614bc124b874eed21bbce20bbcc247e56bd5a2fd8028cecd0f5c88de4b7b",
+      "source_index": 2988,
+      "source_url": "http://images.cocodataset.org/val2017/000000161609.jpg"
+    },
+    {
+      "bytes": 176410,
+      "path": "data/calibration/feature1_multimodal/images/0065.jpg",
+      "sha256": "1dd31e9059c491992be2f562624eb4093e17aee08b4f7baf5ff9ea24543b0a33",
+      "source_index": 1332,
+      "source_url": "http://images.cocodataset.org/val2017/000000000776.jpg"
+    },
+    {
+      "bytes": 104276,
+      "path": "data/calibration/feature1_multimodal/images/0066.jpg",
+      "sha256": "f998d36b3522f75e07b308a85c949cc53516c2a6cd13347f566b7c0acb77d0ba",
+      "source_index": 3032,
+      "source_url": "http://images.cocodataset.org/val2017/000000187585.jpg"
+    },
+    {
+      "bytes": 118773,
+      "path": "data/calibration/feature1_multimodal/images/0067.jpg",
+      "sha256": "e76c6f262920b8c8ba89654061dd83d50a8937291e3f8cda6e3215c9235c686b",
+      "source_index": 2910,
+      "source_url": "http://images.cocodataset.org/val2017/000000253433.jpg"
+    },
+    {
+      "bytes": 181677,
+      "path": "data/calibration/feature1_multimodal/images/0068.jpg",
+      "sha256": "7cc3c7f7b8412661bb9010a294331533391d99cc637ae25802167600140150a1",
+      "source_index": 1716,
+      "source_url": "http://images.cocodataset.org/val2017/000000411530.jpg"
+    },
+    {
+      "bytes": 141587,
+      "path": "data/calibration/feature1_multimodal/images/0069.jpg",
+      "sha256": "48562a050aaa24b7bca00622774170ad34528bb1c00091cc3487d3854fbb67b4",
+      "source_index": 2187,
+      "source_url": "http://images.cocodataset.org/val2017/000000494188.jpg"
+    },
+    {
+      "bytes": 161966,
+      "path": "data/calibration/feature1_multimodal/images/0070.jpg",
+      "sha256": "cd8ed1bfcb916719993f1e8a9c2223da672545cdb150dc7b80bba85411da5e05",
+      "source_index": 584,
+      "source_url": "http://images.cocodataset.org/val2017/000000322352.jpg"
+    },
+    {
+      "bytes": 378591,
+      "path": "data/calibration/feature1_multimodal/images/0071.jpg",
+      "sha256": "1752e2ea7125cfc42c0b5e73390e647f98d0e32d7df9c528f6e839b108d672b7",
+      "source_index": 4990,
+      "source_url": "http://images.cocodataset.org/val2017/000000033759.jpg"
+    },
+    {
+      "bytes": 254679,
+      "path": "data/calibration/feature1_multimodal/images/0072.jpg",
+      "sha256": "9e758c0fd349209914833503940369d901e95c71bc644e50b9d14524467ed915",
+      "source_index": 1401,
+      "source_url": "http://images.cocodataset.org/val2017/000000565012.jpg"
+    },
+    {
+      "bytes": 217088,
+      "path": "data/calibration/feature1_multimodal/images/0073.jpg",
+      "sha256": "3e641c01b7abb3ce7f00c844cea36d71431c54fce70a23c1940e3a7bd07ce0a2",
+      "source_index": 4375,
+      "source_url": "http://images.cocodataset.org/val2017/000000309655.jpg"
+    },
+    {
+      "bytes": 175218,
+      "path": "data/calibration/feature1_multimodal/images/0074.jpg",
+      "sha256": "d9e151b4520f1c6627774f3544d12459d2ee0c0fcdd74f7630a0f93997f7581f",
+      "source_index": 2005,
+      "source_url": "http://images.cocodataset.org/val2017/000000497628.jpg"
+    },
+    {
+      "bytes": 97567,
+      "path": "data/calibration/feature1_multimodal/images/0075.jpg",
+      "sha256": "9f09af60f0a4f214a8b34ff6badbd25111cd8438c39097197a629255408cdb75",
+      "source_index": 1338,
+      "source_url": "http://images.cocodataset.org/val2017/000000022479.jpg"
+    },
+    {
+      "bytes": 103352,
+      "path": "data/calibration/feature1_multimodal/images/0076.jpg",
+      "sha256": "32ce2bb44c2650a805d6282b852f1d5c312cec7df0f8296835bf71005acbe29f",
+      "source_index": 3786,
+      "source_url": "http://images.cocodataset.org/val2017/000000054164.jpg"
+    },
+    {
+      "bytes": 137128,
+      "path": "data/calibration/feature1_multimodal/images/0077.jpg",
+      "sha256": "7ed1f3b86156096c5ae2521b046c371c844fe60e5cd959e7f3a022de15e5dadf",
+      "source_index": 3108,
+      "source_url": "http://images.cocodataset.org/val2017/000000224093.jpg"
+    },
+    {
+      "bytes": 169875,
+      "path": "data/calibration/feature1_multimodal/images/0078.jpg",
+      "sha256": "9c03f8050c99b23fd029103327791fc554d645abbec3604c1bcfdb626bfd8727",
+      "source_index": 2211,
+      "source_url": "http://images.cocodataset.org/val2017/000000539962.jpg"
+    },
+    {
+      "bytes": 116528,
+      "path": "data/calibration/feature1_multimodal/images/0079.jpg",
+      "sha256": "046a91829775a23d9b7429918615fb1879ebc9000335dd321f174aa67057bda0",
+      "source_index": 4562,
+      "source_url": "http://images.cocodataset.org/val2017/000000524850.jpg"
+    },
+    {
+      "bytes": 91590,
+      "path": "data/calibration/feature1_multimodal/images/0080.jpg",
+      "sha256": "c2f11a1c919b1d1969c879b79e51250b83baa0187b42c32a820f7406bc489803",
+      "source_index": 1799,
+      "source_url": "http://images.cocodataset.org/val2017/000000466339.jpg"
+    },
+    {
+      "bytes": 123499,
+      "path": "data/calibration/feature1_multimodal/images/0081.jpg",
+      "sha256": "7d2a3fa3b9172de2adafefbc87e5a13cfa00acabc75c4beaab848956c06407d1",
+      "source_index": 2656,
+      "source_url": "http://images.cocodataset.org/val2017/000000328430.jpg"
+    },
+    {
+      "bytes": 105535,
+      "path": "data/calibration/feature1_multimodal/images/0082.jpg",
+      "sha256": "32e240562398ba3a45d016e61bfa0761a6aa8a54a474bf6b819fef137d2dd59b",
+      "source_index": 458,
+      "source_url": "http://images.cocodataset.org/val2017/000000384670.jpg"
+    },
+    {
+      "bytes": 162182,
+      "path": "data/calibration/feature1_multimodal/images/0083.jpg",
+      "sha256": "9c7eaa2f0e81b3aeebc69ad8be667f5686afbb6f87bf4062c4ae4dbda86949c9",
+      "source_index": 1876,
+      "source_url": "http://images.cocodataset.org/val2017/000000483050.jpg"
+    },
+    {
+      "bytes": 108510,
+      "path": "data/calibration/feature1_multimodal/images/0084.jpg",
+      "sha256": "fdd53437fe0401dbf1e72ad8301f3a05e5d31856ace04c6b139ee6cff328ead7",
+      "source_index": 262,
+      "source_url": "http://images.cocodataset.org/val2017/000000189828.jpg"
+    },
+    {
+      "bytes": 154787,
+      "path": "data/calibration/feature1_multimodal/images/0085.jpg",
+      "sha256": "f4a69620b9c578112bdac7b7007aaa75d79e4b77e6b96318aa8b1a7defb3d4e5",
+      "source_index": 2584,
+      "source_url": "http://images.cocodataset.org/val2017/000000577976.jpg"
+    },
+    {
+      "bytes": 226557,
+      "path": "data/calibration/feature1_multimodal/images/0086.jpg",
+      "sha256": "d834e420e45937e34ecd56b75839fe2afdd4bb2239c0536a72997ae37f1e20e7",
+      "source_index": 3286,
+      "source_url": "http://images.cocodataset.org/val2017/000000460929.jpg"
+    },
+    {
+      "bytes": 121705,
+      "path": "data/calibration/feature1_multimodal/images/0087.jpg",
+      "sha256": "f8a2b4e4e006715d5d5cd17256e82c787d3bdc732d708bcf74645a7ed43ee7dd",
+      "source_index": 2193,
+      "source_url": "http://images.cocodataset.org/val2017/000000091619.jpg"
+    },
+    {
+      "bytes": 230734,
+      "path": "data/calibration/feature1_multimodal/images/0088.jpg",
+      "sha256": "8cef3815ef0704e21f1c9700db528de5159408edf517831c79b7eedab9a07557",
+      "source_index": 542,
+      "source_url": "http://images.cocodataset.org/val2017/000000092839.jpg"
+    },
+    {
+      "bytes": 159415,
+      "path": "data/calibration/feature1_multimodal/images/0089.jpg",
+      "sha256": "d6d088e414bb3638a5f578e5f3ea11d9e587e6a5efb72a23a796b61ef60dd99c",
+      "source_index": 1728,
+      "source_url": "http://images.cocodataset.org/val2017/000000034257.jpg"
+    },
+    {
+      "bytes": 170730,
+      "path": "data/calibration/feature1_multimodal/images/0090.jpg",
+      "sha256": "33faecadaa385037010b7d5d145b988805200a340cc2173508608662cc722d4c",
+      "source_index": 4646,
+      "source_url": "http://images.cocodataset.org/val2017/000000370900.jpg"
+    },
+    {
+      "bytes": 289171,
+      "path": "data/calibration/feature1_multimodal/images/0091.jpg",
+      "sha256": "091feaf5dbb6a28c71f83d0d91756aac8d176e7c3d31b766c484252440772457",
+      "source_index": 2577,
+      "source_url": "http://images.cocodataset.org/val2017/000000344816.jpg"
+    },
+    {
+      "bytes": 290565,
+      "path": "data/calibration/feature1_multimodal/images/0092.jpg",
+      "sha256": "31e0b9ff5ec4bffbe2948acaa40d3b048284d729d1179c60ed1fce41f87b7370",
+      "source_index": 1741,
+      "source_url": "http://images.cocodataset.org/val2017/000000530146.jpg"
+    },
+    {
+      "bytes": 71905,
+      "path": "data/calibration/feature1_multimodal/images/0093.jpg",
+      "sha256": "ec88d4895a9f697857b8ba6e38fba32fd2b7d62f44bbdc8c26be7be9c2d2cefa",
+      "source_index": 4089,
+      "source_url": "http://images.cocodataset.org/val2017/000000476491.jpg"
+    },
+    {
+      "bytes": 104558,
+      "path": "data/calibration/feature1_multimodal/images/0094.jpg",
+      "sha256": "deb91b4988babf28cc289521d785b3f4c4e3ae03c50f946ec5a8420484b514d3",
+      "source_index": 3241,
+      "source_url": "http://images.cocodataset.org/val2017/000000126107.jpg"
+    },
+    {
+      "bytes": 90564,
+      "path": "data/calibration/feature1_multimodal/images/0095.jpg",
+      "sha256": "b61281d7ad2ca043eb4a6066becd42586ab66394757171ee2f31277241b4bc51",
+      "source_index": 3758,
+      "source_url": "http://images.cocodataset.org/val2017/000000080949.jpg"
+    },
+    {
+      "bytes": 153779,
+      "path": "data/calibration/feature1_multimodal/images/0096.jpg",
+      "sha256": "c44a9df9185a2d9b8fb78cf8c15d2a890f166b936e93f4bd0181df6861d1379e",
+      "source_index": 1170,
+      "source_url": "http://images.cocodataset.org/val2017/000000507797.jpg"
+    },
+    {
+      "bytes": 116338,
+      "path": "data/calibration/feature1_multimodal/images/0097.jpg",
+      "sha256": "8f3eea478483e5b94935fe4e20da629a3631b28895899bccb5acc0fba5286060",
+      "source_index": 2169,
+      "source_url": "http://images.cocodataset.org/val2017/000000135670.jpg"
+    },
+    {
+      "bytes": 128916,
+      "path": "data/calibration/feature1_multimodal/images/0098.jpg",
+      "sha256": "a3e2453b0293f04a582274239f4a00290e968ef615480314c2cf00cff986f134",
+      "source_index": 2020,
+      "source_url": "http://images.cocodataset.org/val2017/000000357888.jpg"
+    },
+    {
+      "bytes": 180568,
+      "path": "data/calibration/feature1_multimodal/images/0099.jpg",
+      "sha256": "57740f11d008af86186d9dfa0b3bf93eef6399a4cf4613ffd3c392dfc2bf3543",
+      "source_index": 4598,
+      "source_url": "http://images.cocodataset.org/val2017/000000289702.jpg"
+    },
+    {
+      "bytes": 120292,
+      "path": "data/calibration/feature1_multimodal/images/0100.jpg",
+      "sha256": "d12e9c18535e8ee6774ebc7b9cf3cb1b37e4157f76daf1f3f17c84693bfa9465",
+      "source_index": 4415,
+      "source_url": "http://images.cocodataset.org/val2017/000000367228.jpg"
+    },
+    {
+      "bytes": 79709,
+      "path": "data/calibration/feature1_multimodal/images/0101.jpg",
+      "sha256": "bd95ac3004b39f0402190ef64fb79130a46b7ad141e4f0afa35f6cb120cbb8c2",
+      "source_index": 2152,
+      "source_url": "http://images.cocodataset.org/val2017/000000462643.jpg"
+    },
+    {
+      "bytes": 192233,
+      "path": "data/calibration/feature1_multimodal/images/0102.jpg",
+      "sha256": "183e2018079631fa23f89ce3d4f7d9ff0decaec41355a8348ed5dd5dfef33988",
+      "source_index": 4788,
+      "source_url": "http://images.cocodataset.org/val2017/000000055022.jpg"
+    },
+    {
+      "bytes": 201065,
+      "path": "data/calibration/feature1_multimodal/images/0103.jpg",
+      "sha256": "fe253a1fe03c68c5a031979513d4b593c3b297408c8a84e53e246e0cb9bb8b01",
+      "source_index": 3509,
+      "source_url": "http://images.cocodataset.org/val2017/000000270402.jpg"
+    },
+    {
+      "bytes": 173740,
+      "path": "data/calibration/feature1_multimodal/images/0104.jpg",
+      "sha256": "ef3e93663226a89789def6d1be02a244e9f524192127ee6c7a51aa3fa724b95a",
+      "source_index": 4780,
+      "source_url": "http://images.cocodataset.org/val2017/000000314264.jpg"
+    },
+    {
+      "bytes": 256324,
+      "path": "data/calibration/feature1_multimodal/images/0105.jpg",
+      "sha256": "c7a2792dca793ceaf05f97171d0f1c70800d6295099aebaff6dd0930382866bb",
+      "source_index": 3271,
+      "source_url": "http://images.cocodataset.org/val2017/000000335450.jpg"
+    },
+    {
+      "bytes": 163756,
+      "path": "data/calibration/feature1_multimodal/images/0106.jpg",
+      "sha256": "35668e0f1e026343b862ec9e0663558c92aa60883ecffde2a98f5c3832b4aa7f",
+      "source_index": 2965,
+      "source_url": "http://images.cocodataset.org/val2017/000000211674.jpg"
+    },
+    {
+      "bytes": 234922,
+      "path": "data/calibration/feature1_multimodal/images/0107.jpg",
+      "sha256": "7e4db164281de37dafa6d3a4e861f6777d0202661e92d11fb2b739e39fa8c391",
+      "source_index": 1796,
+      "source_url": "http://images.cocodataset.org/val2017/000000048924.jpg"
+    },
+    {
+      "bytes": 146938,
+      "path": "data/calibration/feature1_multimodal/images/0108.jpg",
+      "sha256": "3cc43ff83372e15961cf0331d291ddc7ccd54344dafcab44158c111aa555e496",
+      "source_index": 1133,
+      "source_url": "http://images.cocodataset.org/val2017/000000531771.jpg"
+    },
+    {
+      "bytes": 114698,
+      "path": "data/calibration/feature1_multimodal/images/0109.jpg",
+      "sha256": "c7847b6a940733f7ae4ee04c5d6a524c76fd9659826dd6269c4564b07f5bc8cb",
+      "source_index": 4174,
+      "source_url": "http://images.cocodataset.org/val2017/000000150638.jpg"
+    },
+    {
+      "bytes": 145220,
+      "path": "data/calibration/feature1_multimodal/images/0110.jpg",
+      "sha256": "b810dfd15be15b74baa40165de76c5df699689f75c514d62c84236f83ed35d1a",
+      "source_index": 4042,
+      "source_url": "http://images.cocodataset.org/val2017/000000236599.jpg"
+    },
+    {
+      "bytes": 207818,
+      "path": "data/calibration/feature1_multimodal/images/0111.jpg",
+      "sha256": "469e5374fcf43466d3ba8167126cdfa2833f1b8c8ed1e2248b29dd9feec20733",
+      "source_index": 744,
+      "source_url": "http://images.cocodataset.org/val2017/000000224807.jpg"
+    },
+    {
+      "bytes": 105361,
+      "path": "data/calibration/feature1_multimodal/images/0112.jpg",
+      "sha256": "7d636d406352e1643cab6f85925dd2fccd7ac11c471f1c58bd627a9512154efc",
+      "source_index": 385,
+      "source_url": "http://images.cocodataset.org/val2017/000000097679.jpg"
+    },
+    {
+      "bytes": 57902,
+      "path": "data/calibration/feature1_multimodal/images/0113.jpg",
+      "sha256": "1b87c39fc815b1d2f6b6c36176a7f65f3f993f9f3ba3b6f6b9ee599c67f10009",
+      "source_index": 898,
+      "source_url": "http://images.cocodataset.org/val2017/000000273198.jpg"
+    },
+    {
+      "bytes": 72526,
+      "path": "data/calibration/feature1_multimodal/images/0114.jpg",
+      "sha256": "45b812194a3240959f1897249a0419969b822e9032d94bf341cba4130e3b6483",
+      "source_index": 1252,
+      "source_url": "http://images.cocodataset.org/val2017/000000235778.jpg"
+    },
+    {
+      "bytes": 213010,
+      "path": "data/calibration/feature1_multimodal/images/0115.jpg",
+      "sha256": "2061d2007fc43ba426705e5f7cc33cdbb55b213fa8b1a162efcbfd3a5cb5cc1b",
+      "source_index": 1310,
+      "source_url": "http://images.cocodataset.org/val2017/000000559099.jpg"
+    },
+    {
+      "bytes": 203018,
+      "path": "data/calibration/feature1_multimodal/images/0116.jpg",
+      "sha256": "154ccc80280800738f0c67dd2c1aeb1622079408d311327d18314b96cbadd67c",
+      "source_index": 3458,
+      "source_url": "http://images.cocodataset.org/val2017/000000200839.jpg"
+    },
+    {
+      "bytes": 192004,
+      "path": "data/calibration/feature1_multimodal/images/0117.jpg",
+      "sha256": "ab8dd34c054d18c7afeb047e803d3668f61dba3e08b211902bb8cda767625b55",
+      "source_index": 4885,
+      "source_url": "http://images.cocodataset.org/val2017/000000417911.jpg"
+    },
+    {
+      "bytes": 122807,
+      "path": "data/calibration/feature1_multimodal/images/0118.jpg",
+      "sha256": "9799ce2cc5ff5360c97711b51bcb3a1e515416f56b975db40d884c831c2f7c99",
+      "source_index": 520,
+      "source_url": "http://images.cocodataset.org/val2017/000000036861.jpg"
+    },
+    {
+      "bytes": 121430,
+      "path": "data/calibration/feature1_multimodal/images/0119.jpg",
+      "sha256": "c6bebe830e7a12afdb30c9fe497cf8d37c705a730d1bc02cd6efef9743cd067c",
+      "source_index": 3152,
+      "source_url": "http://images.cocodataset.org/val2017/000000157601.jpg"
+    },
+    {
+      "bytes": 194065,
+      "path": "data/calibration/feature1_multimodal/images/0120.jpg",
+      "sha256": "9005d022c5e1b405168431bd0373b7d7c6a1b6fa41034fa39bd0c4db73bffcf1",
+      "source_index": 3126,
+      "source_url": "http://images.cocodataset.org/val2017/000000226883.jpg"
+    },
+    {
+      "bytes": 114458,
+      "path": "data/calibration/feature1_multimodal/images/0121.jpg",
+      "sha256": "16fc08c185eeec30bf11d3c0944157279885f938838159e13773e4cfde879618",
+      "source_index": 4881,
+      "source_url": "http://images.cocodataset.org/val2017/000000326128.jpg"
+    },
+    {
+      "bytes": 129824,
+      "path": "data/calibration/feature1_multimodal/images/0122.jpg",
+      "sha256": "bcba74c342f0fa997cd0e58ff8fd780a7e4f9ad8d64f040962bc760e103cedba",
+      "source_index": 3834,
+      "source_url": "http://images.cocodataset.org/val2017/000000578792.jpg"
+    },
+    {
+      "bytes": 288896,
+      "path": "data/calibration/feature1_multimodal/images/0123.jpg",
+      "sha256": "141d3cf96e4324705add1db8eba08c16be30aed16e927f4dae0bfc60d9a265d0",
+      "source_index": 4334,
+      "source_url": "http://images.cocodataset.org/val2017/000000249219.jpg"
+    },
+    {
+      "bytes": 231501,
+      "path": "data/calibration/feature1_multimodal/images/0124.jpg",
+      "sha256": "4ba267554825ed78b348a4e6fefaa11e6142c41d09695be553fe4083fa9a9eee",
+      "source_index": 2059,
+      "source_url": "http://images.cocodataset.org/val2017/000000491090.jpg"
+    },
+    {
+      "bytes": 117451,
+      "path": "data/calibration/feature1_multimodal/images/0125.jpg",
+      "sha256": "0aa436c998cd750d278170996d88b02869af323af4543ae4a8ef6349a14ca7fb",
+      "source_index": 4532,
+      "source_url": "http://images.cocodataset.org/val2017/000000060507.jpg"
+    },
+    {
+      "bytes": 159857,
+      "path": "data/calibration/feature1_multimodal/images/0126.jpg",
+      "sha256": "6cc2205b78ab13769a09c779341f60053529fe8506ca579ef27f3e3ee9f22048",
+      "source_index": 94,
+      "source_url": "http://images.cocodataset.org/val2017/000000239347.jpg"
+    },
+    {
+      "bytes": 232227,
+      "path": "data/calibration/feature1_multimodal/images/0127.jpg",
+      "sha256": "cc29914bae20316129a027ae17ee3b8359173b8e2172818dbf02ac21dd7dbbf9",
+      "source_index": 938,
+      "source_url": "http://images.cocodataset.org/val2017/000000435081.jpg"
+    }
+  ],
+  "num_samples": 128,
+  "prompt": "Describe this image in detail.",
+  "revision": "036f3f8291db64d17faad9b09e59dd30bb65c4d7",
+  "schema_version": 1,
+  "seed": 42,
+  "source_indices": [
+    912,
+    204,
+    2253,
+    2006,
+    1828,
+    1143,
+    839,
+    4467,
+    712,
+    4837,
+    3456,
+    260,
+    244,
+    767,
+    1791,
+    1905,
+    4139,
+    4931,
+    217,
+    4597,
+    1628,
+    4464,
+    3436,
+    1805,
+    3679,
+    4827,
+    2278,
+    53,
+    1307,
+    3462,
+    2787,
+    2276,
+    1273,
+    1763,
+    2757,
+    837,
+    759,
+    3112,
+    792,
+    2940,
+    2817,
+    4945,
+    2166,
+    355,
+    3763,
+    4392,
+    1022,
+    3100,
+    645,
+    4522,
+    2401,
+    2962,
+    4729,
+    1575,
+    569,
+    375,
+    1866,
+    2370,
+    653,
+    1907,
+    827,
+    3113,
+    2277,
+    3714,
+    2988,
+    1332,
+    3032,
+    2910,
+    1716,
+    2187,
+    584,
+    4990,
+    1401,
+    4375,
+    2005,
+    1338,
+    3786,
+    3108,
+    2211,
+    4562,
+    1799,
+    2656,
+    458,
+    1876,
+    262,
+    2584,
+    3286,
+    2193,
+    542,
+    1728,
+    4646,
+    2577,
+    1741,
+    4089,
+    3241,
+    3758,
+    1170,
+    2169,
+    2020,
+    4598,
+    4415,
+    2152,
+    4788,
+    3509,
+    4780,
+    3271,
+    2965,
+    1796,
+    1133,
+    4174,
+    4042,
+    744,
+    385,
+    898,
+    1252,
+    1310,
+    3458,
+    4885,
+    520,
+    3152,
+    3126,
+    4881,
+    3834,
+    4334,
+    2059,
+    4532,
+    94,
+    938
+  ],
+  "split": "validation"
+}

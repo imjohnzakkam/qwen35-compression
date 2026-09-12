@@ -1,0 +1,27 @@
+text_tasks:
+  - mmlu_pro
+  - gsm8k
+  - minerva_math500
+  - ifeval
+  - hellaswag
+  - arc_challenge
+  - wikitext
+
+vision_tasks:
+  - MMBench_DEV_EN_V11
+  - MMMU_DEV_VAL
+  - MathVista_MINI
+  - TextVQA_VAL
+  - OCRBench
+  - DocVQA_VAL
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+max_model_len: 4096
+gpu_memory_utilization: 0.85
+limit: null
+seed: 42
+generation:
+  do_sample: false
+  max_gen_toks: 256

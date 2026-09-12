@@ -5,10 +5,10 @@ from typing import Any
 from qwen35_compression.config import VariantConfig
 
 
-def _scheme(name: str, group_size: int | None = None) -> Any:
+def _scheme(name: str, targets: tuple[str, ...], group_size: int | None = None) -> Any:
     from compressed_tensors.quantization import preset_name_to_scheme
 
-    scheme = preset_name_to_scheme(name, ["Linear"])
+    scheme = preset_name_to_scheme(name, list(targets))
     if group_size is not None:
         if scheme.weights is None:
             raise ValueError(f"scheme {name} has no weight quantization")
@@ -25,7 +25,11 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
 
         return [
             GPTQModifier(
-                config_groups={"group_0": _scheme(variant.scheme or "W4A16", variant.group_size)},
+                config_groups={
+                    "group_0": _scheme(
+                        variant.scheme or "W4A16", variant.targets, variant.group_size
+                    )
+                },
                 ignore=list(variant.ignore),
             )
         ]
@@ -38,7 +42,9 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
             AWQModifier(duo_scaling="both"),
             QuantizationModifier(
                 config_groups={
-                    "group_0": _scheme(variant.scheme or "W4A16_ASYM", variant.group_size)
+                    "group_0": _scheme(
+                        variant.scheme or "W4A16_ASYM", variant.targets, variant.group_size
+                    )
                 },
                 ignore=list(variant.ignore),
             ),
@@ -51,9 +57,22 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
         return [
             SmoothQuantModifier(smoothing_strength=0.8),
             GPTQModifier(
-                config_groups={"group_0": _scheme(variant.scheme or "W8A8")},
+                config_groups={"group_0": _scheme(variant.scheme or "W8A8", variant.targets)},
                 ignore=list(variant.ignore),
             ),
+        ]
+
+    if variant.method == "mixed":
+        from llmcompressor.modifiers.gptq import GPTQModifier
+
+        return [
+            GPTQModifier(
+                config_groups={
+                    group.name: _scheme(group.scheme, group.targets, group.group_size)
+                    for group in variant.groups
+                },
+                ignore=list(variant.ignore),
+            )
         ]
 
     raise ValueError(f"unsupported quantization method: {variant.method}")

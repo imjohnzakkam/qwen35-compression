@@ -21,6 +21,11 @@ def main() -> None:
     parser.add_argument("--variant", required=True)
     args = parser.parse_args()
     config = load_config(args.config)
+    if config.evaluation.mode != "smoke":
+        raise ValueError(
+            "benchmark configurations must use scripts/evaluate_text.py or "
+            "scripts/evaluate_vision.py"
+        )
     variant = config.variant(args.variant)
     source = model_source(config, variant.name)
     if variant.method != "bf16":
@@ -31,7 +36,7 @@ def main() -> None:
     root = config.source_path.parent.parent
     result = {
         "schema_version": 1,
-        "phase": config.phase,
+        "feature": config.feature,
         "variant": variant.name,
         "method": variant.method,
         "model_id": config.model.id,

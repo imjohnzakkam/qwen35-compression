@@ -17,6 +17,8 @@ def evaluate_smoke(
     processor: Any,
     config: EvaluationConfig,
 ) -> dict[str, Any]:
+    if config.path is None:
+        raise ValueError("smoke evaluation requires a fixture path")
     import torch
     import torch.nn.functional as functional
 
@@ -76,7 +78,7 @@ def evaluate_smoke(
 
     mean_nll = total_nll / total_tokens
     return {
-        "suite": "phase0_fixed_text_smoke_v1",
+        "suite": "feature0_fixed_text_smoke_v1",
         "research_result": False,
         "samples": len(rows),
         "tokens": total_tokens,

@@ -1,0 +1,26 @@
+schema_version: 1
+
+gpu_text:
+  python: "3.13"
+  requirements: requirements/gpu-text.lock
+  packages:
+    datasets: "4.8.5"
+    lm-eval: "0.4.13"
+    torch: "2.13.0+cu130"
+    transformers: "5.12.1"
+    vllm: "0.1.1.dev70+gdff76bc3e"
+
+gpu_vision:
+  python: "3.13"
+  requirements: requirements/gpu-vision.lock
+  packages:
+    datasets: "4.8.5"
+    torch: "2.13.0+cu130"
+    transformers: "5.12.1"
+    vlmeval: "0.1.0"
+    vllm: "0.1.1.dev70+gdff76bc3e"
+
+vlmevalkit:
+  repository: https://github.com/open-compass/VLMEvalKit.git
+  revision: 34a64e619d5466ab3a900f1720041ea88d4a1ed6
+  directory: external/VLMEvalKit

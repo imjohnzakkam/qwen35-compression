@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from qwen35_compression.calibration import build_calibration_dataset
-from qwen35_compression.config import ExperimentConfig, VariantConfig
+from qwen35_compression.config import CalibrationConfig, ExperimentConfig, VariantConfig
 from qwen35_compression.export import write_export_manifest
+from qwen35_compression.feature1 import require_calibration_lock
 from qwen35_compression.models import load_resolved_model, resolve_revision
+from qwen35_compression.multimodal import require_multimodal_lock
 from qwen35_compression.quantization.recipes import build_recipe
 
 
@@ -17,13 +19,27 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
         raise ValueError(
             "BF16 is evaluated from the pinned source checkpoint and is not re-exported"
         )
+    calibration = config.calibration
+    if variant.requires_multimodal_calibration:
+        multimodal = config.multimodal_calibration
+        if multimodal is None:
+            raise ValueError("variant requires multimodal_calibration")
+        require_multimodal_lock(multimodal)
+        calibration = CalibrationConfig(
+            path=multimodal.path,
+            num_samples=multimodal.num_samples,
+            max_sequence_length=config.calibration.max_sequence_length,
+            seed=multimodal.seed,
+        )
+    elif calibration.lock_path is not None:
+        require_calibration_lock(calibration)
 
     import torch
     from llmcompressor import oneshot
 
     revision = resolve_revision(config)
     model, processor = load_resolved_model(f"{config.model.id}@{revision}", config)
-    dataset, collator = build_calibration_dataset(processor, config.calibration)
+    dataset, collator = build_calibration_dataset(processor, calibration)
     recipe = build_recipe(variant)
     output_dir = config.paths.outputs / variant.name
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -37,8 +53,8 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
         model=model,
         recipe=recipe,
         dataset=dataset,
-        max_seq_length=config.calibration.max_sequence_length,
-        num_calibration_samples=config.calibration.num_samples,
+        max_seq_length=calibration.max_sequence_length,
+        num_calibration_samples=calibration.num_samples,
         data_collator=collator,
     )
     model.save_pretrained(output_dir, safe_serialization=True, save_compressed=True)
