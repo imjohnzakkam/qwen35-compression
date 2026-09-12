@@ -98,10 +98,13 @@ def main() -> None:
             ("--image", "data/calibration/feature1_multimodal/images/0000.jpg")
         )
     if args.dry_run:
+        bootstrap = [sys.executable, "scripts/bootstrap_gpu.py"]
+        if args.text_only:
+            bootstrap.extend(("--scope", "text"))
         print(
             json.dumps(
                 {
-                    "bootstrap": [sys.executable, "scripts/bootstrap_gpu.py"],
+                    "bootstrap": bootstrap,
                     "text_preflight": [
                         str(text_python),
                         "scripts/preflight.py",
@@ -123,7 +126,10 @@ def main() -> None:
         )
         return
 
-    subprocess.run([sys.executable, "scripts/bootstrap_gpu.py"], cwd=ROOT, check=True)
+    bootstrap = [sys.executable, "scripts/bootstrap_gpu.py"]
+    if args.text_only:
+        bootstrap.extend(("--scope", "text"))
+    subprocess.run(bootstrap, cwd=ROOT, check=True)
     subprocess.run(
         [str(text_python), "scripts/preflight.py", "--profile", "gpu-text"],
         cwd=ROOT,

@@ -22,6 +22,16 @@ def test_gpu_bootstrap_uses_separate_pinned_environments() -> None:
     assert any("--torch-backend cu130" in command for command in flattened)
     assert not any("torchrun" in command for command in flattened)
 
+    text_result = subprocess.run(
+        [sys.executable, "scripts/bootstrap_gpu.py", "--dry-run", "--scope", "text"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    text_commands = [" ".join(command) for command in json.loads(text_result.stdout)]
+    assert any("requirements/gpu-text.lock" in command for command in text_commands)
+    assert not any("gpu-vision" in command for command in text_commands)
+
 
 def test_vlmeval_wrapper_registers_alias_and_forwards_tasks(tmp_path: Path) -> None:
     toolkit = tmp_path / "VLMEvalKit"

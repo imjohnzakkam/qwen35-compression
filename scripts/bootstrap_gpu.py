@@ -19,10 +19,13 @@ def load_toolchains() -> dict[str, Any]:
     return yaml.safe_load(TOOLCHAINS.read_text(encoding="utf-8"))
 
 
-def bootstrap_commands() -> list[list[str]]:
+def bootstrap_commands(scope: str = "all") -> list[list[str]]:
+    if scope not in {"text", "all"}:
+        raise ValueError("scope must be text or all")
     toolchains = load_toolchains()
     commands: list[list[str]] = []
-    for name in ("gpu_text", "gpu_vision"):
+    environments = ("gpu_text",) if scope == "text" else ("gpu_text", "gpu_vision")
+    for name in environments:
         environment = ROOT / f".venv-{name.replace('_', '-')}"
         lock = ROOT / toolchains[name]["requirements"]
         commands.extend(
@@ -42,6 +45,9 @@ def bootstrap_commands() -> list[list[str]]:
                 ],
             )
         )
+
+    if scope == "text":
+        return commands
 
     toolkit = toolchains["vlmevalkit"]
     toolkit_dir = ROOT / toolkit["directory"]
@@ -78,8 +84,9 @@ def main() -> None:
         description="Create isolated, pinned GPU evaluator environments"
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--scope", choices=("text", "all"), default="all")
     args = parser.parse_args()
-    commands = bootstrap_commands()
+    commands = bootstrap_commands(args.scope)
     if args.dry_run:
         print(json.dumps(commands, indent=2))
         return
