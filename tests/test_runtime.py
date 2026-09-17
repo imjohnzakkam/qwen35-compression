@@ -20,6 +20,11 @@ def test_gpu_bootstrap_uses_separate_pinned_environments() -> None:
     assert any("requirements/gpu-text.lock" in command for command in flattened)
     assert any("requirements/gpu-vision.lock" in command for command in flattened)
     assert any("--torch-backend cu130" in command for command in flattened)
+    assert all(
+        "--index-strategy unsafe-best-match" in command
+        for command in flattened
+        if "uv pip sync" in command
+    )
     assert not any("torchrun" in command for command in flattened)
 
     text_result = subprocess.run(

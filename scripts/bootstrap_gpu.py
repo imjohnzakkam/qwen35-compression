@@ -42,6 +42,8 @@ def bootstrap_commands(scope: str = "all") -> list[list[str]]:
                     "cu130",
                     "--extra-index-url",
                     VLLM_INDEX,
+                    "--index-strategy",
+                    "unsafe-best-match",
                 ],
             )
         )
