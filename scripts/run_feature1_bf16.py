@@ -6,16 +6,17 @@ import json
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import _bootstrap  # noqa: F401
 
 from qwen35_compression.config import load_config
 from qwen35_compression.feature1 import (
+    EVALUATOR_ENV,
     build_lm_eval_command,
     build_vlm_eval_command,
     load_benchmark_suite,
+    run_logged,
 )
 from qwen35_compression.io import write_json
 from qwen35_compression.models import download_model, resolve_revision
@@ -23,33 +24,9 @@ from qwen35_compression.provenance import git_revision
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# lm-eval never shuts the vLLM engine down, and the detached EngineCore child kept the
-# harness alive indefinitely after results were written. An in-process engine exits.
-EVALUATOR_ENV = {"VLLM_ENABLE_V1_MULTIPROCESSING": "0"}
-
 
 def _run(command: list[str], log_path: Path) -> float:
-    started = time.perf_counter()
-    with log_path.open("a", encoding="utf-8") as log:
-        log.write("+ " + " ".join(command) + "\n")
-        log.flush()
-        process = subprocess.Popen(
-            command,
-            cwd=ROOT,
-            env={**os.environ, **EVALUATOR_ENV},
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        assert process.stdout is not None
-        for line in process.stdout:
-            print(line, end="", flush=True)
-            log.write(line)
-        return_code = process.wait()
-    if return_code:
-        raise subprocess.CalledProcessError(return_code, command)
-    return time.perf_counter() - started
+    return run_logged(command, log_path, ROOT)
 
 
 def main() -> None:

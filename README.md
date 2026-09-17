@@ -82,6 +82,23 @@ After a JarvisLabs run completes, copy the entire result directory into the igno
 uv run python scripts/fetch_jarvis_results.py --instance-id INSTANCE_ID
 ```
 
+## Feature 1 quantized variants
+
+`scripts/run_feature1_variant.py` quantizes one variant from `configs/variants/feature1.yaml` in
+the compression environment, verifies the export manifest, and then scores the exported checkpoint
+with exactly the BF16 baseline's smoke, text, and vision commands. Results land beneath
+`results/feature1/<variant>/`. An existing non-empty export is reused rather than rebuilt.
+
+```bash
+uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128
+```
+
+Pass `--skip-bootstrap` on a machine whose evaluator environments were already built by a previous
+run, and `--text-only --limit 1` for a non-research pilot.
+
+Both Feature 1 drivers pin `enable_thinking=False`: the 4B chat template thinks by default while the
+0.8B does not, and a 256-token cap on a thinking trace scores zero on every generative task.
+
 The default single-GPU vLLM backend is deliberate. Four spot L4 GPUs cost four times as much per
 hour; `torchrun` reduces elapsed time but cannot reduce total cost for a 4B model that fits on one
 L4.

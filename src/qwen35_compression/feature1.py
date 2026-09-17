@@ -216,3 +216,37 @@ def run_command(command: Sequence[str]) -> None:
     import subprocess
 
     subprocess.run(list(command), check=True)
+
+
+# lm-eval never shuts the vLLM engine down, and the detached EngineCore child kept the
+# harness alive indefinitely after results were written. An in-process engine exits.
+EVALUATOR_ENV = {"VLLM_ENABLE_V1_MULTIPROCESSING": "0"}
+
+
+def run_logged(command: Sequence[str], log_path: Path, cwd: Path) -> float:
+    """Run a step, tee its output to the run log, and return its wall-clock seconds."""
+    import os
+    import subprocess
+    import time
+
+    started = time.perf_counter()
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write("+ " + " ".join(command) + "\n")
+        log.flush()
+        process = subprocess.Popen(
+            list(command),
+            cwd=cwd,
+            env={**os.environ, **EVALUATOR_ENV},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            log.write(line)
+        return_code = process.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, list(command))
+    return time.perf_counter() - started

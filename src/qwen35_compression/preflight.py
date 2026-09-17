@@ -100,13 +100,17 @@ def run_preflight(config_path: Path, profile: str = "local") -> dict[str, Any]:
         Check("calibration:multimodal", "passed", image_lock["content_sha256"])
     )
 
-    from lm_eval.tasks import TaskManager
+    if profile == "gpu-vision":
+        # Only the text environment carries lm-eval; the vision profile checks its own suite.
+        checks.append(Check("benchmarks:text", "skipped", "not used by gpu-vision"))
+    else:
+        from lm_eval.tasks import TaskManager
 
-    registered = TaskManager().all_tasks
-    missing = sorted(set(suite.text_tasks) - set(registered))
-    if missing:
-        raise ValueError(f"lm-eval tasks are not registered: {missing}")
-    checks.append(Check("benchmarks:text", "passed", ",".join(suite.text_tasks)))
+        registered = TaskManager().all_tasks
+        missing = sorted(set(suite.text_tasks) - set(registered))
+        if missing:
+            raise ValueError(f"lm-eval tasks are not registered: {missing}")
+        checks.append(Check("benchmarks:text", "passed", ",".join(suite.text_tasks)))
 
     toolchains = _toolchains(root)
     toolkit = toolchains["vlmevalkit"]
