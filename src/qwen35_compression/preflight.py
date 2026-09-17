@@ -111,14 +111,19 @@ def run_preflight(config_path: Path, profile: str = "local") -> dict[str, Any]:
     toolchains = _toolchains(root)
     toolkit = toolchains["vlmevalkit"]
     toolkit_dir = (root / toolkit["directory"]).resolve()
-    if not (toolkit_dir / "run.py").is_file():
-        raise FileNotFoundError(f"pinned VLMEvalKit checkout is missing: {toolkit_dir}")
-    actual_revision = _git_revision(toolkit_dir)
-    if actual_revision != toolkit["revision"]:
-        raise ValueError(
-            f"VLMEvalKit revision is {actual_revision}; expected {toolkit['revision']}"
-        )
-    checks.append(Check("toolkit:vlmevalkit", "passed", actual_revision))
+    if profile == "gpu-text":
+        # The text evaluator never imports VLMEvalKit, and a text-only bootstrap
+        # does not provision it; only the vision environment must hold the pin.
+        checks.append(Check("toolkit:vlmevalkit", "skipped", "not used by gpu-text"))
+    else:
+        if not (toolkit_dir / "run.py").is_file():
+            raise FileNotFoundError(f"pinned VLMEvalKit checkout is missing: {toolkit_dir}")
+        actual_revision = _git_revision(toolkit_dir)
+        if actual_revision != toolkit["revision"]:
+            raise ValueError(
+                f"VLMEvalKit revision is {actual_revision}; expected {toolkit['revision']}"
+            )
+        checks.append(Check("toolkit:vlmevalkit", "passed", actual_revision))
 
     for environment in ("gpu_text", "gpu_vision"):
         requirements = root / toolchains[environment]["requirements"]

@@ -48,10 +48,46 @@ def bootstrap_commands(scope: str = "all") -> list[list[str]]:
     if scope == "text":
         return commands
 
-    toolkit = toolchains["vlmevalkit"]
-    toolkit_dir = ROOT / toolkit["directory"]
     vision_python = ROOT / ".venv-gpu-vision" / "bin" / "python"
-    if not toolkit_dir.exists():
+    commands.extend(
+        toolkit_commands(toolchains["vlmevalkit"], ROOT / toolchains["vlmevalkit"]["directory"])
+    )
+    commands.append(
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(vision_python),
+            "--no-deps",
+            "--editable",
+            str(ROOT / toolchains["vlmevalkit"]["directory"]),
+        ]
+    )
+    return commands
+
+
+def is_git_checkout(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--git-dir"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def toolkit_commands(toolkit: dict[str, Any], toolkit_dir: Path) -> list[list[str]]:
+    """Ensure the toolkit directory is a real clone pinned to the configured revision.
+
+    A directory uploaded from another machine may carry the files but not the
+    Git metadata, so an existing path is only trusted when Git recognises it.
+    """
+    commands: list[list[str]] = []
+    if not is_git_checkout(toolkit_dir):
+        if toolkit_dir.exists():
+            commands.append(["rm", "-rf", str(toolkit_dir)])
         commands.append(
             [
                 "git",
@@ -63,18 +99,6 @@ def bootstrap_commands(scope: str = "all") -> list[list[str]]:
             ]
         )
     commands.append(["git", "-C", str(toolkit_dir), "checkout", toolkit["revision"]])
-    commands.append(
-        [
-            "uv",
-            "pip",
-            "install",
-            "--python",
-            str(vision_python),
-            "--no-deps",
-            "--editable",
-            str(toolkit_dir),
-        ]
-    )
     return commands
 
 

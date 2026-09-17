@@ -155,3 +155,27 @@ def test_complete_bf16_pipeline_has_mac_dry_run() -> None:
     assert plan["text"][plan["text"].index("--model") + 1] == "vllm"
     assert plan["vision"] is None
     assert plan["runtime_smoke"][0].endswith(".venv-gpu-text/bin/python")
+
+
+def test_toolkit_commands_reclone_when_directory_is_not_a_git_checkout(tmp_path: Path) -> None:
+    module = runpy.run_path("scripts/bootstrap_gpu.py", run_name="bootstrap_gpu")
+    toolkit = {"repository": "https://example.invalid/VLMEvalKit.git", "revision": "abc123"}
+
+    missing = tmp_path / "missing"
+    flattened = [" ".join(c) for c in module["toolkit_commands"](toolkit, missing)]
+    assert flattened[0].startswith("git clone")
+    assert flattened[-1] == f"git -C {missing} checkout abc123"
+    assert not any(c.startswith("rm ") for c in flattened)
+
+    uploaded = tmp_path / "uploaded"
+    uploaded.mkdir()
+    (uploaded / "run.py").write_text("", encoding="utf-8")
+    flattened = [" ".join(c) for c in module["toolkit_commands"](toolkit, uploaded)]
+    assert flattened[0] == f"rm -rf {uploaded}"
+    assert flattened[1].startswith("git clone")
+    assert flattened[-1] == f"git -C {uploaded} checkout abc123"
+
+    cloned = tmp_path / "cloned"
+    subprocess.run(["git", "init", "-q", str(cloned)], check=True)
+    flattened = [" ".join(c) for c in module["toolkit_commands"](toolkit, cloned)]
+    assert flattened == [f"git -C {cloned} checkout abc123"]
