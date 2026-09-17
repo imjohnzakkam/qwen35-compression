@@ -12,7 +12,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLCHAINS = ROOT / "configs" / "toolchains.yaml"
-VLLM_INDEX = "https://wheels.vllm.ai/nightly"
 
 
 def load_toolchains() -> dict[str, Any]:
@@ -40,8 +39,6 @@ def bootstrap_commands(scope: str = "all") -> list[list[str]]:
                     str(environment / "bin" / "python"),
                     "--torch-backend",
                     "cu130",
-                    "--extra-index-url",
-                    VLLM_INDEX,
                     "--index-strategy",
                     "unsafe-best-match",
                 ],

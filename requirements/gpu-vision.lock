@@ -218,7 +218,7 @@ filelock==3.32.6
     #   huggingface-hub
     #   torch
     #   vllm
-flashinfer-python==0.6.18.post1
+flashinfer-python==0.6.18
     # via vllm
 fonttools==4.65.0
     # via matplotlib
@@ -529,22 +529,22 @@ nvidia-cusparse==12.6.3.3
     #   nvidia-cusolver
 nvidia-cusparselt-cu13==0.8.1
     # via torch
-nvidia-cutlass-dsl==4.7.1
+nvidia-cutlass-dsl==4.6.2
     # via
     #   flashinfer-python
     #   quack-kernels
     #   tokenspeed-mla
     #   vllm
-nvidia-cutlass-dsl-libs-base==4.7.1
+nvidia-cutlass-dsl-libs-base==4.6.2
     # via
     #   nvidia-cutlass-dsl
     #   nvidia-cutlass-dsl-libs-cu12
     #   nvidia-cutlass-dsl-libs-cu13
-nvidia-cutlass-dsl-libs-core==4.7.1
+nvidia-cutlass-dsl-libs-core==4.6.2
     # via nvidia-cutlass-dsl-libs-base
-nvidia-cutlass-dsl-libs-cu12==4.7.1
+nvidia-cutlass-dsl-libs-cu12==4.6.2
     # via nvidia-cutlass-dsl
-nvidia-cutlass-dsl-libs-cu13==4.7.1
+nvidia-cutlass-dsl-libs-cu13==4.6.2
     # via nvidia-cutlass-dsl
 nvidia-ml-py==13.610.43
     # via
@@ -687,7 +687,7 @@ propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
-protobuf==7.36.1
+protobuf==6.33.6
     # via
     #   -r requirements/../external/VLMEvalKit/requirements.txt
     #   googleapis-common-protos
@@ -798,7 +798,7 @@ pyyaml==6.0.3
     #   vllm
 pyzmq==27.2.0
     # via vllm
-quack-kernels==0.6.5
+quack-kernels==0.6.4
     # via vllm
 qwen-vl-utils==0.0.14
     # via -r requirements/../external/VLMEvalKit/requirements.txt
@@ -1107,7 +1107,7 @@ uvloop==0.22.1
     # via uvicorn
 validators==0.35.0
     # via -r requirements/../external/VLMEvalKit/requirements.txt
-vllm==0.1.1.dev70+gdff76bc3e
+vllm==0.29.0
     # via -r requirements/gpu-vision.in
 watchfiles==1.2.0
     # via
