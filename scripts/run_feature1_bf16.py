@@ -23,6 +23,10 @@ from qwen35_compression.provenance import git_revision
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# lm-eval never shuts the vLLM engine down, and the detached EngineCore child kept the
+# harness alive indefinitely after results were written. An in-process engine exits.
+EVALUATOR_ENV = {"VLLM_ENABLE_V1_MULTIPROCESSING": "0"}
+
 
 def _run(command: list[str], log_path: Path) -> float:
     started = time.perf_counter()
@@ -32,6 +36,7 @@ def _run(command: list[str], log_path: Path) -> float:
         process = subprocess.Popen(
             command,
             cwd=ROOT,
+            env={**os.environ, **EVALUATOR_ENV},
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -177,6 +182,8 @@ def main() -> None:
         "config_digest": config.digest,
         "scope": "text_only" if args.text_only else "text_and_vision",
         "limit": args.limit,
+        "enable_thinking": suite.enable_thinking,
+        "evaluator_env": EVALUATOR_ENV,
         "research_result": args.limit is None,
         "status": "running",
         "durations_seconds": {},

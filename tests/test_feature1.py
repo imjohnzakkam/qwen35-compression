@@ -131,6 +131,7 @@ def test_vlm_eval_command_uses_pinned_task_list() -> None:
         "OCRBench",
     ]
     assert command[command.index("--max-model-len") + 1] == "4096"
+    assert command[-1] == "--disable-thinking"
 
 
 def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
@@ -149,6 +150,11 @@ def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
     assert "dtype=bfloat16" in model_args
     assert "max_model_len=4096" in model_args
     assert "gpu_memory_utilization=0.85" in model_args
+    # The 4B chat template thinks by default; the suite pins instruct mode explicitly.
+    assert suite.enable_thinking is False
+    assert "enable_thinking=False" in model_args
+    gen_kwargs = command[command.index("--gen_kwargs") + 1 :]
+    assert "max_gen_toks=2048" in gen_kwargs
 
 
 def test_calibration_lock_rejects_changed_data(tmp_path: Path) -> None:

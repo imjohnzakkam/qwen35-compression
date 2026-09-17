@@ -179,3 +179,28 @@ def test_toolkit_commands_reclone_when_directory_is_not_a_git_checkout(tmp_path:
     subprocess.run(["git", "init", "-q", str(cloned)], check=True)
     flattened = [" ".join(c) for c in module["toolkit_commands"](toolkit, cloned)]
     assert flattened == [f"git -C {cloned} checkout abc123"]
+
+
+def test_vlmeval_wrapper_reports_thinking_mode(tmp_path: Path) -> None:
+    toolkit = tmp_path / "VLMEvalKit"
+    toolkit.mkdir()
+    (toolkit / "run.py").write_text("", encoding="utf-8")
+    base = [
+        sys.executable,
+        "scripts/vlmeval_qwen35.py",
+        "--toolkit-dir",
+        str(toolkit),
+        "--model-path",
+        "model",
+        "--output-dir",
+        "results/vision",
+        "--data",
+        "OCRBench",
+        "--dry-run",
+    ]
+    default = subprocess.run(base, check=True, capture_output=True, text=True)
+    assert json.loads(default.stdout)["enable_thinking"] is True
+    disabled = subprocess.run(
+        [*base, "--disable-thinking"], check=True, capture_output=True, text=True
+    )
+    assert json.loads(disabled.stdout)["enable_thinking"] is False

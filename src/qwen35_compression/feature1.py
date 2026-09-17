@@ -28,6 +28,7 @@ class BenchmarkSuite:
     limit: int | None
     seed: int
     generation: Mapping[str, Any]
+    enable_thinking: bool = False
 
 
 def load_benchmark_suite(path: Path) -> BenchmarkSuite:
@@ -45,6 +46,7 @@ def load_benchmark_suite(path: Path) -> BenchmarkSuite:
         limit=(int(raw["limit"]) if raw.get("limit") is not None else None),
         seed=int(raw.get("seed", 42)),
         generation=dict(raw.get("generation", {})),
+        enable_thinking=bool(raw.get("enable_thinking", False)),
     )
 
 
@@ -142,6 +144,8 @@ def build_lm_eval_command(
         )
     if revision:
         model_args.append(f"revision={revision}")
+    # Passed to apply_chat_template by both the hf-multimodal and vllm backends.
+    model_args.append(f"enable_thinking={suite.enable_thinking}")
     command = [
         str(python_executable or sys.executable),
         "-m",
@@ -178,6 +182,7 @@ def build_vlm_eval_command(
     toolkit_dir: Path = Path("external/VLMEvalKit"),
 ) -> list[str]:
     wrapper = Path(__file__).resolve().parents[2] / "scripts" / "vlmeval_qwen35.py"
+    thinking = [] if suite.enable_thinking else ["--disable-thinking"]
     return [
         sys.executable,
         str(wrapper),
@@ -193,6 +198,7 @@ def build_vlm_eval_command(
         str(suite.generation.get("max_gen_toks", 256)),
         "--max-model-len",
         str(suite.max_model_len),
+        *thinking,
     ]
 
 

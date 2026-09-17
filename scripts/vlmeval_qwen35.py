@@ -33,6 +33,11 @@ def main() -> None:
     parser.add_argument("--alias", default="Qwen3.5-4B-pinned")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--max-model-len", type=int, default=4096)
+    parser.add_argument(
+        "--disable-thinking",
+        action="store_true",
+        help="Render prompts with enable_thinking=False so answers are not reasoning traces",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -45,6 +50,7 @@ def main() -> None:
                 {
                     "toolkit_dir": str(toolkit_dir),
                     "model_path": str(args.model_path),
+                    "enable_thinking": not args.disable_thinking,
                     "forwarded_arguments": forwarded_arguments(args),
                 },
                 indent=2,
@@ -65,7 +71,7 @@ def main() -> None:
 
     vllm.LLM = limited_context_llm
 
-    supported_VLM[args.alias] = partial(
+    build_chat = partial(
         Qwen3VLChat,
         model_path=str(args.model_path),
         use_custom_prompt=False,
@@ -74,6 +80,22 @@ def main() -> None:
         temperature=0.0,
         max_new_tokens=args.max_new_tokens,
     )
+
+    def build_model(**overrides: object) -> object:
+        model = build_chat(**overrides)
+        if args.disable_thinking:
+            # Qwen3VLChat calls processor.apply_chat_template without template kwargs,
+            # so the checkpoint's default thinking mode would otherwise apply.
+            original = model.processor.apply_chat_template
+
+            def without_thinking(*positional: object, **keywords: object) -> object:
+                keywords.setdefault("enable_thinking", False)
+                return original(*positional, **keywords)
+
+            model.processor.apply_chat_template = without_thinking
+        return model
+
+    supported_VLM[args.alias] = build_model
 
     sys.path.insert(0, str(toolkit_dir))
     from run import main as vlmeval_main
