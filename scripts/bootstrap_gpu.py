@@ -29,7 +29,7 @@ def bootstrap_commands(scope: str = "all") -> list[list[str]]:
         lock = ROOT / toolchains[name]["requirements"]
         commands.extend(
             (
-                ["uv", "venv", str(environment), "--python", toolchains[name]["python"]],
+                ["uv", "venv", "--clear", str(environment), "--python", toolchains[name]["python"]],
                 [
                     "uv",
                     "pip",
