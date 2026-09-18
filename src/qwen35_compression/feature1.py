@@ -175,6 +175,24 @@ def build_lm_eval_command(
     return command
 
 
+# Datasets VLMEvalKit will not score without an LLM judge; the wrapper uses the served
+# checkpoint itself for answer extraction there, so record that in every manifest.
+VISION_JUDGED_DATASETS = ("MathVista_MINI",)
+
+
+def vision_protocol(suite: BenchmarkSuite) -> dict[str, Any]:
+    return {
+        "inference": "vllm openai server via VLMEvalKit LMDeployAPI",
+        "temperature": 0.0,
+        "max_tokens": int(suite.generation.get("max_gen_toks", 256)),
+        "enable_thinking": suite.enable_thinking,
+        "judge": {
+            "default": "exact_matching",
+            **{name: "served checkpoint (extraction only)" for name in VISION_JUDGED_DATASETS},
+        },
+    }
+
+
 def build_vlm_eval_command(
     model_path: Path,
     suite: BenchmarkSuite,
@@ -198,6 +216,10 @@ def build_vlm_eval_command(
         str(suite.generation.get("max_gen_toks", 256)),
         "--max-model-len",
         str(suite.max_model_len),
+        "--gpu-memory-utilization",
+        str(suite.gpu_memory_utilization),
+        "--seed",
+        str(suite.seed),
         *thinking,
     ]
 

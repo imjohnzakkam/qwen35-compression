@@ -133,6 +133,7 @@ def test_vlm_eval_command_uses_pinned_task_list() -> None:
         "OCRBench",
     ]
     assert command[command.index("--max-model-len") + 1] == "4096"
+    assert command[command.index("--gpu-memory-utilization") + 1] == "0.85"
     assert command[-1] == "--disable-thinking"
 
 

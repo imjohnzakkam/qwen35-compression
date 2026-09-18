@@ -61,13 +61,23 @@ def test_vlmeval_wrapper_registers_alias_and_forwards_tasks(tmp_path: Path) -> N
         capture_output=True,
         text=True,
     )
-    command = json.loads(result.stdout)["forwarded_arguments"]
-
-    assert command[:2] == ["--model", "Qwen3.5-4B-pinned"]
-    assert command[command.index("--data") + 1 : command.index("--work-dir")] == [
+    plan = json.loads(result.stdout)
+    server = plan["server"]
+    assert server[1:3] == ["-m", "vllm.entrypoints.openai.api_server"]
+    assert server[server.index("--served-model-name") + 1] == "Qwen3.5-4B-pinned"
+    infer = plan["infer"]
+    assert infer[1].endswith("run.py")
+    assert infer[infer.index("--model") + 1] == "Qwen3.5-4B-pinned"
+    assert infer[infer.index("--data") + 1 : infer.index("--work-dir")] == [
         "MMMU_DEV_VAL",
         "OCRBench",
     ]
+    assert infer[infer.index("--mode") + 1] == "infer"
+    assert infer[infer.index("--model-class") + 1] == "LMDeployAPI"
+    assert infer[infer.index("--base-url") + 1].startswith("http://127.0.0.1:")
+    # Neither dataset needs an LLM judge, so scoring is rule-based and nothing is judged.
+    assert plan["eval"][plan["eval"].index("--judge") + 1] == "exact_matching"
+    assert plan["eval_judged"] is None and plan["judged_datasets"] == []
 
 
 def test_result_download_targets_local_logs() -> None:
@@ -198,9 +208,50 @@ def test_vlmeval_wrapper_reports_thinking_mode(tmp_path: Path) -> None:
         "OCRBench",
         "--dry-run",
     ]
-    default = subprocess.run(base, check=True, capture_output=True, text=True)
-    assert json.loads(default.stdout)["enable_thinking"] is True
-    disabled = subprocess.run(
-        [*base, "--disable-thinking"], check=True, capture_output=True, text=True
+    default = json.loads(subprocess.run(base, check=True, capture_output=True, text=True).stdout)
+    assert default["enable_thinking"] is True
+    assert "--extra-body" not in default["infer"]
+    disabled = json.loads(
+        subprocess.run(
+            [*base, "--disable-thinking"], check=True, capture_output=True, text=True
+        ).stdout
     )
-    assert json.loads(disabled.stdout)["enable_thinking"] is False
+    assert disabled["enable_thinking"] is False
+    extra = json.loads(disabled["infer"][disabled["infer"].index("--extra-body") + 1])
+    assert extra == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_vlmeval_wrapper_judges_only_datasets_that_require_it(tmp_path: Path) -> None:
+    toolkit = tmp_path / "VLMEvalKit"
+    toolkit.mkdir()
+    (toolkit / "run.py").write_text("", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/vlmeval_qwen35.py",
+            "--toolkit-dir",
+            str(toolkit),
+            "--model-path",
+            "model",
+            "--output-dir",
+            "results/vision",
+            "--data",
+            "MMBench_DEV_EN_V11",
+            "MathVista_MINI",
+            "--disable-thinking",
+            "--dry-run",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    assert plan["judged_datasets"] == ["MathVista_MINI"]
+    assert plan["eval"][plan["eval"].index("--data") + 1] == "MMBench_DEV_EN_V11"
+    judged = plan["eval_judged"]
+    assert judged[judged.index("--data") + 1] == "MathVista_MINI"
+    assert judged[judged.index("--judge") + 1] == "Qwen3.5-4B-pinned"
+    assert judged[judged.index("--judge-base-url") + 1] == judged[judged.index("--base-url") + 1]
+    assert json.loads(judged[judged.index("--judge-args") + 1]) == {
+        "chat_template_kwargs": {"enable_thinking": False}
+    }

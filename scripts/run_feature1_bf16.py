@@ -17,6 +17,7 @@ from qwen35_compression.feature1 import (
     build_vlm_eval_command,
     load_benchmark_suite,
     run_logged,
+    vision_protocol,
 )
 from qwen35_compression.io import write_json
 from qwen35_compression.models import download_model, resolve_revision
@@ -35,11 +36,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("results/feature1/bf16"))
     parser.add_argument("--limit", help="Pilot-only per-task limit")
     parser.add_argument("--text-only", action="store_true")
+    parser.add_argument("--vision-only", action="store_true")
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.limit and not args.text_only:
         raise ValueError("--limit is text-only pilot mode; also pass --text-only")
+    if args.text_only and args.vision_only:
+        raise ValueError("--text-only and --vision-only are mutually exclusive")
     code_revision = args.code_revision or git_revision(ROOT)
     if not code_revision:
         raise ValueError("producer code revision is required")
@@ -118,11 +122,12 @@ def main() -> None:
     if args.text_only:
         bootstrap.extend(("--scope", "text"))
     subprocess.run(bootstrap, cwd=ROOT, check=True)
-    subprocess.run(
-        [str(text_python), "scripts/preflight.py", "--profile", "gpu-text"],
-        cwd=ROOT,
-        check=True,
-    )
+    if not args.vision_only:
+        subprocess.run(
+            [str(text_python), "scripts/preflight.py", "--profile", "gpu-text"],
+            cwd=ROOT,
+            check=True,
+        )
     if not args.text_only:
         subprocess.run(
             [str(vision_python), "scripts/preflight.py", "--profile", "gpu-vision"],
@@ -149,6 +154,12 @@ def main() -> None:
 
     output.mkdir(parents=True, exist_ok=True)
     log_path = output / "run.log"
+    if args.text_only:
+        scope = "text_only"
+    elif args.vision_only:
+        scope = "vision_only"
+    else:
+        scope = "text_and_vision"
     manifest: dict[str, object] = {
         "schema_version": 1,
         "feature": "feature1",
@@ -157,7 +168,8 @@ def main() -> None:
         "model_revision": revision,
         "code_revision": code_revision,
         "config_digest": config.digest,
-        "scope": "text_only" if args.text_only else "text_and_vision",
+        "scope": scope,
+        "vision_protocol": None if args.text_only else vision_protocol(suite),
         "limit": args.limit,
         "enable_thinking": suite.enable_thinking,
         "evaluator_env": EVALUATOR_ENV,
@@ -170,7 +182,8 @@ def main() -> None:
     assert isinstance(durations, dict)
     try:
         durations["runtime_smoke"] = _run(smoke_command, log_path)
-        durations["text"] = _run(text_command, log_path)
+        if not args.vision_only:
+            durations["text"] = _run(text_command, log_path)
         if not args.text_only:
             durations["vision"] = _run(vision_command, log_path)
         manifest["status"] = "passed"
