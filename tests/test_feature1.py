@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -131,6 +133,8 @@ def test_vlm_eval_command_uses_pinned_task_list() -> None:
         "OCRBench",
     ]
     assert command[command.index("--max-model-len") + 1] == "4096"
+    assert command[command.index("--gpu-memory-utilization") + 1] == "0.85"
+    assert command[-1] == "--disable-thinking"
 
 
 def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
@@ -149,6 +153,11 @@ def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
     assert "dtype=bfloat16" in model_args
     assert "max_model_len=4096" in model_args
     assert "gpu_memory_utilization=0.85" in model_args
+    # The 4B chat template thinks by default; the suite pins instruct mode explicitly.
+    assert suite.enable_thinking is False
+    assert "enable_thinking=False" in model_args
+    gen_kwargs = command[command.index("--gen_kwargs") + 1 :]
+    assert "max_gen_toks=2048" in gen_kwargs
 
 
 def test_calibration_lock_rejects_changed_data(tmp_path: Path) -> None:
@@ -212,3 +221,55 @@ def test_multimodal_lock_verifies_jsonl_and_images(tmp_path: Path) -> None:
     image_path.write_bytes(b"changed")
     with pytest.raises(ValueError, match="image does not match"):
         require_multimodal_lock(local_config)
+
+
+def test_variant_runner_plans_quantize_then_shared_protocol() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_feature1_variant.py",
+            "--variant",
+            "gptq_w4a16_g128",
+            "--code-revision",
+            "abc123",
+            "--dry-run",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    export_dir = plan["export_dir"]
+    assert export_dir.endswith("outputs/feature1/gptq_w4a16_g128")
+    assert plan["quantize"][1:] == [
+        "scripts/quantize.py",
+        "--config",
+        str(Path("configs/feature1.yaml").resolve()),
+        "--variant",
+        "gptq_w4a16_g128",
+    ]
+    text = plan["text"]
+    assert text[0].endswith(".venv-gpu-text/bin/python")
+    assert f"pretrained={export_dir}" in text[text.index("--model_args") + 1]
+    assert "enable_thinking=False" in text[text.index("--model_args") + 1]
+    assert "revision=" not in text[text.index("--model_args") + 1]
+    vision = plan["vision"]
+    assert vision[0].endswith(".venv-gpu-vision/bin/python")
+    assert vision[vision.index("--model-path") + 1] == export_dir
+    assert vision[-1] == "--disable-thinking"
+
+    rejected = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_feature1_variant.py",
+            "--variant",
+            "bf16",
+            "--code-revision",
+            "abc123",
+            "--dry-run",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode != 0
+    assert "run_feature1_bf16.py" in rejected.stderr

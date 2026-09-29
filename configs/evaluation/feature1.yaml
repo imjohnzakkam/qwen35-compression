@@ -22,6 +22,10 @@ max_model_len: 4096
 gpu_memory_utilization: 0.85
 limit: null
 seed: 42
+# Qwen3.5 chat templates differ in their default (0.8B: off, 4B: on); pin it so every
+# model size and every quantized variant is scored under the same instruct-mode protocol.
+enable_thinking: false
 generation:
   do_sample: false
-  max_gen_toks: 256
+  # Upper bound only; lm-eval's largest per-task default is 2048 (MMLU-Pro).
+  max_gen_toks: 2048

@@ -1,30 +1,157 @@
 #!/usr/bin/env python3
+"""Score a pinned Qwen3.5 checkpoint with VLMEvalKit through a local vLLM server.
+
+VLMEvalKit's in-process Qwen3-VL path sends one prompt at a time to vLLM, which ran at
+roughly five seconds per sample on an L4. Serving the checkpoint and driving VLMEvalKit's
+OpenAI-compatible API path with many workers lets vLLM batch requests instead.
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
-from functools import partial
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
+API_KEY = "sk-local"
+# VLMEvalKit asserts a working LLM judge for these; every other suite dataset is scored by
+# rules (exact option matching, ANLS, OCR accuracy). The served checkpoint extracts answers.
+JUDGED_DATASETS = ("MathVista_MINI",)
+NO_THINKING = {"chat_template_kwargs": {"enable_thinking": False}}
 
-def forwarded_arguments(args: argparse.Namespace) -> list[str]:
+
+def base_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}/v1"
+
+
+def server_command(args: argparse.Namespace) -> list[str]:
     return [
+        sys.executable,
+        "-m",
+        "vllm.entrypoints.openai.api_server",
+        "--model",
+        str(args.model_path),
+        "--served-model-name",
+        args.alias,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(args.port),
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        str(args.max_model_len),
+        "--gpu-memory-utilization",
+        str(args.gpu_memory_utilization),
+        "--seed",
+        str(args.seed),
+        "--limit-mm-per-prompt",
+        json.dumps({"image": args.max_images}),
+    ]
+
+
+def vlmeval_command(
+    args: argparse.Namespace,
+    toolkit_dir: Path,
+    data: list[str],
+    mode: str,
+    judge: str | None = None,
+) -> list[str]:
+    command = [
+        sys.executable,
+        str(toolkit_dir / "run.py"),
         "--model",
         args.alias,
         "--data",
-        *args.data,
+        *data,
         "--work-dir",
         str(args.output_dir),
         "--mode",
-        "all",
-        "--verbose",
+        mode,
+        "--reuse",
+        "--base-url",
+        base_url(args.port),
+        "--model-class",
+        "LMDeployAPI",
+        "--key",
+        API_KEY,
+        "--api-nproc",
+        str(args.api_nproc),
+        "--temperature",
+        "0",
+        "--max-tokens",
+        str(args.max_new_tokens),
+        "--timeout",
+        str(args.timeout),
+        "--retry",
+        "3",
     ]
+    if args.disable_thinking:
+        command.extend(("--extra-body", json.dumps(NO_THINKING)))
+    if mode == "eval":
+        if judge is None:
+            command.extend(("--judge", "exact_matching"))
+        else:
+            command.extend(
+                (
+                    "--judge",
+                    judge,
+                    "--judge-base-url",
+                    base_url(args.port),
+                    "--judge-key",
+                    API_KEY,
+                    "--judge-api-nproc",
+                    str(args.api_nproc),
+                )
+            )
+            if args.disable_thinking:
+                # The judge gets a 128-token budget; a thinking trace would exhaust it.
+                command.extend(("--judge-args", json.dumps(NO_THINKING)))
+    return command
+
+
+def build_plan(args: argparse.Namespace, toolkit_dir: Path) -> dict[str, object]:
+    judged = [name for name in args.data if name in JUDGED_DATASETS]
+    scored_by_rules = [name for name in args.data if name not in JUDGED_DATASETS]
+    return {
+        "toolkit_dir": str(toolkit_dir),
+        "model_path": str(args.model_path),
+        "enable_thinking": not args.disable_thinking,
+        "judged_datasets": judged,
+        "server": server_command(args),
+        "infer": vlmeval_command(args, toolkit_dir, list(args.data), "infer"),
+        "eval": (
+            vlmeval_command(args, toolkit_dir, scored_by_rules, "eval") if scored_by_rules else None
+        ),
+        "eval_judged": (
+            vlmeval_command(args, toolkit_dir, judged, "eval", judge=args.alias) if judged else None
+        ),
+    }
+
+
+def wait_for_server(process: subprocess.Popen[bytes], port: int, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    health = f"http://127.0.0.1:{port}/health"
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"vLLM server exited early with code {process.returncode}")
+        try:
+            with urllib.request.urlopen(health, timeout=5) as response:
+                if response.status == 200:
+                    return
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            pass
+        time.sleep(5)
+    raise TimeoutError(f"vLLM server did not become healthy within {timeout:.0f}s")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Register a pinned Qwen3.5 checkpoint with VLMEvalKit"
+        description="Evaluate a pinned Qwen3.5 checkpoint with VLMEvalKit via vLLM serving"
     )
     parser.add_argument("--toolkit-dir", type=Path, required=True)
     parser.add_argument("--model-path", type=Path, required=True)
@@ -33,53 +160,48 @@ def main() -> None:
     parser.add_argument("--alias", default="Qwen3.5-4B-pinned")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--max-model-len", type=int, default=4096)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.85)
+    parser.add_argument("--max-images", type=int, default=8, help="Images per prompt (MMMU)")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--api-nproc", type=int, default=32, help="Concurrent requests")
+    parser.add_argument("--timeout", type=int, default=1800, help="Per-request timeout")
+    parser.add_argument("--server-timeout", type=float, default=1200.0)
+    parser.add_argument(
+        "--disable-thinking",
+        action="store_true",
+        help="Render prompts with enable_thinking=False so answers are not reasoning traces",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     toolkit_dir = args.toolkit_dir.resolve()
     if not (toolkit_dir / "run.py").is_file():
         raise FileNotFoundError(f"VLMEvalKit run.py not found: {toolkit_dir}")
+    plan = build_plan(args, toolkit_dir)
     if args.dry_run:
-        print(
-            json.dumps(
-                {
-                    "toolkit_dir": str(toolkit_dir),
-                    "model_path": str(args.model_path),
-                    "forwarded_arguments": forwarded_arguments(args),
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(plan, indent=2))
         return
 
-    sys.path.insert(0, str(toolkit_dir))
-    import vllm
-    from vlmeval.config import supported_VLM
-    from vlmeval.vlm import Qwen3VLChat
-
-    original_llm = vllm.LLM
-
-    def limited_context_llm(*positional: object, **keywords: object) -> object:
-        keywords.setdefault("max_model_len", args.max_model_len)
-        return original_llm(*positional, **keywords)
-
-    vllm.LLM = limited_context_llm
-
-    supported_VLM[args.alias] = partial(
-        Qwen3VLChat,
-        model_path=str(args.model_path),
-        use_custom_prompt=False,
-        use_vllm=True,
-        do_sample=False,
-        temperature=0.0,
-        max_new_tokens=args.max_new_tokens,
-    )
-
-    sys.path.insert(0, str(toolkit_dir))
-    from run import main as vlmeval_main
-
-    sys.argv = [str(toolkit_dir / "run.py"), *forwarded_arguments(args)]
-    vlmeval_main()
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    server_log = (args.output_dir / "vllm_server.log").open("ab")
+    server = subprocess.Popen(plan["server"], stdout=server_log, stderr=subprocess.STDOUT)  # type: ignore[arg-type]
+    try:
+        wait_for_server(server, args.port, args.server_timeout)
+        for stage in ("infer", "eval", "eval_judged"):
+            command = plan[stage]
+            if command is None:
+                continue
+            print(f"= vlmeval {stage}", flush=True)
+            subprocess.run(command, cwd=toolkit_dir, check=True)  # type: ignore[arg-type]
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait()
+        server_log.close()
 
 
 if __name__ == "__main__":

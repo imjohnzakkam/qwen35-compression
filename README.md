@@ -82,6 +82,39 @@ After a JarvisLabs run completes, copy the entire result directory into the igno
 uv run python scripts/fetch_jarvis_results.py --instance-id INSTANCE_ID
 ```
 
+## Feature 1 quantized variants
+
+`scripts/run_feature1_variant.py` quantizes one variant from `configs/variants/feature1.yaml` in
+the compression environment, verifies the export manifest, and then scores the exported checkpoint
+with exactly the BF16 baseline's smoke, text, and vision commands. Results land beneath
+`results/feature1/<variant>/`. An existing non-empty export is reused rather than rebuilt.
+
+```bash
+uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128
+```
+
+Pass `--skip-bootstrap` on a machine whose evaluator environments were already built by a previous
+run, and `--text-only --limit 1` for a non-research pilot.
+
+## Feature 1 vision protocol
+
+`scripts/vlmeval_qwen35.py` serves the checkpoint with vLLM's OpenAI-compatible server and drives
+VLMEvalKit's API path (`LMDeployAPI`) with 32 concurrent workers, because VLMEvalKit's in-process
+Qwen3-VL path generates one sample at a time (about five seconds per sample on an L4, or more than
+a day for the six datasets). Inference runs first for every dataset (`--mode infer`, resumable
+with `--reuse`), then scoring:
+
+- MMBench, MMMU, TextVQA, OCRBench, and DocVQA are scored by rules (`--judge exact_matching`).
+  An answer the rules cannot parse counts as wrong; the policy is identical for every variant.
+- MathVista refuses to score without an LLM judge, so the served checkpoint extracts its own
+  answers. This is recorded in the run manifest under `vision_protocol`. Because predictions are
+  saved, `--mode eval` can be re-run later against a fixed judge without repeating inference.
+
+Pass `--vision-only` to either driver to run just this stage, for example after a text-only run.
+
+Both Feature 1 drivers pin `enable_thinking=False`: the 4B chat template thinks by default while the
+0.8B does not, and a 256-token cap on a thinking trace scores zero on every generative task.
+
 The default single-GPU vLLM backend is deliberate. Four spot L4 GPUs cost four times as much per
 hour; `torchrun` reduces elapsed time but cannot reduce total cost for a 4B model that fits on one
 L4.

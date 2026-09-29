@@ -28,6 +28,7 @@ class BenchmarkSuite:
     limit: int | None
     seed: int
     generation: Mapping[str, Any]
+    enable_thinking: bool = False
 
 
 def load_benchmark_suite(path: Path) -> BenchmarkSuite:
@@ -45,6 +46,7 @@ def load_benchmark_suite(path: Path) -> BenchmarkSuite:
         limit=(int(raw["limit"]) if raw.get("limit") is not None else None),
         seed=int(raw.get("seed", 42)),
         generation=dict(raw.get("generation", {})),
+        enable_thinking=bool(raw.get("enable_thinking", False)),
     )
 
 
@@ -142,6 +144,8 @@ def build_lm_eval_command(
         )
     if revision:
         model_args.append(f"revision={revision}")
+    # Passed to apply_chat_template by both the hf-multimodal and vllm backends.
+    model_args.append(f"enable_thinking={suite.enable_thinking}")
     command = [
         str(python_executable or sys.executable),
         "-m",
@@ -171,6 +175,24 @@ def build_lm_eval_command(
     return command
 
 
+# Datasets VLMEvalKit will not score without an LLM judge; the wrapper uses the served
+# checkpoint itself for answer extraction there, so record that in every manifest.
+VISION_JUDGED_DATASETS = ("MathVista_MINI",)
+
+
+def vision_protocol(suite: BenchmarkSuite) -> dict[str, Any]:
+    return {
+        "inference": "vllm openai server via VLMEvalKit LMDeployAPI",
+        "temperature": 0.0,
+        "max_tokens": int(suite.generation.get("max_gen_toks", 256)),
+        "enable_thinking": suite.enable_thinking,
+        "judge": {
+            "default": "exact_matching",
+            **{name: "served checkpoint (extraction only)" for name in VISION_JUDGED_DATASETS},
+        },
+    }
+
+
 def build_vlm_eval_command(
     model_path: Path,
     suite: BenchmarkSuite,
@@ -178,6 +200,7 @@ def build_vlm_eval_command(
     toolkit_dir: Path = Path("external/VLMEvalKit"),
 ) -> list[str]:
     wrapper = Path(__file__).resolve().parents[2] / "scripts" / "vlmeval_qwen35.py"
+    thinking = [] if suite.enable_thinking else ["--disable-thinking"]
     return [
         sys.executable,
         str(wrapper),
@@ -193,6 +216,11 @@ def build_vlm_eval_command(
         str(suite.generation.get("max_gen_toks", 256)),
         "--max-model-len",
         str(suite.max_model_len),
+        "--gpu-memory-utilization",
+        str(suite.gpu_memory_utilization),
+        "--seed",
+        str(suite.seed),
+        *thinking,
     ]
 
 
@@ -210,3 +238,37 @@ def run_command(command: Sequence[str]) -> None:
     import subprocess
 
     subprocess.run(list(command), check=True)
+
+
+# lm-eval never shuts the vLLM engine down, and the detached EngineCore child kept the
+# harness alive indefinitely after results were written. An in-process engine exits.
+EVALUATOR_ENV = {"VLLM_ENABLE_V1_MULTIPROCESSING": "0"}
+
+
+def run_logged(command: Sequence[str], log_path: Path, cwd: Path) -> float:
+    """Run a step, tee its output to the run log, and return its wall-clock seconds."""
+    import os
+    import subprocess
+    import time
+
+    started = time.perf_counter()
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write("+ " + " ".join(command) + "\n")
+        log.flush()
+        process = subprocess.Popen(
+            list(command),
+            cwd=cwd,
+            env={**os.environ, **EVALUATOR_ENV},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            log.write(line)
+        return_code = process.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, list(command))
+    return time.perf_counter() - started
