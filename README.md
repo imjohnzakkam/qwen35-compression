@@ -10,6 +10,96 @@ Reproducible compression experiments for the dense Qwen3.5 vision-language famil
 
 The 9B model is not downloaded or run by any Feature 0 command.
 
+The Feature 0/1/2 names will become `smoke-0.8b`, `study-4b`, and `validate-9b` once the 4B study
+is finished. Renaming earlier would change the config digest halfway through the 4B results.
+
+## Status
+
+Last updated 2026-10-01. Stages follow `plan.md`.
+
+| Stage | Status |
+| --- | --- |
+| Feature 0: 0.8B pipeline smoke (BF16, INT8, GPTQ, AWQ, export) | Done. `results/phase0/` |
+| Feature 1: BF16 text baseline | Done |
+| Feature 1: BF16 vision baseline | Inference done. 3 of 6 datasets wait for extractor scoring |
+| Feature 1: frozen calibration set | Done. `data/calibration/feature1*.lock.json` |
+| Feature 1: INT8, GPTQ, AWQ baselines | Not started. Driver ready; needs GPU budget |
+| Feature 1: component sensitivity, mixed precision | Not started |
+| Feature 2: 9B validation | Not started |
+
+### Feature 1 BF16 baseline: Qwen3.5-4B, instruct mode
+
+All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers.
+
+Text: lm-evaluation-harness on vLLM, 0-shot, chat template, code `ffc8f10`.
+
+| Task | Metric | Score |
+| --- | --- | ---: |
+| MMLU-Pro | exact match, custom extract | 67.0 |
+| GSM8K | exact match, flexible extract | 82.9 |
+| MATH-500 | math_verify | 73.2 |
+| IFEval | prompt-level strict | 82.8 |
+| HellaSwag | acc_norm | 65.4 |
+| ARC-Challenge | acc_norm | 50.6 |
+| WikiText-2 | word perplexity | 11.47 |
+
+HellaSwag and ARC-Challenge read lower than typical reports for this model size. They are
+likelihood-scored tasks run through the chat template, which is the likely cause. This still needs
+checking; comparisons between variants are unaffected because every variant uses the same protocol.
+
+Vision: VLMEvalKit through a vLLM server, code `1e6abe0`, 0 rejected requests.
+
+| Dataset | Score | Scoring |
+| --- | ---: | --- |
+| DocVQA (val) | 95.4 | rules (ANLS) |
+| OCRBench | 86.3 | rules |
+| TextVQA (val) | 83.0 | rules |
+| MMBench (dev, EN v1.1) | pending | gpt-4o-mini extractor |
+| MMMU (val) | pending | gpt-4o-mini extractor |
+| MathVista (mini) | pending | gpt-4o-mini extractor |
+
+The first extractor pass was invalid: an OpenAI rate limit made VLMEvalKit fill 391 MMMU and 30
+MMBench answers with random options. It is kept only as a record at
+`logs/jarvis/feature1-bf16-20260930T030752Z-scored-ratelimited-invalid/`. A throttled pass is due
+once the account's daily request limit has reset.
+
+Raw results are ignored by Git and live under `logs/jarvis/`:
+
+- text: `feature1-bf16-full-20260917T232611Z/`
+- vision: `feature1-bf16-20260930T030752Z/`
+- extractor scores: `feature1-bf16-20260930T030752Z-scored/`, once the pass is done
+
+### GPU spend (JarvisLabs, on-demand L4 at ₹41.31/h)
+
+| Run | Cost |
+| --- | ---: |
+| BF16 vision, including one aborted attempt | ₹145.57 |
+| Balance on 2026-10-01 | ₹835.24 |
+
+Every run pairs with a teardown watcher. It downloads the results and destroys the instance when the
+run ends or fails, and it stops the run at a hard budget deadline.
+
+### Protocol decisions so far
+
+- **Instruct mode.** The 4B chat template thinks by default and the 0.8B does not. Every size and
+  variant is scored with `enable_thinking=False` and a 2048-token generation cap.
+- **Vision context.** The vision server uses `vision_max_model_len: 32768`. At the text suite's
+  4096, image prompts over 2048 tokens were rejected, and VLMEvalKit counted each rejection as a
+  wrong answer.
+- **Multiple-choice extraction.** MMBench, MMMU, and MathVista are scored by one fixed
+  `gpt-4o-mini` extractor after download, never by the variant itself. See the vision protocol
+  section below. Check the per-item `log` column for random fills, not VLMEvalKit's
+  `judge_fail_rate`, which reports 0% even when answers were randomly filled.
+
+### Next
+
+1. Finish BF16 vision scoring for MMBench, MMMU, and MathVista (about $0.40 of API credit).
+2. Run INT8 W8A8, GPTQ W4A16 g128, and AWQ W4A16 g128. The estimate is ₹900–1,000 of GPU time,
+   which is more than the current balance.
+3. Build the comparison table from `plan.md`: change from BF16 and compression ratio, for text and
+   vision.
+4. Component sensitivity and a mixed-precision recipe, then the 9B validation.
+
 ## Setup
 
 ```bash
@@ -98,8 +188,8 @@ run, and `--text-only --limit 1` for a non-research pilot.
 
 ## Feature 1 vision protocol
 
-`scripts/vlmeval_qwen35.py` serves the checkpoint with vLLM's OpenAI-compatible server and drives
-VLMEvalKit's API path (`LMDeployAPI`) with 32 concurrent workers, because VLMEvalKit's in-process
+`scripts/vlmeval_qwen35.py` serves the checkpoint with vLLM's OpenAI-compatible server (context
+`vision_max_model_len`) and drives VLMEvalKit's API path (`LMDeployAPI`) with 32 concurrent workers, because VLMEvalKit's in-process
 Qwen3-VL path generates one sample at a time (about five seconds per sample on an L4, or more than
 a day for the six datasets). Inference runs first for every dataset (`--mode infer`, resumable
 with `--reuse`), then scoring:
@@ -124,8 +214,11 @@ uv run python scripts/score_vision.py --run-dir logs/jarvis/feature1-bf16-<times
 ```
 
 The downloaded run is left untouched; predictions are copied to `<run-dir>-scored/`, which also
-holds `scoring_manifest.json` (extractor, VLMEvalKit revision, prediction SHA-256s). One pass costs
-about $0.40 in API credit per model.
+holds `scoring_manifest.json` (extractor, VLMEvalKit revision, prediction SHA-256s, extraction
+failures). One pass costs about $0.40 in API credit per model. The extractor runs 4 requests at a
+time (`--api-nproc`) to stay under the OpenAI account's rate limit. The script exits non-zero if
+any answer was randomly filled or any task is unscored, and it redacts the API key, which
+VLMEvalKit's client logs, from its output and from every file it writes.
 
 Pass `--vision-only` to either driver to run just this stage, for example after a text-only run.
 
