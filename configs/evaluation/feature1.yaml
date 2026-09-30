@@ -19,6 +19,9 @@ fewshot: 0
 text_backend: vllm
 batch_size: "auto"
 max_model_len: 4096
+# Vision prompts carry image tokens (MMMU has up to 8 images, DocVQA full-page scans); at
+# 4096 any prompt above 4096 - max_gen_toks tokens was rejected and scored as wrong.
+vision_max_model_len: 32768
 gpu_memory_utilization: 0.85
 limit: null
 seed: 42

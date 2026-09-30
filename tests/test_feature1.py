@@ -16,6 +16,7 @@ from qwen35_compression.feature1 import (
     build_vlm_eval_command,
     load_benchmark_suite,
     require_calibration_lock,
+    vision_protocol,
 )
 from qwen35_compression.multimodal import require_multimodal_lock
 
@@ -121,6 +122,7 @@ def test_vlm_eval_command_uses_pinned_task_list() -> None:
         limit=None,
         seed=42,
         generation={},
+        vision_max_model_len=32768,
     )
 
     command = build_vlm_eval_command(
@@ -132,9 +134,19 @@ def test_vlm_eval_command_uses_pinned_task_list() -> None:
         "MMMU_DEV_VAL",
         "OCRBench",
     ]
-    assert command[command.index("--max-model-len") + 1] == "4096"
+    assert command[command.index("--max-model-len") + 1] == "32768"
     assert command[command.index("--gpu-memory-utilization") + 1] == "0.85"
     assert command[-1] == "--disable-thinking"
+
+
+def test_pinned_suite_leaves_room_for_image_prompts() -> None:
+    suite = load_benchmark_suite(Path("configs/evaluation/feature1.yaml"))
+    max_gen_toks = int(suite.generation["max_gen_toks"])
+
+    # The text protocol that produced the BF16 text baseline is unchanged.
+    assert suite.max_model_len == 4096
+    assert suite.vision_max_model_len - max_gen_toks >= 16384
+    assert vision_protocol(suite)["max_model_len"] == suite.vision_max_model_len
 
 
 def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
