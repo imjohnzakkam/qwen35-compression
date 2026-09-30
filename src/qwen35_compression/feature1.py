@@ -29,6 +29,9 @@ class BenchmarkSuite:
     seed: int
     generation: Mapping[str, Any]
     enable_thinking: bool = False
+    # Image prompts run far longer than text ones; a prompt that does not fit beside
+    # max_gen_toks is rejected by vLLM and VLMEvalKit scores the failed request as wrong.
+    vision_max_model_len: int = 4096
 
 
 def load_benchmark_suite(path: Path) -> BenchmarkSuite:
@@ -47,6 +50,9 @@ def load_benchmark_suite(path: Path) -> BenchmarkSuite:
         seed=int(raw.get("seed", 42)),
         generation=dict(raw.get("generation", {})),
         enable_thinking=bool(raw.get("enable_thinking", False)),
+        vision_max_model_len=int(
+            raw.get("vision_max_model_len", raw.get("max_model_len", 4096))
+        ),
     )
 
 
@@ -185,6 +191,7 @@ def vision_protocol(suite: BenchmarkSuite) -> dict[str, Any]:
         "inference": "vllm openai server via VLMEvalKit LMDeployAPI",
         "temperature": 0.0,
         "max_tokens": int(suite.generation.get("max_gen_toks", 256)),
+        "max_model_len": suite.vision_max_model_len,
         "enable_thinking": suite.enable_thinking,
         "judge": {
             "default": "exact_matching",
@@ -215,7 +222,7 @@ def build_vlm_eval_command(
         "--max-new-tokens",
         str(suite.generation.get("max_gen_toks", 256)),
         "--max-model-len",
-        str(suite.max_model_len),
+        str(suite.vision_max_model_len),
         "--gpu-memory-utilization",
         str(suite.gpu_memory_utilization),
         "--seed",
