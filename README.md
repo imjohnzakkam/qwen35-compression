@@ -129,8 +129,50 @@ about $0.40 in API credit per model.
 
 Pass `--vision-only` to either driver to run just this stage, for example after a text-only run.
 
-Both Feature 1 drivers pin `enable_thinking=False`: the 4B chat template thinks by default while the
-0.8B does not, and a 256-token cap on a thinking trace scores zero on every generative task.
+## Feature 1 evaluation tracks
+
+Two protocols, kept apart on purpose. The instruct track is cheap enough to run on every variant.
+The thinking track measures the model the way Qwen publishes it, on a subset, for BF16 and the
+final few variants.
+
+| | Instruct track (main) | Thinking track |
+| --- | --- | --- |
+| Suite | `configs/evaluation/feature1.yaml` | `configs/evaluation/feature1_thinking.yaml` |
+| Mode | `enable_thinking=False` | thinking, as the model card recommends |
+| Decoding | greedy | `temperature=1.0, top_p=0.95, top_k=20, presence_penalty=1.5` |
+| Answer cap | 8,192 tokens, text and vision | 32,768 tokens |
+| Tasks | full text and vision suite | MMLU-Pro (fixed 1,001 questions), MATH-500, IFEval |
+| Runs | one | one per seed (42, 43), averaged |
+| Used for | every variant and the sensitivity sweep | BF16 and the final 2–3 variants |
+
+The 8,192-token cap replaced 2,048, which cut off 8.2% of MMLU-Pro, 14.6% of MATH-500, and 10.8% of
+MMMU answers (most then scored wrong). A variant that writes longer answers would have lost accuracy
+to truncation rather than quality. The text context is 12,288 tokens because lm-eval silently
+truncates the start of any prompt that does not fit beside the answer budget. Suites that leave
+fewer than 2,048 prompt tokens (16,384 for vision) are rejected. The larger context also changes
+WikiText perplexity, which is computed over windows of that length.
+
+Run the thinking track with `--suite`. It is text-only and writes to `<variant>-thinking/`:
+
+```bash
+uv run python scripts/run_feature1_bf16.py --suite configs/evaluation/feature1_thinking.yaml
+uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128 \
+  --suite configs/evaluation/feature1_thinking.yaml
+uv run python scripts/fetch_jarvis_results.py --instance-id INSTANCE_ID \
+  --remote-path /home/qwen35-compression/results/feature1/bf16-thinking
+```
+
+The MMLU-Pro subset is stratified by subject with seed 42, and `scripts/make_thinking_subset.py`
+regenerates it. lm-eval strips everything up to `</think>` before extracting answers, and in thinking
+mode it cannot score likelihood tasks (HellaSwag, ARC, WikiText). Every run manifest records the
+suite's path and SHA-256 under `benchmark_suite`.
+
+**Why these numbers differ from the model card.** Qwen reports thinking mode with 32,768–81,920
+output tokens, sampling, and answer-format prompts: for example MMLU-Pro 79.1 and IFEval 89.8. The
+instruct track scored 67.0 and 82.8 under a 2,048-token cap; the gap comes from the mode, the cap,
+and the answer format, not from a different checkpoint. The thinking track should land near the card
+on MMLU-Pro and IFEval. It differs on purpose in using lm-eval's prompts, a subset, and no GPQA
+Diamond (`Idavidrein/gpqa` is gated on Hugging Face).
 
 The default single-GPU vLLM backend is deliberate. Four spot L4 GPUs cost four times as much per
 hour; `torchrun` reduces elapsed time but cannot reduce total cost for a 4B model that fits on one

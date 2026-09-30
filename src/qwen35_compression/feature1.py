@@ -36,10 +36,28 @@ class BenchmarkSuite:
     # scored after download by one fixed extractor, identical for every variant.
     vision_answer_extractor: str | None = None
     vision_extracted_tasks: tuple[str, ...] = ()
+    # Thinking-mode suites: lm-eval strips everything up to this token before extracting answers.
+    think_end_token: str | None = None
+    # Sampled suites run once per seed; an empty tuple means one run with `seed`.
+    seeds: tuple[int, ...] = ()
+    # Fixed per-task document indices (lm-eval --samples), for reproducible subsets.
+    samples_path: Path | None = None
+    source_path: Path | None = None
+    digest: str | None = None
+
+
+# lm-eval rejects likelihood-scored tasks when enable_thinking=True.
+LOGLIKELIHOOD_TASKS = frozenset({"hellaswag", "arc_challenge", "arc_easy", "wikitext"})
+# Room a prompt needs beside max_gen_toks. lm-eval silently truncates the start of any prompt
+# that does not fit, so a suite that leaves less than this is rejected.
+MIN_PROMPT_TOKENS = 2048
+# Image prompts (MMMU carries up to 8 images) need far more room than text ones.
+MIN_VISION_PROMPT_TOKENS = 16384
 
 
 def load_benchmark_suite(path: Path) -> BenchmarkSuite:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw_bytes = path.read_bytes()
+    raw = yaml.safe_load(raw_bytes)
     if not isinstance(raw, Mapping):
         raise ValueError(f"expected a YAML mapping in {path}")
     vision_tasks = tuple(str(task) for task in raw["vision_tasks"])
@@ -50,24 +68,86 @@ def load_benchmark_suite(path: Path) -> BenchmarkSuite:
     unknown = sorted(set(extracted) - set(vision_tasks))
     if unknown:
         raise ValueError(f"vision_extracted_tasks not in vision_tasks: {unknown}")
+    text_tasks = tuple(str(task) for task in raw["text_tasks"])
+    enable_thinking = bool(raw.get("enable_thinking", False))
+    think_end_token = raw.get("think_end_token")
+    if enable_thinking and not think_end_token:
+        raise ValueError("enable_thinking requires think_end_token")
+    likelihood = sorted(set(text_tasks) & LOGLIKELIHOOD_TASKS)
+    if enable_thinking and likelihood:
+        raise ValueError(f"thinking suites cannot score likelihood tasks: {likelihood}")
+    if enable_thinking and vision_tasks:
+        raise ValueError("thinking suites are text-only")
+    max_model_len = int(raw.get("max_model_len", 4096))
+    vision_max_model_len = int(raw.get("vision_max_model_len", max_model_len))
+    max_gen_toks = int(dict(raw.get("generation", {})).get("max_gen_toks", 256))
+    if text_tasks and max_model_len - max_gen_toks < MIN_PROMPT_TOKENS:
+        raise ValueError(
+            f"max_model_len {max_model_len} leaves under {MIN_PROMPT_TOKENS} prompt tokens "
+            f"beside max_gen_toks {max_gen_toks}"
+        )
+    if vision_tasks and vision_max_model_len - max_gen_toks < MIN_VISION_PROMPT_TOKENS:
+        raise ValueError(
+            f"vision_max_model_len {vision_max_model_len} leaves under "
+            f"{MIN_VISION_PROMPT_TOKENS} prompt tokens beside max_gen_toks {max_gen_toks}"
+        )
+    samples = raw.get("samples_path")
+    samples_path = (path.parent / str(samples)).resolve() if samples else None
+    if samples_path is not None and not samples_path.is_file():
+        raise FileNotFoundError(f"samples_path not found: {samples_path}")
+    if samples_path is not None and raw.get("limit") is not None:
+        raise ValueError("samples_path and limit are mutually exclusive")
     return BenchmarkSuite(
-        text_tasks=tuple(str(task) for task in raw["text_tasks"]),
+        text_tasks=text_tasks,
         vision_tasks=vision_tasks,
         fewshot=int(raw.get("fewshot", 0)),
         text_backend=str(raw.get("text_backend", "hf-multimodal")),
         batch_size=str(raw.get("batch_size", "auto")),
-        max_model_len=int(raw.get("max_model_len", 4096)),
+        max_model_len=max_model_len,
         gpu_memory_utilization=float(raw.get("gpu_memory_utilization", 0.85)),
         limit=(int(raw["limit"]) if raw.get("limit") is not None else None),
         seed=int(raw.get("seed", 42)),
         generation=dict(raw.get("generation", {})),
-        enable_thinking=bool(raw.get("enable_thinking", False)),
-        vision_max_model_len=int(
-            raw.get("vision_max_model_len", raw.get("max_model_len", 4096))
-        ),
+        enable_thinking=enable_thinking,
+        vision_max_model_len=vision_max_model_len,
         vision_answer_extractor=str(extractor) if extractor else None,
         vision_extracted_tasks=extracted,
+        think_end_token=str(think_end_token) if think_end_token else None,
+        seeds=tuple(int(seed) for seed in raw.get("seeds", ())),
+        samples_path=samples_path,
+        source_path=path.resolve(),
+        digest=hashlib.sha256(raw_bytes).hexdigest(),
     )
+
+
+def suite_record(suite: BenchmarkSuite) -> dict[str, Any]:
+    """What a run manifest records about the benchmark suite that produced it."""
+    return {
+        "path": str(suite.source_path) if suite.source_path else None,
+        "sha256": suite.digest,
+        "enable_thinking": suite.enable_thinking,
+        "max_gen_toks": int(suite.generation.get("max_gen_toks", 256)),
+        "max_model_len": suite.max_model_len,
+        "seeds": list(suite.seeds) or [suite.seed],
+        "samples": (
+            {"path": str(suite.samples_path), "sha256": _file_sha256(suite.samples_path)}
+            if suite.samples_path
+            else None
+        ),
+    }
+
+
+def suite_label(suite: BenchmarkSuite, default_suite: Path | None) -> str | None:
+    """None for the config's own suite, else a short name for output paths ("thinking")."""
+    if suite.source_path is None or (
+        default_suite is not None and suite.source_path == default_suite.resolve()
+    ):
+        return None
+    return suite.source_path.stem.removeprefix("feature1_")
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def prepare_calibration_dataset(config: CalibrationConfig) -> Mapping[str, Any]:
@@ -147,8 +227,10 @@ def build_lm_eval_command(
     limit_override: str | None = None,
     backend_override: str | None = None,
     python_executable: str | Path | None = None,
+    seed_override: int | None = None,
 ) -> list[str]:
     backend = backend_override or suite.text_backend
+    seed = suite.seed if seed_override is None else seed_override
     if backend not in {"hf-multimodal", "vllm"}:
         raise ValueError(f"unsupported text backend: {backend}")
     model_args = [f"pretrained={model_path}"]
@@ -160,12 +242,16 @@ def build_lm_eval_command(
                 "dtype=bfloat16",
                 f"max_model_len={suite.max_model_len}",
                 f"gpu_memory_utilization={suite.gpu_memory_utilization}",
+                # vLLM's sampling seed; greedy suites are unaffected by it.
+                f"seed={seed}",
             )
         )
     if revision:
         model_args.append(f"revision={revision}")
     # Passed to apply_chat_template by both the hf-multimodal and vllm backends.
     model_args.append(f"enable_thinking={suite.enable_thinking}")
+    if suite.think_end_token:
+        model_args.append(f"think_end_token={suite.think_end_token}")
     command = [
         str(python_executable or sys.executable),
         "-m",
@@ -182,7 +268,7 @@ def build_lm_eval_command(
         suite.batch_size,
         "--apply_chat_template",
         "--seed",
-        str(suite.seed),
+        str(seed),
         "--gen_kwargs",
         *(f"{key}={value!r}" for key, value in sorted(suite.generation.items())),
         "--log_samples",
@@ -192,7 +278,51 @@ def build_lm_eval_command(
     limit = limit_override if limit_override is not None else suite.limit
     if limit is not None:
         command.extend(("--limit", str(limit)))
+    elif suite.samples_path is not None:
+        command.extend(("--samples", str(suite.samples_path)))
     return command
+
+
+def build_text_eval_commands(
+    model_path: Path,
+    suite: BenchmarkSuite,
+    output_path: Path,
+    revision: str | None = None,
+    limit_override: str | None = None,
+    python_executable: str | Path | None = None,
+) -> list[tuple[str, list[str]]]:
+    """One lm-eval command per seed for sampled suites, else a single command."""
+    if not suite.seeds:
+        return [
+            (
+                "text",
+                build_lm_eval_command(
+                    model_path,
+                    suite,
+                    output_path,
+                    revision,
+                    limit_override=limit_override,
+                    backend_override="vllm",
+                    python_executable=python_executable,
+                ),
+            )
+        ]
+    return [
+        (
+            f"text_seed{seed}",
+            build_lm_eval_command(
+                model_path,
+                suite,
+                output_path / f"seed-{seed}",
+                revision,
+                limit_override=limit_override,
+                backend_override="vllm",
+                python_executable=python_executable,
+                seed_override=seed,
+            ),
+        )
+        for seed in suite.seeds
+    ]
 
 
 # Datasets VLMEvalKit will not score without an LLM judge; the wrapper uses the served
