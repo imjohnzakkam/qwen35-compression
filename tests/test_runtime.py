@@ -75,9 +75,10 @@ def test_vlmeval_wrapper_registers_alias_and_forwards_tasks(tmp_path: Path) -> N
     assert infer[infer.index("--mode") + 1] == "infer"
     assert infer[infer.index("--model-class") + 1] == "LMDeployAPI"
     assert infer[infer.index("--base-url") + 1].startswith("http://127.0.0.1:")
-    # Neither dataset needs an LLM judge, so scoring is rule-based and nothing is judged.
+    # Neither dataset is left for the answer extractor, so both are scored by rules on the GPU.
     assert plan["eval"][plan["eval"].index("--judge") + 1] == "exact_matching"
-    assert plan["eval_judged"] is None and plan["judged_datasets"] == []
+    assert plan["extracted_datasets"] == []
+    assert "eval_judged" not in plan
 
 
 def test_result_download_targets_local_logs() -> None:
@@ -221,7 +222,7 @@ def test_vlmeval_wrapper_reports_thinking_mode(tmp_path: Path) -> None:
     assert extra == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
-def test_vlmeval_wrapper_judges_only_datasets_that_require_it(tmp_path: Path) -> None:
+def test_vlmeval_wrapper_leaves_extracted_datasets_for_local_scoring(tmp_path: Path) -> None:
     toolkit = tmp_path / "VLMEvalKit"
     toolkit.mkdir()
     (toolkit / "run.py").write_text("", encoding="utf-8")
@@ -238,6 +239,10 @@ def test_vlmeval_wrapper_judges_only_datasets_that_require_it(tmp_path: Path) ->
             "--data",
             "MMBench_DEV_EN_V11",
             "MathVista_MINI",
+            "TextVQA_VAL",
+            "--extracted-data",
+            "MMBench_DEV_EN_V11",
+            "MathVista_MINI",
             "--disable-thinking",
             "--dry-run",
         ],
@@ -246,12 +251,16 @@ def test_vlmeval_wrapper_judges_only_datasets_that_require_it(tmp_path: Path) ->
         text=True,
     )
     plan = json.loads(result.stdout)
-    assert plan["judged_datasets"] == ["MathVista_MINI"]
-    assert plan["eval"][plan["eval"].index("--data") + 1] == "MMBench_DEV_EN_V11"
-    judged = plan["eval_judged"]
-    assert judged[judged.index("--data") + 1] == "MathVista_MINI"
-    assert judged[judged.index("--judge") + 1] == "Qwen3.5-4B-pinned"
-    assert judged[judged.index("--judge-base-url") + 1] == judged[judged.index("--base-url") + 1]
-    assert json.loads(judged[judged.index("--judge-args") + 1]) == {
-        "chat_template_kwargs": {"enable_thinking": False}
-    }
+    infer = plan["infer"]
+    # Every dataset is inferred on the GPU ...
+    assert infer[infer.index("--data") + 1 : infer.index("--work-dir")] == [
+        "MMBench_DEV_EN_V11",
+        "MathVista_MINI",
+        "TextVQA_VAL",
+    ]
+    # ... but only rule-scored ones are evaluated there; the rest wait for score_vision.py.
+    assert plan["extracted_datasets"] == ["MMBench_DEV_EN_V11", "MathVista_MINI"]
+    evaluate = plan["eval"]
+    assert evaluate[evaluate.index("--data") + 1 : evaluate.index("--work-dir")] == ["TextVQA_VAL"]
+    assert evaluate[evaluate.index("--judge") + 1] == "exact_matching"
+    assert "eval_judged" not in plan

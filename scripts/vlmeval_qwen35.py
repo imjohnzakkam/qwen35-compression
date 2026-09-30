@@ -18,9 +18,6 @@ import urllib.request
 from pathlib import Path
 
 API_KEY = "sk-local"
-# VLMEvalKit asserts a working LLM judge for these; every other suite dataset is scored by
-# rules (exact option matching, ANLS, OCR accuracy). The served checkpoint extracts answers.
-JUDGED_DATASETS = ("MathVista_MINI",)
 NO_THINKING = {"chat_template_kwargs": {"enable_thinking": False}}
 
 
@@ -59,7 +56,6 @@ def vlmeval_command(
     toolkit_dir: Path,
     data: list[str],
     mode: str,
-    judge: str | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -93,42 +89,24 @@ def vlmeval_command(
     if args.disable_thinking:
         command.extend(("--extra-body", json.dumps(NO_THINKING)))
     if mode == "eval":
-        if judge is None:
-            command.extend(("--judge", "exact_matching"))
-        else:
-            command.extend(
-                (
-                    "--judge",
-                    judge,
-                    "--judge-base-url",
-                    base_url(args.port),
-                    "--judge-key",
-                    API_KEY,
-                    "--judge-api-nproc",
-                    str(args.api_nproc),
-                )
-            )
-            if args.disable_thinking:
-                # The judge gets a 128-token budget; a thinking trace would exhaust it.
-                command.extend(("--judge-args", json.dumps(NO_THINKING)))
+        command.extend(("--judge", "exact_matching"))
     return command
 
 
 def build_plan(args: argparse.Namespace, toolkit_dir: Path) -> dict[str, object]:
-    judged = [name for name in args.data if name in JUDGED_DATASETS]
-    scored_by_rules = [name for name in args.data if name not in JUDGED_DATASETS]
+    # Datasets whose free-form answers need the fixed answer extractor are only inferred here;
+    # scripts/score_vision.py scores them after download so every variant shares one extractor.
+    extracted = [name for name in args.data if name in args.extracted_data]
+    scored_by_rules = [name for name in args.data if name not in args.extracted_data]
     return {
         "toolkit_dir": str(toolkit_dir),
         "model_path": str(args.model_path),
         "enable_thinking": not args.disable_thinking,
-        "judged_datasets": judged,
+        "extracted_datasets": extracted,
         "server": server_command(args),
         "infer": vlmeval_command(args, toolkit_dir, list(args.data), "infer"),
         "eval": (
             vlmeval_command(args, toolkit_dir, scored_by_rules, "eval") if scored_by_rules else None
-        ),
-        "eval_judged": (
-            vlmeval_command(args, toolkit_dir, judged, "eval", judge=args.alias) if judged else None
         ),
     }
 
@@ -157,6 +135,12 @@ def main() -> None:
     parser.add_argument("--model-path", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--data", nargs="+", required=True)
+    parser.add_argument(
+        "--extracted-data",
+        nargs="*",
+        default=[],
+        help="Datasets to infer but leave for scripts/score_vision.py to score",
+    )
     parser.add_argument("--alias", default="Qwen3.5-4B-pinned")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--max-model-len", type=int, default=4096)
@@ -188,7 +172,7 @@ def main() -> None:
     server = subprocess.Popen(plan["server"], stdout=server_log, stderr=subprocess.STDOUT)  # type: ignore[arg-type]
     try:
         wait_for_server(server, args.port, args.server_timeout)
-        for stage in ("infer", "eval", "eval_judged"):
+        for stage in ("infer", "eval"):
             command = plan[stage]
             if command is None:
                 continue

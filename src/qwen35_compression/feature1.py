@@ -32,15 +32,27 @@ class BenchmarkSuite:
     # Image prompts run far longer than text ones; a prompt that does not fit beside
     # max_gen_toks is rejected by vLLM and VLMEvalKit scores the failed request as wrong.
     vision_max_model_len: int = 4096
+    # MCQ-style answers are free-form explanations the rules cannot parse; these datasets are
+    # scored after download by one fixed extractor, identical for every variant.
+    vision_answer_extractor: str | None = None
+    vision_extracted_tasks: tuple[str, ...] = ()
 
 
 def load_benchmark_suite(path: Path) -> BenchmarkSuite:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, Mapping):
         raise ValueError(f"expected a YAML mapping in {path}")
+    vision_tasks = tuple(str(task) for task in raw["vision_tasks"])
+    extracted = tuple(str(task) for task in raw.get("vision_extracted_tasks", ()))
+    extractor = raw.get("vision_answer_extractor")
+    if extracted and not extractor:
+        raise ValueError("vision_extracted_tasks requires vision_answer_extractor")
+    unknown = sorted(set(extracted) - set(vision_tasks))
+    if unknown:
+        raise ValueError(f"vision_extracted_tasks not in vision_tasks: {unknown}")
     return BenchmarkSuite(
         text_tasks=tuple(str(task) for task in raw["text_tasks"]),
-        vision_tasks=tuple(str(task) for task in raw["vision_tasks"]),
+        vision_tasks=vision_tasks,
         fewshot=int(raw.get("fewshot", 0)),
         text_backend=str(raw.get("text_backend", "hf-multimodal")),
         batch_size=str(raw.get("batch_size", "auto")),
@@ -53,6 +65,8 @@ def load_benchmark_suite(path: Path) -> BenchmarkSuite:
         vision_max_model_len=int(
             raw.get("vision_max_model_len", raw.get("max_model_len", 4096))
         ),
+        vision_answer_extractor=str(extractor) if extractor else None,
+        vision_extracted_tasks=extracted,
     )
 
 
@@ -183,9 +197,6 @@ def build_lm_eval_command(
 
 # Datasets VLMEvalKit will not score without an LLM judge; the wrapper uses the served
 # checkpoint itself for answer extraction there, so record that in every manifest.
-VISION_JUDGED_DATASETS = ("MathVista_MINI",)
-
-
 def vision_protocol(suite: BenchmarkSuite) -> dict[str, Any]:
     return {
         "inference": "vllm openai server via VLMEvalKit LMDeployAPI",
@@ -195,7 +206,10 @@ def vision_protocol(suite: BenchmarkSuite) -> dict[str, Any]:
         "enable_thinking": suite.enable_thinking,
         "judge": {
             "default": "exact_matching",
-            **{name: "served checkpoint (extraction only)" for name in VISION_JUDGED_DATASETS},
+            **{
+                name: f"{suite.vision_answer_extractor} answer extraction after download"
+                for name in suite.vision_extracted_tasks
+            },
         },
     }
 
@@ -208,6 +222,9 @@ def build_vlm_eval_command(
 ) -> list[str]:
     wrapper = Path(__file__).resolve().parents[2] / "scripts" / "vlmeval_qwen35.py"
     thinking = [] if suite.enable_thinking else ["--disable-thinking"]
+    extracted = (
+        ["--extracted-data", *suite.vision_extracted_tasks] if suite.vision_extracted_tasks else []
+    )
     return [
         sys.executable,
         str(wrapper),
@@ -227,7 +244,47 @@ def build_vlm_eval_command(
         str(suite.gpu_memory_utilization),
         "--seed",
         str(suite.seed),
+        *extracted,
         *thinking,
+    ]
+
+
+def build_vision_score_command(
+    suite: BenchmarkSuite,
+    work_dir: Path,
+    model_alias: str,
+    toolkit_dir: Path,
+    python_executable: Path,
+    api_nproc: int = 4,
+) -> list[str]:
+    """VLMEvalKit eval-only command that scores saved predictions with the fixed extractor."""
+    if not suite.vision_extracted_tasks or suite.vision_answer_extractor is None:
+        raise ValueError("the benchmark suite defines no extractor-scored vision tasks")
+    return [
+        str(python_executable),
+        str(toolkit_dir / "run.py"),
+        "--model",
+        model_alias,
+        "--data",
+        *suite.vision_extracted_tasks,
+        "--work-dir",
+        str(work_dir),
+        "--mode",
+        "eval",
+        "--reuse",
+        "--judge",
+        suite.vision_answer_extractor,
+        # VLMEvalKit's default of 32 concurrent requests trips OpenAI rate limits, and a
+        # failed extraction becomes a random option; stay well under the account limit.
+        "--judge-api-nproc",
+        str(api_nproc),
+        # run.py builds the inference model even in eval mode; nothing is sent to it.
+        "--base-url",
+        "http://127.0.0.1:9/v1",
+        "--model-class",
+        "LMDeployAPI",
+        "--key",
+        "unused",
     ]
 
 

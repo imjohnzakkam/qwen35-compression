@@ -22,6 +22,14 @@ max_model_len: 4096
 # Vision prompts carry image tokens (MMMU has up to 8 images, DocVQA full-page scans); at
 # 4096 any prompt above 4096 - max_gen_toks tokens was rejected and scored as wrong.
 vision_max_model_len: 32768
+# The 4B model answers multiple-choice questions with explanations that VLMEvalKit's rules
+# cannot parse (MMMU scored below chance). These datasets are scored after download by one fixed
+# extractor, the VLMEvalKit/OpenCompass default, identical for every variant.
+vision_answer_extractor: gpt-4o-mini
+vision_extracted_tasks:
+  - MMBench_DEV_EN_V11
+  - MMMU_DEV_VAL
+  - MathVista_MINI
 gpu_memory_utilization: 0.85
 limit: null
 seed: 42
