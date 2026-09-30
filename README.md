@@ -104,11 +104,28 @@ Qwen3-VL path generates one sample at a time (about five seconds per sample on a
 a day for the six datasets). Inference runs first for every dataset (`--mode infer`, resumable
 with `--reuse`), then scoring:
 
-- MMBench, MMMU, TextVQA, OCRBench, and DocVQA are scored by rules (`--judge exact_matching`).
-  An answer the rules cannot parse counts as wrong; the policy is identical for every variant.
-- MathVista refuses to score without an LLM judge, so the served checkpoint extracts its own
-  answers. This is recorded in the run manifest under `vision_protocol`. Because predictions are
-  saved, `--mode eval` can be re-run later against a fixed judge without repeating inference.
+- TextVQA, OCRBench, and DocVQA are scored by rules on the GPU (`--judge exact_matching`).
+- MMBench, MMMU, and MathVista are inferred on the GPU but scored after download by one fixed
+  answer extractor, `gpt-4o-mini` (VLMEvalKit's and the OpenCompass leaderboard's default). The
+  4B model answers multiple-choice questions with explanations that the rules cannot parse; under
+  rules alone MMMU scored below chance. A variant must never extract its own answers, or
+  quantization would change the extractor as well as the model.
+
+The extractor, and which datasets use it, are set in `configs/evaluation/feature1.yaml` and
+recorded in the run manifest under `vision_protocol`. Score a downloaded run on the local machine;
+the OpenAI key is read from `~/.config/qwen35/openai.env` into the scoring process only and never
+leaves the machine:
+
+```bash
+uv venv .venv-vision-score --python 3.11
+uv pip install --python .venv-vision-score/bin/python -r requirements/vision-score.lock
+uv pip install --python .venv-vision-score/bin/python --no-deps -e external/VLMEvalKit
+uv run python scripts/score_vision.py --run-dir logs/jarvis/feature1-bf16-<timestamp>
+```
+
+The downloaded run is left untouched; predictions are copied to `<run-dir>-scored/`, which also
+holds `scoring_manifest.json` (extractor, VLMEvalKit revision, prediction SHA-256s). One pass costs
+about $0.40 in API credit per model.
 
 Pass `--vision-only` to either driver to run just this stage, for example after a text-only run.
 

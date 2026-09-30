@@ -11,3 +11,6 @@ outputs/
 results/
 logs/
 external/
+
+# Local evaluator environments (.venv-gpu-*, .venv-vision-score)
+.venv-*/

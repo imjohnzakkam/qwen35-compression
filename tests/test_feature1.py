@@ -13,6 +13,7 @@ from qwen35_compression.config import load_config
 from qwen35_compression.feature1 import (
     BenchmarkSuite,
     build_lm_eval_command,
+    build_vision_score_command,
     build_vlm_eval_command,
     load_benchmark_suite,
     require_calibration_lock,
@@ -285,3 +286,120 @@ def test_variant_runner_plans_quantize_then_shared_protocol() -> None:
     )
     assert rejected.returncode != 0
     assert "run_feature1_bf16.py" in rejected.stderr
+
+
+def _extractor_suite(**overrides: object) -> BenchmarkSuite:
+    fields: dict[str, object] = {
+        "text_tasks": (),
+        "vision_tasks": ("MMMU_DEV_VAL", "OCRBench"),
+        "fewshot": 0,
+        "text_backend": "vllm",
+        "batch_size": "auto",
+        "max_model_len": 4096,
+        "gpu_memory_utilization": 0.85,
+        "limit": None,
+        "seed": 42,
+        "generation": {},
+        "vision_answer_extractor": "gpt-4o-mini",
+        "vision_extracted_tasks": ("MMMU_DEV_VAL",),
+    }
+    fields.update(overrides)
+    return BenchmarkSuite(**fields)  # type: ignore[arg-type]
+
+
+def test_pinned_suite_scores_free_form_mcq_with_one_fixed_extractor() -> None:
+    suite = load_benchmark_suite(Path("configs/evaluation/feature1.yaml"))
+
+    assert suite.vision_answer_extractor == "gpt-4o-mini"
+    assert suite.vision_extracted_tasks == ("MMBench_DEV_EN_V11", "MMMU_DEV_VAL", "MathVista_MINI")
+    judge = vision_protocol(suite)["judge"]
+    assert judge["default"] == "exact_matching"
+    assert judge["MMMU_DEV_VAL"] == "gpt-4o-mini answer extraction after download"
+    assert "TextVQA_VAL" not in judge
+
+
+def test_suite_rejects_extracted_tasks_outside_the_vision_suite(tmp_path: Path) -> None:
+    path = tmp_path / "suite.yaml"
+    path.write_text(
+        "text_tasks: []\nvision_tasks: [OCRBench]\n"
+        "vision_answer_extractor: gpt-4o-mini\nvision_extracted_tasks: [MMMU_DEV_VAL]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not in vision_tasks"):
+        load_benchmark_suite(path)
+
+    path.write_text(
+        "text_tasks: []\nvision_tasks: [MMMU_DEV_VAL]\nvision_extracted_tasks: [MMMU_DEV_VAL]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="requires vision_answer_extractor"):
+        load_benchmark_suite(path)
+
+
+def test_vision_commands_split_rule_and_extractor_scoring() -> None:
+    suite = _extractor_suite()
+
+    gpu = build_vlm_eval_command(Path("model"), suite, Path("results/vision"))
+    assert gpu[gpu.index("--extracted-data") + 1 : -1] == ["MMMU_DEV_VAL"]
+    assert gpu[-1] == "--disable-thinking"
+
+    local = build_vision_score_command(
+        suite, Path("scored"), "Qwen3.5-4B-pinned", Path("vendor/vlmeval"), Path("py")
+    )
+    assert local[:2] == ["py", "vendor/vlmeval/run.py"]
+    assert local[local.index("--data") + 1 : local.index("--work-dir")] == ["MMMU_DEV_VAL"]
+    assert local[local.index("--mode") + 1] == "eval"
+    assert local[local.index("--judge") + 1] == "gpt-4o-mini"
+    assert "--reuse" in local
+    assert local[local.index("--judge-api-nproc") + 1] == "4"
+
+    with pytest.raises(ValueError, match="no extractor-scored"):
+        build_vision_score_command(
+            _extractor_suite(vision_extracted_tasks=()), Path("s"), "m", Path("v"), Path("p")
+        )
+
+
+def test_score_vision_dry_run_finds_saved_predictions(tmp_path: Path) -> None:
+    run = tmp_path / "feature1-bf16-20260930T000000Z"
+    model_dir = run / "vision" / "Qwen3.5-4B-pinned" / "T20260930-000000"
+    model_dir.mkdir(parents=True)
+    for task in ("MMBench_DEV_EN_V11", "MMMU_DEV_VAL", "MathVista_MINI"):
+        (model_dir / f"Qwen3.5-4B-pinned_{task}.xlsx").write_bytes(b"x")
+    (run / "run_manifest.json").write_text(
+        json.dumps({"status": "passed", "research_result": True}), encoding="utf-8"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/score_vision.py", "--run-dir", str(run), "--dry-run"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    plan = json.loads(result.stdout)
+    assert plan["output"] == str(run.with_name(run.name + "-scored").resolve())
+    assert sorted(plan["predictions"]) == ["MMBench_DEV_EN_V11", "MMMU_DEV_VAL", "MathVista_MINI"]
+    command = plan["command"]
+    assert command[command.index("--model") + 1] == "Qwen3.5-4B-pinned"
+    assert command[command.index("--work-dir") + 1] == plan["output"]
+
+
+def test_score_vision_redacts_the_api_key_from_written_files(tmp_path: Path) -> None:
+    import importlib.util
+
+    sys.path.insert(0, "scripts")
+    spec = importlib.util.spec_from_file_location("score_vision", "scripts/score_vision.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    secret = "sk-proj-" + "x" * 40
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs" / "run.log").write_text(f"API Key: {secret}\n", encoding="utf-8")
+    (tmp_path / "clean.txt").write_text("nothing here\n", encoding="utf-8")
+
+    redacted = module.redact_tree(tmp_path, secret)
+
+    assert redacted == ["logs/run.log"]
+    log = (tmp_path / "logs" / "run.log").read_text(encoding="utf-8")
+    assert secret not in log
+    assert "[REDACTED_OPENAI_API_KEY]" in log
