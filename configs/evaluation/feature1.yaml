@@ -18,7 +18,9 @@ vision_tasks:
 fewshot: 0
 text_backend: vllm
 batch_size: "auto"
-max_model_len: 4096
+# Prompt + answer. lm-eval silently truncates the start of a prompt that does not fit beside
+# max_gen_toks, so this leaves 4096 prompt tokens beside the 8192-token answer cap.
+max_model_len: 12288
 # Vision prompts carry image tokens (MMMU has up to 8 images, DocVQA full-page scans); at
 # 4096 any prompt above 4096 - max_gen_toks tokens was rejected and scored as wrong.
 vision_max_model_len: 32768
@@ -38,5 +40,7 @@ seed: 42
 enable_thinking: false
 generation:
   do_sample: false
-  # Upper bound only; lm-eval's largest per-task default is 2048 (MMLU-Pro).
-  max_gen_toks: 2048
+  # Overrides every generative task's own limit, for text and vision alike. At 2048, 8.2% of
+  # MMLU-Pro, 14.6% of MATH-500 and 10.8% of MMMU answers hit the cap and were mostly scored
+  # wrong; a variant that writes longer answers would then lose accuracy to truncation alone.
+  max_gen_toks: 8192

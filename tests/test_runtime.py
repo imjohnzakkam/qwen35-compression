@@ -163,7 +163,9 @@ def test_complete_bf16_pipeline_has_mac_dry_run() -> None:
         text=True,
     )
     plan = json.loads(result.stdout)
-    assert plan["text"][plan["text"].index("--model") + 1] == "vllm"
+    text = plan["text"]["text"]
+    assert text[text.index("--model") + 1] == "vllm"
+    assert plan["benchmark_suite"]["max_gen_toks"] == 8192
     assert plan["vision"] is None
     assert plan["runtime_smoke"][0].endswith(".venv-gpu-text/bin/python")
 

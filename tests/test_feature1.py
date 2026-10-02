@@ -13,6 +13,7 @@ from qwen35_compression.config import load_config
 from qwen35_compression.feature1 import (
     BenchmarkSuite,
     build_lm_eval_command,
+    build_text_eval_commands,
     build_vision_score_command,
     build_vlm_eval_command,
     load_benchmark_suite,
@@ -140,13 +141,16 @@ def test_vlm_eval_command_uses_pinned_task_list() -> None:
     assert command[-1] == "--disable-thinking"
 
 
-def test_pinned_suite_leaves_room_for_image_prompts() -> None:
+def test_pinned_suite_leaves_room_for_long_answers_and_prompts() -> None:
     suite = load_benchmark_suite(Path("configs/evaluation/feature1.yaml"))
     max_gen_toks = int(suite.generation["max_gen_toks"])
 
-    # The text protocol that produced the BF16 text baseline is unchanged.
-    assert suite.max_model_len == 4096
+    # At 2048, 8-15% of MMLU-Pro, MATH-500 and MMMU answers were cut off and scored wrong.
+    assert max_gen_toks == 8192
+    # lm-eval silently truncates prompts that do not fit beside the answer budget.
+    assert suite.max_model_len - max_gen_toks >= 4096
     assert suite.vision_max_model_len - max_gen_toks >= 16384
+    assert vision_protocol(suite)["max_tokens"] == max_gen_toks
     assert vision_protocol(suite)["max_model_len"] == suite.vision_max_model_len
 
 
@@ -164,13 +168,16 @@ def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
     assert command[command.index("--model") + 1] == "vllm"
     model_args = command[command.index("--model_args") + 1]
     assert "dtype=bfloat16" in model_args
-    assert "max_model_len=4096" in model_args
+    assert "max_model_len=12288" in model_args
     assert "gpu_memory_utilization=0.85" in model_args
+    assert "seed=42" in model_args
+    assert "think_end_token" not in model_args
+    assert "--samples" not in command
     # The 4B chat template thinks by default; the suite pins instruct mode explicitly.
     assert suite.enable_thinking is False
     assert "enable_thinking=False" in model_args
     gen_kwargs = command[command.index("--gen_kwargs") + 1 :]
-    assert "max_gen_toks=2048" in gen_kwargs
+    assert "max_gen_toks=8192" in gen_kwargs
 
 
 def test_calibration_lock_rejects_changed_data(tmp_path: Path) -> None:
@@ -261,7 +268,8 @@ def test_variant_runner_plans_quantize_then_shared_protocol() -> None:
         "--variant",
         "gptq_w4a16_g128",
     ]
-    text = plan["text"]
+    assert list(plan["text"]) == ["text"]
+    text = plan["text"]["text"]
     assert text[0].endswith(".venv-gpu-text/bin/python")
     assert f"pretrained={export_dir}" in text[text.index("--model_args") + 1]
     assert "enable_thinking=False" in text[text.index("--model_args") + 1]
@@ -403,3 +411,100 @@ def test_score_vision_redacts_the_api_key_from_written_files(tmp_path: Path) -> 
     log = (tmp_path / "logs" / "run.log").read_text(encoding="utf-8")
     assert secret not in log
     assert "[REDACTED_OPENAI_API_KEY]" in log
+
+
+THINKING_SUITE = Path("configs/evaluation/feature1_thinking.yaml")
+
+
+def test_thinking_suite_runs_each_seed_with_qwen_sampling_and_a_fixed_subset() -> None:
+    suite = load_benchmark_suite(THINKING_SUITE)
+
+    assert suite.enable_thinking and suite.think_end_token == "</think>"
+    assert suite.vision_tasks == ()
+    assert suite.seeds == (42, 43)
+    assert suite.generation["temperature"] == 1.0 and suite.generation["top_k"] == 20
+    assert suite.max_model_len - int(suite.generation["max_gen_toks"]) >= 2048
+    commands = build_text_eval_commands(
+        Path("model"), suite, Path("out/text"), "rev", python_executable="py"
+    )
+
+    assert [label for label, _ in commands] == ["text_seed42", "text_seed43"]
+    for (_, command), seed in zip(commands, (42, 43), strict=True):
+        model_args = command[command.index("--model_args") + 1].split(",")
+        assert f"seed={seed}" in model_args
+        assert "enable_thinking=True" in model_args
+        assert "think_end_token=</think>" in model_args
+        assert command[command.index("--seed") + 1] == str(seed)
+        assert command[command.index("--samples") + 1] == str(suite.samples_path)
+        assert command[command.index("--output_path") + 1] == f"out/text/seed-{seed}"
+        assert "--limit" not in command
+
+
+def test_committed_thinking_subset_matches_its_generator() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("subset", "scripts/make_thinking_subset.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    committed = json.loads(
+        Path("configs/evaluation/feature1_thinking_samples.json").read_text(encoding="utf-8")
+    )
+
+    assert committed == module.stratified_subset(module.MMLU_PRO_SIZES, 1000, 42)
+    assert sum(len(indices) for indices in committed.values()) == 1001
+    for task, indices in committed.items():
+        assert indices == sorted(set(indices))
+        assert 0 <= indices[0] and indices[-1] < module.MMLU_PRO_SIZES[task]
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ("enable_thinking: true\ntext_tasks: [ifeval]\n", "requires think_end_token"),
+        (
+            "enable_thinking: true\nthink_end_token: x\ntext_tasks: [hellaswag]\n",
+            "cannot score likelihood tasks",
+        ),
+        (
+            "text_tasks: [ifeval]\nmax_model_len: 4096\ngeneration: {max_gen_toks: 4000}\n",
+            "prompt tokens",
+        ),
+        (
+            "text_tasks: [ifeval]\nsamples_path: subset.json\nlimit: 3\n",
+            "mutually exclusive",
+        ),
+    ],
+)
+def test_suite_rejects_unsafe_settings(tmp_path: Path, body: str, message: str) -> None:
+    (tmp_path / "subset.json").write_text("{}", encoding="utf-8")
+    path = tmp_path / "suite.yaml"
+    path.write_text("vision_tasks: []\n" + body, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_benchmark_suite(path)
+
+
+def test_bf16_driver_runs_the_thinking_track_text_only_into_its_own_directory() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_feature1_bf16.py",
+            "--suite",
+            str(THINKING_SUITE),
+            "--dry-run",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    plan = json.loads(result.stdout)
+    assert plan["vision"] is None
+    assert plan["bootstrap"][-2:] == ["--scope", "text"]
+    assert list(plan["text"]) == ["text_seed42", "text_seed43"]
+    output = plan["text"]["text_seed42"][plan["text"]["text_seed42"].index("--output_path") + 1]
+    assert output.endswith("results/feature1/bf16-thinking/text/seed-42")
+    record = plan["benchmark_suite"]
+    assert record["enable_thinking"] is True and record["seeds"] == [42, 43]
+    assert record["samples"]["path"].endswith("feature1_thinking_samples.json")

@@ -1,0 +1,39 @@
+# Thinking-mode track: Qwen3.5's default mode and the mode behind its published scores. Run for
+# BF16 and a few final variants only (see README): answers run to thousands of tokens.
+#
+# Settings follow the Qwen3.5-4B model card: thinking mode, temperature 1.0, top_p 0.95, top_k 20,
+# presence_penalty 1.5, and a 32768-token output budget. Sampling makes one run noisy, so each
+# model is evaluated once per seed and the seeds are averaged.
+#
+# Deliberate differences from Qwen's own evaluation: lm-eval's task prompts instead of Qwen's
+# answer-format prompts, a fixed 1001-question MMLU-Pro subset instead of the full test set, and
+# no GPQA Diamond (Idavidrein/gpqa is gated on Hugging Face; add gpqa_diamond_cot_zeroshot once
+# the account has access).
+text_tasks:
+  - mmlu_pro
+  - minerva_math500
+  - ifeval
+
+vision_tasks: []
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+# 32768-token answer + 4096 prompt tokens.
+max_model_len: 36864
+gpu_memory_utilization: 0.9
+limit: null
+# Stratified by subject, seed 42; regenerate with scripts/make_thinking_subset.py.
+samples_path: feature1_thinking_samples.json
+seed: 42
+seeds: [42, 43]
+enable_thinking: true
+think_end_token: "</think>"
+generation:
+  do_sample: true
+  temperature: 1.0
+  top_p: 0.95
+  top_k: 20
+  min_p: 0.0
+  presence_penalty: 1.5
+  max_gen_toks: 32768

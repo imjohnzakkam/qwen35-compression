@@ -13,10 +13,12 @@ import _bootstrap  # noqa: F401
 from qwen35_compression.config import load_config
 from qwen35_compression.feature1 import (
     EVALUATOR_ENV,
-    build_lm_eval_command,
+    build_text_eval_commands,
     build_vlm_eval_command,
     load_benchmark_suite,
     run_logged,
+    suite_label,
+    suite_record,
     vision_protocol,
 )
 from qwen35_compression.io import write_json
@@ -33,7 +35,12 @@ def _run(command: list[str], log_path: Path) -> float:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the complete Feature 1 BF16 baseline")
     parser.add_argument("--config", type=Path, default=Path("configs/feature1.yaml"))
-    parser.add_argument("--output", type=Path, default=Path("results/feature1/bf16"))
+    parser.add_argument(
+        "--suite",
+        type=Path,
+        help="Benchmark suite override, e.g. configs/evaluation/feature1_thinking.yaml",
+    )
+    parser.add_argument("--output", type=Path, help="Defaults to results/feature1/bf16[-<suite>]")
     parser.add_argument("--limit", help="Pilot-only per-task limit")
     parser.add_argument("--text-only", action="store_true")
     parser.add_argument("--vision-only", action="store_true")
@@ -54,20 +61,25 @@ def main() -> None:
         raise ValueError("run_feature1_bf16.py accepts only a feature1 config")
     if config.evaluation.suite_path is None:
         raise ValueError("Feature 1 requires a benchmark suite")
-    suite = load_benchmark_suite(config.evaluation.suite_path)
-    output = args.output.resolve()
+    suite = load_benchmark_suite(args.suite or config.evaluation.suite_path)
+    label = suite_label(suite, config.evaluation.suite_path)
+    if not suite.vision_tasks:
+        if args.vision_only:
+            raise ValueError(f"suite {label!r} has no vision tasks")
+        args.text_only = True
+    default_output = Path("results/feature1") / ("bf16" if label is None else f"bf16-{label}")
+    output = (args.output or default_output).resolve()
     text_python = ROOT / ".venv-gpu-text" / "bin" / "python"
     vision_python = ROOT / ".venv-gpu-vision" / "bin" / "python"
     toolkit_dir = ROOT / "external" / "VLMEvalKit"
     revision = config.model.revision or "RESOLVED_AT_RUNTIME"
 
-    text_command = build_lm_eval_command(
+    text_commands = build_text_eval_commands(
         Path(config.model.id),
         suite,
         output / "text",
         revision,
         limit_override=args.limit,
-        backend_override="vllm",
         python_executable=text_python,
     )
     vision_command = build_vlm_eval_command(
@@ -109,8 +121,9 @@ def main() -> None:
                         "--profile",
                         "gpu-vision",
                     ],
+                    "benchmark_suite": suite_record(suite),
                     "runtime_smoke": smoke_command,
-                    "text": text_command,
+                    "text": dict(text_commands),
                     "vision": None if args.text_only else vision_command,
                 },
                 indent=2,
@@ -139,13 +152,12 @@ def main() -> None:
     snapshot, downloaded_revision = download_model(config)
     if downloaded_revision != revision:
         raise RuntimeError("downloaded model revision changed during the run")
-    text_command = build_lm_eval_command(
+    text_commands = build_text_eval_commands(
         Path(config.model.id),
         suite,
         output / "text",
         revision,
         limit_override=args.limit,
-        backend_override="vllm",
         python_executable=text_python,
     )
     vision_command = build_vlm_eval_command(snapshot, suite, output / "vision", toolkit_dir)
@@ -168,6 +180,7 @@ def main() -> None:
         "model_revision": revision,
         "code_revision": code_revision,
         "config_digest": config.digest,
+        "benchmark_suite": suite_record(suite),
         "scope": scope,
         "vision_protocol": None if args.text_only else vision_protocol(suite),
         "limit": args.limit,
@@ -183,7 +196,8 @@ def main() -> None:
     try:
         durations["runtime_smoke"] = _run(smoke_command, log_path)
         if not args.vision_only:
-            durations["text"] = _run(text_command, log_path)
+            for stage, command in text_commands:
+                durations[stage] = _run(command, log_path)
         if not args.text_only:
             durations["vision"] = _run(vision_command, log_path)
         manifest["status"] = "passed"
