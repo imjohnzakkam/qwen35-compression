@@ -78,6 +78,9 @@ def text_commands(args, suite, snapshot: Path, output: Path) -> list[tuple[str, 
                 device=args.device,
                 batch_size_override=str(batch_size),
             )
+            # scripts/lm_eval_local.py: lm-eval with the MPS cache released after each forward.
+            assert command[1:3] == ["-m", "lm_eval"]
+            command[1:3] = [str(ROOT / "scripts" / "lm_eval_local.py")]
             command.extend(("--use_cache", str(output / "lm_cache" / f"{base}{suffix}")))
             commands.append((base + suffix, command))
     return commands

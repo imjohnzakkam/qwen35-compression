@@ -41,14 +41,14 @@ def main() -> None:
         help="Benchmark suite override, e.g. configs/evaluation/feature1_thinking.yaml",
     )
     parser.add_argument("--output", type=Path, help="Defaults to results/feature1/bf16[-<suite>]")
-    parser.add_argument("--limit", help="Pilot-only per-task limit")
+    parser.add_argument(
+        "--limit", help="Pilot-only: first N questions of every text task and vision dataset"
+    )
     parser.add_argument("--text-only", action="store_true")
     parser.add_argument("--vision-only", action="store_true")
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    if args.limit and not args.text_only:
-        raise ValueError("--limit is text-only pilot mode; also pass --text-only")
     if args.text_only and args.vision_only:
         raise ValueError("--text-only and --vision-only are mutually exclusive")
     code_revision = args.code_revision or git_revision(ROOT)
@@ -86,6 +86,8 @@ def main() -> None:
         Path("PINNED_SNAPSHOT_AT_RUNTIME"), suite, output / "vision", toolkit_dir
     )
     vision_command[0] = str(vision_python)
+    if args.limit:
+        vision_command.extend(("--limit", str(args.limit)))
     smoke_python = text_python if args.text_only else vision_python
     smoke_command = [
         str(smoke_python),
@@ -162,6 +164,8 @@ def main() -> None:
     )
     vision_command = build_vlm_eval_command(snapshot, suite, output / "vision", toolkit_dir)
     vision_command[0] = str(vision_python)
+    if args.limit:
+        vision_command.extend(("--limit", str(args.limit)))
     smoke_command[smoke_command.index("--model-path") + 1] = str(snapshot)
 
     output.mkdir(parents=True, exist_ok=True)
@@ -184,6 +188,8 @@ def main() -> None:
         "scope": scope,
         "vision_protocol": None if args.text_only else vision_protocol(suite),
         "limit": args.limit,
+        # score_vision.py scores the same first-N subset of a pilot.
+        "vision_limit": None if args.limit is None or args.text_only else int(args.limit),
         "enable_thinking": suite.enable_thinking,
         "evaluator_env": EVALUATOR_ENV,
         "research_result": args.limit is None,

@@ -104,8 +104,10 @@ run ends or fails, and it stops the run at a hard budget deadline.
   VLMEvalKit picks a random option. Before that happens, the answer is taken from the model's last
   explicit `Final Answer: X` statement, if X is a valid option. The rule is fixed and the same for
   every variant. `scoring_manifest.json` counts how often it was used.
-- **Validate locally first.** Every GPU run is preceded by `scripts/validate_local.py` on the Mac (see
-  below).
+- **Pilot first.** Every full GPU run starts with a `--limit 10` pilot (text and vision) on the same
+  instance, so setup is paid for once. The pilot writes to `results/feature1/bf16-pilot`, so the full
+  run cannot reuse its predictions. A 16 GB Mac is too small to validate the 4B model at these
+  settings in reasonable time, so `scripts/validate_local.py` (below) is optional.
 
 ### Next
 
@@ -205,7 +207,7 @@ uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128
 Pass `--skip-bootstrap` on a machine whose evaluator environments were already built by a previous
 run, and `--text-only --limit 1` for a non-research pilot.
 
-## Local validation before a GPU run
+## Local validation (optional)
 
 `scripts/validate_local.py` runs the same suite end to end on the Mac on the first N questions of
 every task (default 10): lm-eval tasks, prompts, chat template and `enable_thinking`, VLMEvalKit's API

@@ -173,6 +173,19 @@ def test_complete_bf16_pipeline_has_mac_dry_run() -> None:
     assert plan["runtime_smoke"][0].endswith(".venv-gpu-text/bin/python")
 
 
+def test_bf16_pilot_limits_text_and_vision() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/run_feature1_bf16.py", "--dry-run", "--limit", "10"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    text = plan["text"]["text"]
+    assert text[text.index("--limit") + 1] == "10"
+    assert plan["vision"][-2:] == ["--limit", "10"]
+
+
 def test_toolkit_commands_reclone_when_directory_is_not_a_git_checkout(tmp_path: Path) -> None:
     module = runpy.run_path("scripts/bootstrap_gpu.py", run_name="bootstrap_gpu")
     toolkit = {"repository": "https://example.invalid/VLMEvalKit.git", "revision": "abc123"}
