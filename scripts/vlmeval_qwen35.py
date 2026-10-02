@@ -21,11 +21,37 @@ API_KEY = "sk-local"
 NO_THINKING = {"chat_template_kwargs": {"enable_thinking": False}}
 
 
+def vlmeval_run_prefix(toolkit_dir: Path, limit: int | None) -> list[str]:
+    # Same as qwen35_compression.feature1.vlmeval_run_prefix; this script runs in the vision
+    # environment, which does not install the project package.
+    prefix = [str(Path(__file__).resolve().parent / "vlmeval_run.py"), "--toolkit-dir"]
+    prefix.append(str(toolkit_dir))
+    if limit is not None:
+        prefix.extend(("--limit", str(limit)))
+    return [*prefix, "--"]
+
+
 def base_url(port: int) -> str:
     return f"http://127.0.0.1:{port}/v1"
 
 
 def server_command(args: argparse.Namespace) -> list[str]:
+    if args.server == "local":
+        # Local validation only: scripts/local_vlm_server.py stands in for vLLM on the Mac.
+        return [
+            str(args.server_python or sys.executable),
+            str(Path(__file__).resolve().parent / "local_vlm_server.py"),
+            "--model",
+            str(args.model_path),
+            "--served-model-name",
+            args.alias,
+            "--port",
+            str(args.port),
+            "--device",
+            args.device,
+            "--request-log",
+            str(args.output_dir / "local_server_requests.jsonl"),
+        ]
     return [
         sys.executable,
         "-m",
@@ -59,7 +85,7 @@ def vlmeval_command(
 ) -> list[str]:
     command = [
         sys.executable,
-        str(toolkit_dir / "run.py"),
+        *vlmeval_run_prefix(toolkit_dir, args.limit),
         "--model",
         args.alias,
         "--data",
@@ -116,7 +142,7 @@ def wait_for_server(process: subprocess.Popen[bytes], port: int, timeout: float)
     health = f"http://127.0.0.1:{port}/health"
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"vLLM server exited early with code {process.returncode}")
+            raise RuntimeError(f"model server exited early with code {process.returncode}")
         try:
             with urllib.request.urlopen(health, timeout=5) as response:
                 if response.status == 200:
@@ -124,7 +150,7 @@ def wait_for_server(process: subprocess.Popen[bytes], port: int, timeout: float)
         except (urllib.error.URLError, ConnectionError, TimeoutError):
             pass
         time.sleep(5)
-    raise TimeoutError(f"vLLM server did not become healthy within {timeout:.0f}s")
+    raise TimeoutError(f"model server did not become healthy within {timeout:.0f}s")
 
 
 def main() -> None:
@@ -156,6 +182,15 @@ def main() -> None:
         action="store_true",
         help="Render prompts with enable_thinking=False so answers are not reasoning traces",
     )
+    parser.add_argument(
+        "--server",
+        choices=("vllm", "local"),
+        default="vllm",
+        help="local: transformers stand-in for local validation runs only",
+    )
+    parser.add_argument("--server-python", type=Path, help="Python for --server local")
+    parser.add_argument("--device", default="mps", help="Device for --server local")
+    parser.add_argument("--limit", type=int, help="First N questions per dataset (validation)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -168,7 +203,7 @@ def main() -> None:
         return
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    server_log = (args.output_dir / "vllm_server.log").open("ab")
+    server_log = (args.output_dir / f"{args.server}_server.log").open("ab")
     server = subprocess.Popen(plan["server"], stdout=server_log, stderr=subprocess.STDOUT)  # type: ignore[arg-type]
     try:
         wait_for_server(server, args.port, args.server_timeout)

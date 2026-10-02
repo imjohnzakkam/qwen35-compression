@@ -24,6 +24,7 @@ from qwen35_compression.config import load_config
 from qwen35_compression.feature1 import build_vision_score_command, load_benchmark_suite
 from qwen35_compression.io import write_json
 from qwen35_compression.provenance import git_revision
+from qwen35_compression.vlmeval_patches import FINAL_ANSWER_RULE_LOG
 
 ROOT = Path(__file__).resolve().parent.parent
 SCORE_FILE_SUFFIXES = ("_acc.csv", "_score.csv", "_score.json")
@@ -140,8 +141,10 @@ def main() -> None:
     output = (args.output or run_dir.with_name(run_dir.name + "-scored")).resolve()
     toolkit_dir = ROOT / "external" / "VLMEvalKit"
     python = ROOT / ".venv-vision-score" / "bin" / "python"
+    # Local validation runs infer only the first N questions; score the same subset.
+    vision_limit = run_manifest.get("vision_limit")
     command = build_vision_score_command(
-        suite, output, alias, toolkit_dir, python, api_nproc=args.api_nproc
+        suite, output, alias, toolkit_dir, python, api_nproc=args.api_nproc, limit=vision_limit
     )
     if args.dry_run:
         print(
@@ -175,21 +178,25 @@ def main() -> None:
     finally:
         redact_tree(output, secret)
 
-    failures = json.loads(
-        subprocess.run(
-            [
-                str(python),
-                "-c",
-                COUNT_FAILURES,
-                str(output),
-                str(suite.vision_answer_extractor),
-                *EXTRACTION_FAILURE_MARKERS,
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout
-    )
+    def count_logs(*markers: str) -> dict[str, int]:
+        return json.loads(
+            subprocess.run(
+                [
+                    str(python),
+                    "-c",
+                    COUNT_FAILURES,
+                    str(output),
+                    str(suite.vision_answer_extractor),
+                    *markers,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+        )
+
+    failures = count_logs(*EXTRACTION_FAILURE_MARKERS)
+    rule_answers = count_logs(FINAL_ANSWER_RULE_LOG)
 
     scores = sorted(
         path.relative_to(output).as_posix()
@@ -223,7 +230,12 @@ def main() -> None:
                 for task, path in predictions.items()
             },
             "score_files": scores,
+            "vision_limit": vision_limit,
             "extraction_failures": failures,
+            "final_answer_rule": {
+                "applies": "after prefetch and the extractor fail, before VLMEvalKit's random fill",
+                "answers": rule_answers,
+            },
         },
     )
     print(f"scored={output}")
