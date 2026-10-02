@@ -20,16 +20,20 @@ Last updated 2026-10-01. Stages follow `plan.md`.
 | Stage | Status |
 | --- | --- |
 | Feature 0: 0.8B pipeline smoke (BF16, INT8, GPTQ, AWQ, export) | Done. `results/phase0/` |
-| Feature 1: BF16 text baseline | Done |
-| Feature 1: BF16 vision baseline | Inference done. 3 of 6 datasets wait for extractor scoring |
+| Feature 1: BF16 text baseline | Done at the old 2,048-token cap; rerun planned at 8,192 |
+| Feature 1: BF16 vision baseline | Done at 2,048 for 3 of 6 datasets; rerun planned at 8,192 |
+| Feature 1: BF16 thinking track | Not started. MMLU-Pro subset, MATH-500, IFEval |
 | Feature 1: frozen calibration set | Done. `data/calibration/feature1*.lock.json` |
 | Feature 1: INT8, GPTQ, AWQ baselines | Not started. Driver ready; needs GPU budget |
 | Feature 1: component sensitivity, mixed precision | Not started |
 | Feature 2: 9B validation | Not started |
 
-### Feature 1 BF16 baseline: Qwen3.5-4B, instruct mode
+### Feature 1 BF16 baseline: Qwen3.5-4B, instruct mode, 2,048-token cap
 
-All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers.
+All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers, including the
+model card's (for example MMLU-Pro 79.1, IFEval 89.8). The 2,048-token cap cut off 8.2% of MMLU-Pro,
+14.6% of MATH-500 and 10.8% of MMMU answers. These numbers are kept as a record and will be replaced
+by the 8,192-token rerun before any variant is compared with them.
 
 Text: lm-evaluation-harness on vLLM, 0-shot, chat template, code `ffc8f10`.
 
@@ -81,8 +85,13 @@ run ends or fails, and it stops the run at a hard budget deadline.
 
 ### Protocol decisions so far
 
-- **Instruct mode.** The 4B chat template thinks by default and the 0.8B does not. Every size and
-  variant is scored with `enable_thinking=False` and a 2048-token generation cap.
+- **Two tracks.** The main track is instruct mode (`enable_thinking=False`, greedy, 8,192-token cap)
+  for every variant. A thinking track follows the model card's settings on a subset, for BF16 and the
+  final 2–3 variants, with two seeds averaged. Running thinking mode on every variant would cost about
+  ₹2,000+ per model, and sampling noise (about ±1.5 points per run) is as large as the INT8 and
+  GPTQ effects being measured.
+- **Answer cap.** 2,048 → 8,192 tokens. The old cap truncated enough answers that a more verbose
+  variant would have lost accuracy to truncation alone.
 - **Vision context.** The vision server uses `vision_max_model_len: 32768`. At the text suite's
   4096, image prompts over 2048 tokens were rejected, and VLMEvalKit counted each rejection as a
   wrong answer.
@@ -93,12 +102,15 @@ run ends or fails, and it stops the run at a hard budget deadline.
 
 ### Next
 
-1. Finish BF16 vision scoring for MMBench, MMMU, and MathVista (about $0.40 of API credit).
-2. Run INT8 W8A8, GPTQ W4A16 g128, and AWQ W4A16 g128. The estimate is ₹900–1,000 of GPU time,
-   which is more than the current balance.
-3. Build the comparison table from `plan.md`: change from BF16 and compression ratio, for text and
+1. Rerun the BF16 instruct baseline (text and vision) at the 8,192-token cap, then score MMBench,
+   MMMU, and MathVista with the extractor (about $0.40).
+2. Run INT8 W8A8, GPTQ W4A16 g128, and AWQ W4A16 g128 on the instruct track.
+3. Run the thinking track for BF16 and the best variants.
+4. Build the comparison table from `plan.md`: change from BF16 and compression ratio, for text and
    vision.
-4. Component sensitivity and a mixed-precision recipe, then the 9B validation.
+5. Component sensitivity and a mixed-precision recipe, then the 9B validation.
+
+Steps 1–3 need more GPU budget than the current balance; each run gets a cost estimate first.
 
 ## Setup
 
