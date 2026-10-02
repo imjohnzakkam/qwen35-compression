@@ -15,20 +15,54 @@ is finished. Renaming earlier would change the config digest halfway through the
 
 ## Status
 
-Last updated 2026-10-01. Stages follow `plan.md`.
+Last updated 2026-10-03. Stages follow `plan.md`.
 
 | Stage | Status |
 | --- | --- |
 | Feature 0: 0.8B pipeline smoke (BF16, INT8, GPTQ, AWQ, export) | Done. `results/phase0/` |
-| Feature 1: BF16 text baseline | Done at the old 2,048-token cap; rerun planned at 8,192 |
-| Feature 1: BF16 vision baseline | Done at 2,048 for 3 of 6 datasets; rerun planned at 8,192 |
+| Feature 1: BF16 baseline, instruct track, 8,192-token cap | Done (text and vision), 2026-10-02 |
 | Feature 1: BF16 thinking track | Not started. MMLU-Pro subset, MATH-500, IFEval |
 | Feature 1: frozen calibration set | Done. `data/calibration/feature1*.lock.json` |
-| Feature 1: INT8, GPTQ, AWQ baselines | Not started. Driver ready; needs GPU budget |
+| Feature 1: INT8, GPTQ, AWQ baselines | Running, 2026-10-03 |
 | Feature 1: component sensitivity, mixed precision | Not started |
 | Feature 2: 9B validation | Not started |
 
-### Feature 1 BF16 baseline: Qwen3.5-4B, instruct mode, 2,048-token cap
+### Feature 1 BF16 baseline: Qwen3.5-4B, instruct mode, 8,192-token cap
+
+The reference every variant is compared with. `enable_thinking=False`, greedy decoding, code
+`9fd9b46`, one A30 (run `r_e8b44978`). Raw results: `logs/jarvis/feature1-bf16-a30-8192-20261002b/`,
+extractor scores: `logs/jarvis/feature1-bf16-a30-8192-20261002b-scored/`.
+
+| Task | Metric | 2,048 cap | 8,192 cap |
+| --- | --- | ---: | ---: |
+| MMLU-Pro | exact match, custom extract | 67.0 | 74.6 |
+| GSM8K | exact match, flexible extract | 82.9 | 83.2 |
+| MATH-500 | math_verify | 73.2 | 83.4 |
+| IFEval | prompt-level strict | 82.8 | 82.3 |
+| HellaSwag | acc_norm | 65.4 | 65.4 |
+| ARC-Challenge | acc_norm | 50.6 | 51.1 |
+| WikiText-2 | word perplexity (lower is better) | 11.47 | 10.95 |
+| DocVQA (val) | ANLS, rules | 95.4 | 95.3 |
+| OCRBench | rules | 86.3 | 86.3 |
+| TextVQA (val) | rules | 83.0 | 82.8 |
+| MMBench (dev, EN v1.1) | gpt-4o-mini extractor | 84.8 | 85.4 |
+| MMMU (val) | gpt-4o-mini extractor | 63.4 | 69.6 |
+| MathVista (mini) | gpt-4o-mini extractor | 80.8 | 81.0 |
+
+At 8,192 tokens, 4.8% of MMLU-Pro and 3.6% of MATH-500 answers still reach the cap, almost all of
+them repetition loops. Four MMMU answers end at the cap without an answer, and VLMEvalKit fills
+them with random options (at most 0.4 points). How to score them is still open. WikiText
+perplexity changed because its windows grew from 4,096 to 12,288 tokens.
+
+**Against the model card.** Qwen reports MMLU-Pro 79.1, IFEval 89.8, MMMU 77.6, MathVista 85.1,
+MMBench 89.4 and OCRBench 85.0. The card's numbers come from thinking mode (the model's default),
+sampling at `temperature=1.0`, a 32,768–81,920-token budget, answer-format prompts and Qwen's own
+harness. These are the same BF16 weights (the checkpoint's own dtype), so precision is not the
+difference. OCRBench, which needs a short answer and no reasoning, matches the card (86.3 against
+85.0), while the gaps appear only on reasoning-heavy tasks. The thinking track (below) reproduces
+the card's protocol for BF16 and the final variants.
+
+### Earlier BF16 record: 2,048-token cap (superseded)
 
 All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers, including the
 model card's (for example MMLU-Pro 79.1, IFEval 89.8). The 2,048-token cap cut off 8.2% of MMLU-Pro,
@@ -74,12 +108,16 @@ Raw results are ignored by Git and live under `logs/jarvis/`:
 - vision: `feature1-bf16-20260930T030752Z/`
 - extractor scores: `feature1-bf16-20260930T030752Z-scored/`
 
-### GPU spend (JarvisLabs, on-demand L4 at ₹41.31/h)
+### GPU spend (JarvisLabs, on-demand)
 
-| Run | Cost |
-| --- | ---: |
-| BF16 vision, including one aborted attempt | ₹145.57 |
-| Balance on 2026-10-01 | ₹835.24 |
+| Run | GPU | Cost |
+| --- | --- | ---: |
+| BF16 vision at 2,048, including one aborted attempt | L4, ₹41.31/h | ₹145.57 (~$1.51) |
+| BF16 limit-10 pilot, and a full run lost when a watcher misread a status glitch | A30, ₹38.88/h | ₹112.49 (~$1.17) |
+| BF16 full run at 8,192 | A30, ₹38.88/h | ₹212.27 (~$2.20) |
+
+USD at ₹96.3. The A30 replaced the L4: generation here is limited by memory bandwidth, and the A30
+has about 3× the L4's for less per hour. Measured: about 1,600 output tokens/s, 1.75–1.9× the L4.
 
 Every run pairs with a teardown watcher. It downloads the results and destroys the instance when the
 run ends or fails, and it stops the run at a hard budget deadline.
@@ -111,15 +149,12 @@ run ends or fails, and it stops the run at a hard budget deadline.
 
 ### Next
 
-1. Rerun the BF16 instruct baseline (text and vision) at the 8,192-token cap, then score MMBench,
-   MMMU, and MathVista with the extractor (about $0.40).
-2. Run INT8 W8A8, GPTQ W4A16 g128, and AWQ W4A16 g128 on the instruct track.
-3. Run the thinking track for BF16 and the best variants.
-4. Build the comparison table from `plan.md`: change from BF16 and compression ratio, for text and
+1. Run INT8 W8A8, GPTQ W4A16 g128, and AWQ W4A16 g128 on the instruct track (running: three A30s in
+   parallel, each a limit-10 pilot and then the full suite with `--pilot-limit 10`).
+2. Build the comparison table from `plan.md`: change from BF16 and compression ratio, for text and
    vision.
-5. Component sensitivity and a mixed-precision recipe, then the 9B validation.
-
-Steps 1–3 need more GPU budget than the current balance; each run gets a cost estimate first.
+3. Run the thinking track for BF16 and the best variant on one instance.
+4. Component sensitivity and a mixed-precision recipe, then the 9B validation.
 
 ## Setup
 
@@ -205,7 +240,13 @@ uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128
 ```
 
 Pass `--skip-bootstrap` on a machine whose evaluator environments were already built by a previous
-run, and `--text-only --limit 1` for a non-research pilot.
+run. `--limit N` runs a non-research pilot on the first N questions of every text task and vision
+dataset. `--pilot-limit N` runs that pilot into `<output>-pilot` first and starts the full run only
+if it passes, on the same machine: the export the pilot builds is reused and setup is paid once.
+
+```bash
+uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128 --pilot-limit 10
+```
 
 ## Local validation (optional)
 

@@ -12,10 +12,11 @@ from pathlib import Path
 
 import _bootstrap  # noqa: F401
 
-from qwen35_compression.config import load_config
+from qwen35_compression.config import ExperimentConfig, VariantConfig, load_config
 from qwen35_compression.export import verify_export
 from qwen35_compression.feature1 import (
     EVALUATOR_ENV,
+    BenchmarkSuite,
     build_text_eval_commands,
     build_vlm_eval_command,
     load_benchmark_suite,
@@ -43,7 +44,15 @@ def main() -> None:
     parser.add_argument(
         "--output", type=Path, help="Defaults to <paths.results>/<variant>[-<suite>]"
     )
-    parser.add_argument("--limit", help="Pilot-only per-task limit")
+    parser.add_argument(
+        "--limit", help="Pilot-only: first N questions of every text task and vision dataset"
+    )
+    parser.add_argument(
+        "--pilot-limit",
+        type=int,
+        help="Run a --limit N pilot into <output>-pilot first; start the full run only if it "
+        "passes. The export it builds is reused, and setup is paid once.",
+    )
     parser.add_argument("--text-only", action="store_true")
     parser.add_argument("--vision-only", action="store_true")
     parser.add_argument(
@@ -54,8 +63,8 @@ def main() -> None:
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    if args.limit and not args.text_only:
-        raise ValueError("--limit is text-only pilot mode; also pass --text-only")
+    if args.limit and args.pilot_limit:
+        raise ValueError("--limit and --pilot-limit are mutually exclusive")
     if args.text_only and args.vision_only:
         raise ValueError("--text-only and --vision-only are mutually exclusive")
     code_revision = args.code_revision or git_revision(ROOT)
@@ -77,9 +86,26 @@ def main() -> None:
         if args.vision_only:
             raise ValueError(f"suite {label!r} has no vision tasks")
         args.text_only = True
-    export_dir = config.paths.outputs / variant.name
     run_name = variant.name if label is None else f"{variant.name}-{label}"
     output = (args.output or config.paths.results / run_name).resolve()
+    if args.pilot_limit and not args.dry_run:
+        pilot = output.with_name(output.name + "-pilot")
+        run(args, config, variant, suite, pilot, str(args.pilot_limit), code_revision)
+        args.skip_bootstrap = True
+    run(args, config, variant, suite, output, args.limit, code_revision)
+
+
+def run(
+    args: argparse.Namespace,
+    config: ExperimentConfig,
+    variant: VariantConfig,
+    suite: BenchmarkSuite,
+    output: Path,
+    limit: str | None,
+    code_revision: str,
+) -> None:
+    """One run of the variant: quantize unless its export exists, then smoke, text and vision."""
+    export_dir = config.paths.outputs / variant.name
     text_python = ROOT / ".venv-gpu-text" / "bin" / "python"
     vision_python = ROOT / ".venv-gpu-vision" / "bin" / "python"
     toolkit_dir = ROOT / "external" / "VLMEvalKit"
@@ -116,11 +142,13 @@ def main() -> None:
         suite,
         output / "text",
         None,
-        limit_override=args.limit,
+        limit_override=limit,
         python_executable=text_python,
     )
     vision_command = build_vlm_eval_command(export_dir, suite, output / "vision", toolkit_dir)
     vision_command[0] = str(vision_python)
+    if limit:
+        vision_command.extend(("--limit", str(limit)))
     export_exists = export_dir.is_dir() and any(export_dir.iterdir())
 
     if args.dry_run:
@@ -129,6 +157,7 @@ def main() -> None:
                 {
                     "variant": variant.name,
                     "method": variant.method,
+                    "pilot_limit": args.pilot_limit,
                     "export_dir": str(export_dir),
                     "bootstrap": None if args.skip_bootstrap else bootstrap,
                     "text_preflight": text_preflight,
@@ -172,10 +201,12 @@ def main() -> None:
         "export_dir": str(export_dir),
         "scope": scope,
         "vision_protocol": None if args.text_only else vision_protocol(suite),
-        "limit": args.limit,
+        "limit": limit,
+        # score_vision.py scores the same first-N subset of a pilot.
+        "vision_limit": None if limit is None or args.text_only else int(limit),
         "enable_thinking": suite.enable_thinking,
         "evaluator_env": EVALUATOR_ENV,
-        "research_result": args.limit is None,
+        "research_result": limit is None,
         "status": "running",
         "durations_seconds": {},
     }
