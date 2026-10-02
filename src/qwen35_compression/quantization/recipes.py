@@ -35,11 +35,15 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
         ]
 
     if variant.method == "awq":
+        import torch
         from llmcompressor.modifiers.quantization import QuantizationModifier
         from llmcompressor.modifiers.transform.awq import AWQModifier
 
         return [
-            AWQModifier(duo_scaling="both"),
+            # AWQ caches each layer's calibration inputs (512 x 2,048 tokens) for its scale search;
+            # on the GPU that filled a 24 GB A30 by the 4B model's second layer. Offloading the
+            # cache to the CPU changes where it lives, not the scales AWQ finds.
+            AWQModifier(duo_scaling="both", offload_device=torch.device("cpu")),
             QuantizationModifier(
                 config_groups={
                     "group_0": _scheme(
