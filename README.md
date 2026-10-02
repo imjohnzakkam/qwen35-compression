@@ -58,20 +58,21 @@ Vision: VLMEvalKit through a vLLM server, code `1e6abe0`, 0 rejected requests.
 | DocVQA (val) | 95.4 | rules (ANLS) |
 | OCRBench | 86.3 | rules |
 | TextVQA (val) | 83.0 | rules |
-| MMBench (dev, EN v1.1) | pending | gpt-4o-mini extractor |
-| MMMU (val) | pending | gpt-4o-mini extractor |
-| MathVista (mini) | pending | gpt-4o-mini extractor |
+| MMBench (dev, EN v1.1) | 84.8 | gpt-4o-mini extractor |
+| MMMU (val) | 63.4 | gpt-4o-mini extractor |
+| MathVista (mini) | 80.8 | gpt-4o-mini extractor |
 
-The first extractor pass was invalid: an OpenAI rate limit made VLMEvalKit fill 391 MMMU and 30
-MMBench answers with random options. It is kept only as a record at
-`logs/jarvis/feature1-bf16-20260930T030752Z-scored-ratelimited-invalid/`. A throttled pass is due
-once the account's daily request limit has reset.
+The throttled extractor pass (2026-10-02) left 3 of about 6,900 answers randomly filled: 1 MMBench and
+2 MMMU questions where the model wrote an explicit `Final Answer: **B**` that the extractor still
+failed to map. That moves the scores by at most 0.1 and 0.2 points. The final-answer rule (see
+protocol decisions) now handles these cases. The first, rate-limited pass is kept only as a record
+at `logs/jarvis/feature1-bf16-20260930T030752Z-scored-ratelimited-invalid/`.
 
 Raw results are ignored by Git and live under `logs/jarvis/`:
 
 - text: `feature1-bf16-full-20260917T232611Z/`
 - vision: `feature1-bf16-20260930T030752Z/`
-- extractor scores: `feature1-bf16-20260930T030752Z-scored/`, once the pass is done
+- extractor scores: `feature1-bf16-20260930T030752Z-scored/`
 
 ### GPU spend (JarvisLabs, on-demand L4 at ₹41.31/h)
 
@@ -99,6 +100,14 @@ run ends or fails, and it stops the run at a hard budget deadline.
   `gpt-4o-mini` extractor after download, never by the variant itself. See the vision protocol
   section below. Check the per-item `log` column for random fills, not VLMEvalKit's
   `judge_fail_rate`, which reports 0% even when answers were randomly filled.
+- **Final-answer rule.** When rule matching and the extractor both fail on a multiple-choice answer,
+  VLMEvalKit picks a random option. Before that happens, the answer is taken from the model's last
+  explicit `Final Answer: X` statement, if X is a valid option. The rule is fixed and the same for
+  every variant. `scoring_manifest.json` counts how often it was used.
+- **Pilot first.** Every full GPU run starts with a `--limit 10` pilot (text and vision) on the same
+  instance, so setup is paid for once. The pilot writes to `results/feature1/bf16-pilot`, so the full
+  run cannot reuse its predictions. A 16 GB Mac is too small to validate the 4B model at these
+  settings in reasonable time, so `scripts/validate_local.py` (below) is optional.
 
 ### Next
 
@@ -197,6 +206,31 @@ uv run python scripts/run_feature1_variant.py --variant gptq_w4a16_g128
 
 Pass `--skip-bootstrap` on a machine whose evaluator environments were already built by a previous
 run, and `--text-only --limit 1` for a non-research pilot.
+
+## Local validation (optional)
+
+`scripts/validate_local.py` runs the same suite end to end on the Mac on the first N questions of
+every task (default 10): lm-eval tasks, prompts, chat template and `enable_thinking`, VLMEvalKit's API
+path with the same datasets, and the fixed extractor. It then checks the outputs and writes
+`validation_report.json` with a PASS/FAIL verdict. Results go to `results/local-validate/`. They are
+not research results.
+
+```bash
+uv run python scripts/validate_local.py --limit 10 --answer-cap 1024
+```
+
+What differs from the GPU run, and why:
+
+- **Backend.** vLLM does not run on macOS. Text uses lm-eval's `hf` backend, and vision uses
+  `scripts/local_vlm_server.py`, a small OpenAI-compatible transformers server that stands in for
+  vLLM's. VLMEvalKit's client side is unchanged.
+- **Device.** The Apple GPU (`--device mps`). On the CPU the 4B model generates under 1 token/s.
+- **Answer cap.** `--answer-cap` lowers the cap for the local run only. On the Apple GPU (about
+  32 tokens/s at batch size 8), one answer that runs to 8,192 tokens holds up its whole batch for
+  about 30 minutes. The GPU run keeps the suite's cap, and the report records both values.
+
+The GPU-only pieces (CUDA environments, vLLM) are covered by the GPU driver's preflight, which fails
+within minutes. The teardown watcher then destroys the instance.
 
 ## Feature 1 vision protocol
 

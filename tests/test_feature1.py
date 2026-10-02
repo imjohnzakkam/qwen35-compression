@@ -170,6 +170,7 @@ def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
     assert "dtype=bfloat16" in model_args
     assert "max_model_len=12288" in model_args
     assert "gpu_memory_utilization=0.85" in model_args
+    assert "max_num_batched_tokens=4096" in model_args
     assert "seed=42" in model_args
     assert "think_end_token" not in model_args
     assert "--samples" not in command
@@ -354,12 +355,19 @@ def test_vision_commands_split_rule_and_extractor_scoring() -> None:
     local = build_vision_score_command(
         suite, Path("scored"), "Qwen3.5-4B-pinned", Path("vendor/vlmeval"), Path("py")
     )
-    assert local[:2] == ["py", "vendor/vlmeval/run.py"]
+    assert local[0] == "py"
+    assert local[1].endswith("scripts/vlmeval_run.py")
+    assert local[2:5] == ["--toolkit-dir", "vendor/vlmeval", "--"]
     assert local[local.index("--data") + 1 : local.index("--work-dir")] == ["MMMU_DEV_VAL"]
     assert local[local.index("--mode") + 1] == "eval"
     assert local[local.index("--judge") + 1] == "gpt-4o-mini"
     assert "--reuse" in local
     assert local[local.index("--judge-api-nproc") + 1] == "4"
+
+    limited = build_vision_score_command(
+        suite, Path("scored"), "m", Path("vendor/vlmeval"), Path("py"), limit=10
+    )
+    assert limited[2:7] == ["--toolkit-dir", "vendor/vlmeval", "--limit", "10", "--"]
 
     with pytest.raises(ValueError, match="no extractor-scored"):
         build_vision_score_command(

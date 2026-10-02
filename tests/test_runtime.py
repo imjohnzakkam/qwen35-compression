@@ -66,7 +66,10 @@ def test_vlmeval_wrapper_registers_alias_and_forwards_tasks(tmp_path: Path) -> N
     assert server[1:3] == ["-m", "vllm.entrypoints.openai.api_server"]
     assert server[server.index("--served-model-name") + 1] == "Qwen3.5-4B-pinned"
     infer = plan["infer"]
-    assert infer[1].endswith("run.py")
+    # run.py is reached through scripts/vlmeval_run.py, which applies the final-answer rule.
+    assert infer[1].endswith("scripts/vlmeval_run.py")
+    assert infer[infer.index("--toolkit-dir") + 1] == str(toolkit.resolve())
+    assert "--limit" not in infer[: infer.index("--")]
     assert infer[infer.index("--model") + 1] == "Qwen3.5-4B-pinned"
     assert infer[infer.index("--data") + 1 : infer.index("--work-dir")] == [
         "MMMU_DEV_VAL",
@@ -170,6 +173,19 @@ def test_complete_bf16_pipeline_has_mac_dry_run() -> None:
     assert plan["runtime_smoke"][0].endswith(".venv-gpu-text/bin/python")
 
 
+def test_bf16_pilot_limits_text_and_vision() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/run_feature1_bf16.py", "--dry-run", "--limit", "10"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    text = plan["text"]["text"]
+    assert text[text.index("--limit") + 1] == "10"
+    assert plan["vision"][-2:] == ["--limit", "10"]
+
+
 def test_toolkit_commands_reclone_when_directory_is_not_a_git_checkout(tmp_path: Path) -> None:
     module = runpy.run_path("scripts/bootstrap_gpu.py", run_name="bootstrap_gpu")
     toolkit = {"repository": "https://example.invalid/VLMEvalKit.git", "revision": "abc123"}
@@ -266,3 +282,40 @@ def test_vlmeval_wrapper_leaves_extracted_datasets_for_local_scoring(tmp_path: P
     assert evaluate[evaluate.index("--data") + 1 : evaluate.index("--work-dir")] == ["TextVQA_VAL"]
     assert evaluate[evaluate.index("--judge") + 1] == "exact_matching"
     assert "eval_judged" not in plan
+
+
+def test_vlmeval_wrapper_local_server_for_validation(tmp_path: Path) -> None:
+    toolkit = tmp_path / "VLMEvalKit"
+    toolkit.mkdir()
+    (toolkit / "run.py").write_text("", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/vlmeval_qwen35.py",
+            "--toolkit-dir",
+            str(toolkit),
+            "--model-path",
+            "model",
+            "--output-dir",
+            "results/vision",
+            "--data",
+            "MMMU_DEV_VAL",
+            "--server",
+            "local",
+            "--server-python",
+            "local-py",
+            "--limit",
+            "10",
+            "--dry-run",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    assert plan["server"][0] == "local-py"
+    assert plan["server"][1].endswith("scripts/local_vlm_server.py")
+    assert plan["server"][plan["server"].index("--device") + 1] == "mps"
+    infer = plan["infer"]
+    assert infer[infer.index("--limit") + 1] == "10"
+    assert infer.index("--limit") < infer.index("--")

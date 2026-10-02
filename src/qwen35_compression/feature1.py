@@ -228,20 +228,30 @@ def build_lm_eval_command(
     backend_override: str | None = None,
     python_executable: str | Path | None = None,
     seed_override: int | None = None,
+    device: str | None = None,
+    batch_size_override: str | None = None,
 ) -> list[str]:
     backend = backend_override or suite.text_backend
     seed = suite.seed if seed_override is None else seed_override
-    if backend not in {"hf-multimodal", "vllm"}:
+    if backend not in {"hf", "hf-multimodal", "vllm"}:
         raise ValueError(f"unsupported text backend: {backend}")
     model_args = [f"pretrained={model_path}"]
     if backend == "hf-multimodal":
         model_args.append("trust_remote_code=True")
+    elif backend == "hf":
+        # Local validation: same prompt + answer budget as the vLLM runs.
+        model_args.extend(("dtype=bfloat16", f"max_length={suite.max_model_len}"))
     else:
         model_args.extend(
             (
                 "dtype=bfloat16",
                 f"max_model_len={suite.max_model_len}",
                 f"gpu_memory_utilization={suite.gpu_memory_utilization}",
+                # Prompt logprobs (WikiText, HellaSwag, ARC) are computed per prefill chunk over
+                # the 248k-token vocabulary: 4 GB of fp32 logits at 4,096 tokens, the peak the
+                # 4,096-context run fitted on a 24 GB GPU. vLLM's default chunk of 8,192 would
+                # double it once windows reach 12,288 tokens. Scheduling only; scores unchanged.
+                "max_num_batched_tokens=4096",
                 # vLLM's sampling seed; greedy suites are unaffected by it.
                 f"seed={seed}",
             )
@@ -265,7 +275,7 @@ def build_lm_eval_command(
         "--num_fewshot",
         str(suite.fewshot),
         "--batch_size",
-        suite.batch_size,
+        batch_size_override or suite.batch_size,
         "--apply_chat_template",
         "--seed",
         str(seed),
@@ -275,6 +285,8 @@ def build_lm_eval_command(
         "--output_path",
         str(output_path),
     ]
+    if device is not None:
+        command.extend(("--device", device))
     limit = limit_override if limit_override is not None else suite.limit
     if limit is not None:
         command.extend(("--limit", str(limit)))
@@ -379,6 +391,16 @@ def build_vlm_eval_command(
     ]
 
 
+def vlmeval_run_prefix(toolkit_dir: Path, limit: int | None = None) -> list[str]:
+    """VLMEvalKit's run.py through scripts/vlmeval_run.py, which applies the fixed final-answer
+    rule before any random multiple-choice fill and, for local validation only, a row limit."""
+    wrapper = Path(__file__).resolve().parents[2] / "scripts" / "vlmeval_run.py"
+    prefix = [str(wrapper), "--toolkit-dir", str(toolkit_dir)]
+    if limit is not None:
+        prefix.extend(("--limit", str(limit)))
+    return [*prefix, "--"]
+
+
 def build_vision_score_command(
     suite: BenchmarkSuite,
     work_dir: Path,
@@ -386,13 +408,14 @@ def build_vision_score_command(
     toolkit_dir: Path,
     python_executable: Path,
     api_nproc: int = 4,
+    limit: int | None = None,
 ) -> list[str]:
     """VLMEvalKit eval-only command that scores saved predictions with the fixed extractor."""
     if not suite.vision_extracted_tasks or suite.vision_answer_extractor is None:
         raise ValueError("the benchmark suite defines no extractor-scored vision tasks")
     return [
         str(python_executable),
-        str(toolkit_dir / "run.py"),
+        *vlmeval_run_prefix(toolkit_dir, limit),
         "--model",
         model_alias,
         "--data",
