@@ -21,6 +21,7 @@ import _bootstrap  # noqa: F401
 
 from qwen35_compression.config import load_config
 from qwen35_compression.feature1 import (
+    LOGLIKELIHOOD_TASKS,
     build_lm_eval_command,
     build_vlm_eval_command,
     load_benchmark_suite,
@@ -39,27 +40,46 @@ API_FAILURE = "Failed to obtain answer via API"
 
 
 def text_commands(args, suite, snapshot: Path, output: Path) -> list[tuple[str, list[str]]]:
+    """Generative and likelihood tasks as separate lm-eval runs.
+
+    Likelihood tasks score every prompt token over the 248k-token vocabulary: one 12,288-token
+    WikiText window is ~6 GB of logits, so on the Apple GPU they run one at a time in shorter
+    windows. The request cache keeps finished generations if a later task fails.
+    """
+    generative = tuple(t for t in suite.text_tasks if t not in LOGLIKELIHOOD_TASKS)
+    likelihood = tuple(t for t in suite.text_tasks if t in LOGLIKELIHOOD_TASKS)
+    # Likelihood first: it takes minutes, so a memory problem shows before the long stage.
+    parts = [
+        (
+            "_likelihood",
+            dataclasses.replace(
+                suite, text_tasks=likelihood, max_model_len=args.likelihood_max_length
+            ),
+            1,
+        ),
+        ("", dataclasses.replace(suite, text_tasks=generative), args.batch_size),
+    ]
     seeds = list(suite.seeds) or [None]
     commands = []
     for seed in seeds:
-        stage = "text" if seed is None else f"text_seed{seed}"
+        base = "text" if seed is None else f"text_seed{seed}"
         path = output / "text" if seed is None else output / "text" / f"seed-{seed}"
-        commands.append(
-            (
-                stage,
-                build_lm_eval_command(
-                    snapshot,
-                    suite,
-                    path,
-                    limit_override=str(args.limit),
-                    backend_override="hf",
-                    python_executable=LOCAL_PYTHON,
-                    seed_override=seed,
-                    device=args.device,
-                    batch_size_override=str(args.batch_size),
-                ),
+        for suffix, part, batch_size in parts:
+            if not part.text_tasks:
+                continue
+            command = build_lm_eval_command(
+                snapshot,
+                part,
+                path,
+                limit_override=str(args.limit),
+                backend_override="hf",
+                python_executable=LOCAL_PYTHON,
+                seed_override=seed,
+                device=args.device,
+                batch_size_override=str(batch_size),
             )
-        )
+            command.extend(("--use_cache", str(output / "lm_cache" / f"{base}{suffix}")))
+            commands.append((base + suffix, command))
     return commands
 
 
@@ -121,12 +141,12 @@ def check_text(output: Path, suite, limit: int, cap: int) -> dict:
     for task in expected:
         if task not in seen:
             report["problems"].append(f"{task}: no samples written")
-    if results:
-        metrics = json.loads(results[-1].read_text(encoding="utf-8")).get("results", {})
-        report["metrics"] = {
-            name: {k: v for k, v in values.items() if isinstance(v, int | float)}
-            for name, values in metrics.items()
-        }
+    report["metrics"] = {}
+    for path in results:
+        for name, values in json.loads(path.read_text(encoding="utf-8")).get("results", {}).items():
+            report["metrics"][name] = {
+                k: v for k, v in values.items() if isinstance(v, int | float)
+            }
     return report
 
 
@@ -190,6 +210,12 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--device", default="mps", choices=("mps", "cpu"))
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument(
+        "--likelihood-max-length",
+        type=int,
+        default=2048,
+        help="Window for likelihood tasks on this machine (WikiText perplexity changes with it)",
+    )
     parser.add_argument(
         "--answer-cap",
         type=int,
@@ -262,6 +288,10 @@ def main() -> None:
         "limit": args.limit,
         "vision_limit": args.limit,
         "answer_cap": {"suite": suite_cap, "local": cap},
+        "likelihood_max_length": {
+            "suite": suite.max_model_len,
+            "local": args.likelihood_max_length,
+        },
         "enable_thinking": suite.enable_thinking,
         "research_result": False,
         "status": "running",

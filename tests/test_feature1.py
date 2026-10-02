@@ -170,6 +170,7 @@ def test_vllm_command_uses_single_gpu_optimized_backend() -> None:
     assert "dtype=bfloat16" in model_args
     assert "max_model_len=12288" in model_args
     assert "gpu_memory_utilization=0.85" in model_args
+    assert "max_num_batched_tokens=4096" in model_args
     assert "seed=42" in model_args
     assert "think_end_token" not in model_args
     assert "--samples" not in command

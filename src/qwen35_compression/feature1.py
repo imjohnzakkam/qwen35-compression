@@ -247,6 +247,11 @@ def build_lm_eval_command(
                 "dtype=bfloat16",
                 f"max_model_len={suite.max_model_len}",
                 f"gpu_memory_utilization={suite.gpu_memory_utilization}",
+                # Prompt logprobs (WikiText, HellaSwag, ARC) are computed per prefill chunk over
+                # the 248k-token vocabulary: 4 GB of fp32 logits at 4,096 tokens, the peak the
+                # 4,096-context run fitted on a 24 GB GPU. vLLM's default chunk of 8,192 would
+                # double it once windows reach 12,288 tokens. Scheduling only; scores unchanged.
+                "max_num_batched_tokens=4096",
                 # vLLM's sampling seed; greedy suites are unaffected by it.
                 f"seed={seed}",
             )
