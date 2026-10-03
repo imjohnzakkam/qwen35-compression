@@ -79,6 +79,42 @@ def panel_scores(
     return scores
 
 
+def per_question(run: Path, subset: dict[str, list[int]]) -> dict[str, dict]:
+    """Per-question correctness (0/1) for the panel's text tasks, keyed by (task, doc_id)."""
+    rows: dict[str, dict] = {"MMLU-Pro (1001)": {}, "MATH-500": {}, "IFEval": {}}
+    for task in _mmlu_pro_tasks(run):
+        keep = set(subset.get(task, []))
+        for row in _samples(run, task):
+            if row["doc_id"] in keep:
+                rows["MMLU-Pro (1001)"][(task, row["doc_id"])] = float(row["exact_match"])
+    for row in _samples(run, "minerva_math500"):
+        rows["MATH-500"][row["doc_id"]] = float(row["math_verify"])
+    for row in _samples(run, "ifeval"):
+        rows["IFEval"][row["doc_id"]] = float(row["prompt_level_strict_acc"])
+    return rows
+
+
+def paired_delta(
+    candidate: dict, reference: dict, resamples: int = 2000, seed: int = 0
+) -> dict[str, float]:
+    """Mean difference (points) over shared questions, with a paired bootstrap 95% interval."""
+    import random
+
+    keys = sorted(set(candidate) & set(reference), key=str)
+    if not keys:
+        raise ValueError("no shared questions")
+    diffs = [candidate[key] - reference[key] for key in keys]
+    rng = random.Random(seed)
+    n = len(diffs)
+    means = sorted(sum(diffs[rng.randrange(n)] for _ in range(n)) / n for _ in range(resamples))
+    return {
+        "delta": 100 * sum(diffs) / n,
+        "low": 100 * means[int(0.025 * resamples)],
+        "high": 100 * means[int(0.975 * resamples) - 1],
+        "questions": n,
+    }
+
+
 def _at_cap(tokenizer, row: dict, cap: int = 8192) -> bool:
     # Responses are decoded text; allow a few tokens for re-tokenisation differences.
     return len(tokenizer(row["resps"][0][0])["input_ids"]) >= cap - 12
@@ -93,6 +129,11 @@ def main() -> None:
         help="NAME=RUN_DIR; the scored-vision directory <RUN_DIR>-scored is used when present",
     )
     parser.add_argument("--loops", action="store_true", help="Also count answers at the cap")
+    parser.add_argument(
+        "--vs",
+        help="Reference run NAME: also report each model's change from it, with paired "
+        "bootstrap 95%% intervals over the same questions",
+    )
     parser.add_argument("--json", type=Path, help="Write the scores here as well")
     args = parser.parse_args()
 
@@ -118,6 +159,25 @@ def main() -> None:
     for name, scores in results.items():
         cells = ["–" if scores[m] is None else f"{scores[m]:.1f}" for m in metrics]
         print("| " + " | ".join([name, *cells]) + " |")
+    if args.vs:
+        runs = {spec.partition("=")[0]: Path(spec.partition("=")[2]).resolve() for spec in args.run}
+        if args.vs not in runs:
+            raise ValueError(f"--vs {args.vs} is not one of the --run names")
+        reference = per_question(runs[args.vs], subset)
+        tasks = list(reference)
+        print(f"\nChange from {args.vs} (points, paired bootstrap 95% interval)")
+        print("| " + " | ".join(["model", *tasks]) + " |")
+        print("| " + " | ".join(["---", *["---:"] * len(tasks)]) + " |")
+        for name, run in runs.items():
+            if name == args.vs:
+                continue
+            candidate = per_question(run, subset)
+            deltas = {task: paired_delta(candidate[task], reference[task]) for task in tasks}
+            results[name]["vs"] = {args.vs: deltas}
+            cells = [
+                f"{d['delta']:+.1f} [{d['low']:+.1f}, {d['high']:+.1f}]" for d in deltas.values()
+            ]
+            print("| " + " | ".join([name, *cells]) + " |")
     if args.json:
         args.json.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
 

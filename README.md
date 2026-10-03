@@ -126,6 +126,41 @@ Panel candidates: `autoround_w4a16_g128` (AutoRound tunes each block's rounding 
 against BF16's outputs, same size as GPTQ g128), and the sensitivity variants, which apply GPTQ
 W4A16 g128 to one language-model component (DeltaNet, attention or FFN) and keep the rest in BF16.
 
+### Comparing compression methods
+
+- **Equal size.** Methods are compared at equal checkpoint size (within about 2%). A method that
+  is more accurate only because it is bigger is a different point on the size-accuracy curve.
+- **Paired intervals.** `scripts/panel_scores.py --vs bf16` reports each model's change from a
+  reference on the same questions, with paired bootstrap 95% intervals. On the panel those
+  intervals are about ±2 points (MMLU-Pro) to ±3.5 points (MATH-500): GPTQ and AWQ are both
+  clearly below BF16, but they cannot be told apart from each other.
+
+  | Change from BF16 | MMLU-Pro (1,001) | MATH-500 | IFEval |
+  | --- | ---: | ---: | ---: |
+  | INT8 W8A8 | +0.1 [−2.1, +2.2] | −0.8 [−3.8, +2.2] | −0.2 [−3.0, +2.4] |
+  | GPTQ W4A16 g128 | −3.5 [−5.9, −1.2] | −7.6 [−11.2, −3.8] | −1.5 [−4.6, +1.5] |
+  | AWQ W4A16 g128 | −2.5 [−4.8, −0.3] | −10.0 [−13.8, −6.0] | −3.0 [−6.1, +0.0] |
+
+### Drift study
+
+`scripts/drift_scores.py` replays BF16's own answers (MATH-500 and the 1,001-question MMLU-Pro
+subset, about two million answer tokens) through a model in one prefill, and records at every
+answer position whether the model's top choice is BF16's token and its loss on it. No text is
+generated, so a model is scored in minutes, and the token-level measure separates methods far
+smaller than the panel can. A flip rate that grows with position along the same answers means the
+error compounds over the sequence, as a recurrent DeltaNet state would; a flat curve means it is
+local.
+
+`scripts/run_drift_study.py` scores BF16 (the noise floor), the published INT8, GPTQ and AWQ models
+(each verified against its SHA-256 manifest), and GPTQ W4A16 g128 applied to only the DeltaNet,
+attention or FFN layers. It then installs `flash-linear-attention` and measures it against
+transformers' PyTorch DeltaNet fallback (`scripts/check_fla.py`).
+
+```bash
+uv run python scripts/run_drift_study.py --pilot-limit 20
+uv run python scripts/drift_scores.py report results/feature1/drift/*.json
+```
+
 ### Earlier BF16 record: 2,048-token cap (superseded)
 
 All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers, including the
