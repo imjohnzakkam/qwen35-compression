@@ -13,22 +13,30 @@ fallback, after every quantization has run, so all exports share the baseline's 
 
 from __future__ import annotations
 
-import argparse
-import json
-import os
-import subprocess
 import sys
-import time
-from pathlib import Path
 
-import _bootstrap  # noqa: F401
+# The GPU image's base Python ships brotlicffi, visible to this environment through its system
+# site-packages, and httpx 0.28 fails mid-download decoding Brotli with it ("decoder process called
+# with data when 'can_accept_more_data()' is False", run r_b65eec27). Hidden before httpx loads,
+# httpx no longer asks for Brotli and the Hub answers with gzip.
+for _name in ("brotli", "brotlicffi"):
+    sys.modules.setdefault(_name, None)
 
-from qwen35_compression.config import load_config
-from qwen35_compression.export import verify_export
-from qwen35_compression.feature1 import run_logged
-from qwen35_compression.io import write_json
-from qwen35_compression.models import download_model
-from qwen35_compression.provenance import git_revision
+import argparse  # noqa: E402
+import json  # noqa: E402
+import os  # noqa: E402
+import subprocess  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import _bootstrap  # noqa: E402, F401
+
+from qwen35_compression.config import load_config  # noqa: E402
+from qwen35_compression.export import verify_export  # noqa: E402
+from qwen35_compression.feature1 import run_logged  # noqa: E402
+from qwen35_compression.io import write_json  # noqa: E402
+from qwen35_compression.models import download_model  # noqa: E402
+from qwen35_compression.provenance import git_revision  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 TRACES_REPO = "lazybrick/kiln-evals"
