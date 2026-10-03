@@ -26,8 +26,8 @@ and up to 8,192 generated tokens.
 - **The 4-bit error is local:** replayed along BF16's own answers, quantized models disagree with
   BF16 at a constant rate from the first token to the 8,000th. Nothing compounds through the
   DeltaNet recurrent state.
-- **No component dominates the 4-bit error:** by excess loss, attention contributes 18% from 9% of
-  the weights, DeltaNet 27% from 27.5%, and FFN 56% from 63.5%.
+- **No component dominates the 4-bit error:** by excess loss, attention contributes 18% from 8.2% of
+  the weights, DeltaNet 27% from 28.3%, and FFN 56% from 63.5%.
 
 ## Released artifacts
 

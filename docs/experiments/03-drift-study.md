@@ -28,8 +28,8 @@ to the Linear layers of one component and keep the rest in BF16:
 
 | Component | Layers | Share of the 4-bit weights |
 | --- | --- | ---: |
-| DeltaNet | 24 linear-attention layers: `in_proj_qkv`, `in_proj_z`, `in_proj_a`, `in_proj_b`, `out_proj` | 27.5% |
-| Attention | 8 full-attention layers: `q_proj`, `k_proj`, `v_proj`, `o_proj` | 9.0% |
+| DeltaNet | 24 linear-attention layers: `in_proj_qkv`, `in_proj_z`, `in_proj_a`, `in_proj_b`, `out_proj` | 28.3% |
+| Attention | 8 full-attention layers: `q_proj`, `k_proj`, `v_proj`, `o_proj` | 8.2% |
 | FFN | 32 MLPs: `gate_proj`, `up_proj`, `down_proj` | 63.5% |
 
 | | |
@@ -61,8 +61,8 @@ components.
 
 | Component | Share of 4-bit weights | Share of GPTQ's excess loss | Per parameter |
 | --- | ---: | ---: | ---: |
-| Attention | 9.0% | 18% | 2.0× |
-| DeltaNet | 27.5% | 27% | 1.0× |
+| Attention | 8.2% | 18% | 2.2× |
+| DeltaNet | 28.3% | 27% | 1.0× |
 | FFN | 63.5% | 56% | 0.9× |
 
 ## Findings
@@ -77,7 +77,7 @@ components.
   disagreement rises along the answer (2.5% to 2.9%). This fits softmax attention over a growing
   context of quantized keys and values. It is small next to the whole-model error.
 - **No component dominates.** Only the full-attention layers are disproportionately sensitive, and
-  they are 9% of the weights. Keeping them at 8 bits would add about 0.17 GB and remove at most
+  they are 8% of the weights. Keeping them at 8 bits would add about 0.15 GB and remove at most
   about 18% of GPTQ's excess loss.
 - **The measure is more sensitive than the benchmarks.** INT8 changes 2.4% of top choices (7× the
   noise floor) with no measurable benchmark change. AWQ (5.42%) and GPTQ (5.70%) separate cleanly
