@@ -591,6 +591,46 @@ def test_sensitivity_targets_hit_only_their_linear_layers() -> None:
     assert hits("sensitivity_ffn_w4a16_g128") == {"model.language_model.layers.3.mlp.down_proj"}
 
 
+def test_component_targets_match_vllm_fused_layer_names() -> None:
+    """vLLM 0.29 names Qwen3.5's text layers language_model.model.layers.N... and fuses
+    projections; this replays its compressed-tensors matching (find_matched_target: the layer
+    name, else every part of a fused layer) on those names."""
+    import re
+
+    fused = {
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
+        "in_proj_qkvz": ["in_proj_qkv", "in_proj_z"],
+        "in_proj_ba": ["in_proj_b", "in_proj_a"],
+    }
+
+    def matches(name: str, targets: tuple[str, ...]) -> bool:
+        def hit(value: str) -> bool:
+            return any(re.match(t.removeprefix("re:"), value) for t in targets)
+
+        if hit(name):
+            return True
+        key = next((k for k in fused if name.endswith(k)), None)
+        return key is not None and all(hit(name.replace(key, part)) for part in fused[key])
+
+    vllm_layers = {
+        "language_model.model.layers.0.linear_attn.in_proj_qkvz": "deltanet",
+        "language_model.model.layers.0.linear_attn.in_proj_ba": "deltanet",
+        "language_model.model.layers.0.linear_attn.out_proj": "deltanet",
+        "language_model.model.layers.3.self_attn.qkv_proj": "attention",
+        "language_model.model.layers.3.self_attn.o_proj": "attention",
+        "language_model.model.layers.3.mlp.gate_up_proj": "ffn",
+        "language_model.model.layers.3.mlp.down_proj": "ffn",
+        "visual.blocks.0.mlp.linear_fc1": None,
+        "visual.blocks.0.attn.qkv": None,
+    }
+    plan = load_config(Path("configs/feature1.yaml"))
+    for component in ("deltanet", "attention", "ffn"):
+        targets = plan.variant(f"sensitivity_{component}_w4a16_g128").targets
+        expected = {name for name, owner in vllm_layers.items() if owner == component}
+        assert {name for name in vllm_layers if matches(name, targets)} == expected, component
+
+
 def test_panel_suite_matches_the_instruct_protocol() -> None:
     panel = load_benchmark_suite(Path("configs/evaluation/feature1_panel.yaml"))
     main = load_benchmark_suite(Path("configs/evaluation/feature1.yaml"))

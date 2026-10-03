@@ -134,7 +134,7 @@ def study(
     manifest["traces"] = {"repo": TRACES_REPO, "revision": fetch_traces(traces)}
     write_json(output / "run_manifest.json", manifest)
 
-    def score(name: str, model: Path | str) -> None:
+    def score(name: str, model: Path | str) -> bool:
         started = time.perf_counter()
         try:
             run_logged(
@@ -143,10 +143,13 @@ def study(
                 ROOT,
             )
             record(name, status="scored", seconds=round(time.perf_counter() - started))
+            return True
         except subprocess.CalledProcessError as error:
             record(name, status="score_failed", error=str(error))
+            return False
 
-    score("bf16", snapshot)
+    if not args.skip_bf16:
+        score("bf16", snapshot)
     for name in published:
         try:
             path, repo_revision = fetch_published(PUBLISHED[name])
@@ -187,7 +190,11 @@ def study(
                 error=f"{type(error).__name__}: {error}",
             )
             continue
-        score(component, export)
+        if not score(component, export):
+            # Every component variant is served the same way; the rest would fail alike after
+            # ~25 minutes of quantization each.
+            record(component, note="later components skipped after this one failed to score")
+            break
 
     if fla:
         try:
@@ -242,9 +249,8 @@ def study(
         ).stdout
         (output / "report.md").write_text(report, encoding="utf-8")
         print(report, flush=True)
-    manifest["status"] = (
-        "passed" if manifest["models"].get("bf16", {}).get("status") == "scored" else "failed"
-    )
+    statuses = [entry.get("status") for entry in manifest["models"].values()]
+    manifest["status"] = "passed" if statuses and all(s == "scored" for s in statuses) else "failed"
     write_json(output / "run_manifest.json", manifest)
     return manifest
 
@@ -262,6 +268,11 @@ def main() -> None:
         "quantization); run the full study only if that passes",
     )
     parser.add_argument("--skip-fla", action="store_true")
+    parser.add_argument(
+        "--skip-bf16",
+        action="store_true",
+        help="Do not re-score BF16; reuse its scores from an earlier run on the same traces",
+    )
     parser.add_argument("--skip-bootstrap", action="store_true")
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
