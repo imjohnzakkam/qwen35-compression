@@ -23,7 +23,7 @@ Last updated 2026-10-03. Stages follow `plan.md`.
 | Feature 1: BF16 baseline, instruct track, 8,192-token cap | Done (text and vision), 2026-10-02 |
 | Feature 1: BF16 thinking track | Not started. MMLU-Pro subset, MATH-500, IFEval |
 | Feature 1: frozen calibration set | Done. `data/calibration/feature1*.lock.json` |
-| Feature 1: INT8, GPTQ, AWQ baselines | Running, 2026-10-03 |
+| Feature 1: INT8, GPTQ, AWQ baselines, instruct track | Done, 2026-10-03. Published as Kiln on Hugging Face |
 | Feature 1: component sensitivity, mixed precision | Not started |
 | Feature 2: 9B validation | Not started |
 
@@ -61,6 +61,45 @@ harness. These are the same BF16 weights (the checkpoint's own dtype), so precis
 difference. OCRBench, which needs a short answer and no reasoning, matches the card (86.3 against
 85.0), while the gaps appear only on reasoning-heavy tasks. The thinking track (below) reproduces
 the card's protocol for BF16 and the final variants.
+
+### Feature 1 compression baselines: instruct track, 8,192-token cap
+
+Every variant quantizes the language model only (vision encoder, embeddings and `lm_head` stay in
+BF16) with the same 512-conversation calibration set, and is scored with exactly the BF16 protocol.
+Code `f4e2433` (AWQ: `0d41716`, which adds CPU offload of AWQ's calibration cache; the scales are
+unchanged). Published at `lazybrick/Qwen3.5-4B-Kiln-*`, with every record in `lazybrick/kiln-evals`.
+
+| Task | BF16 | INT8 W8A8 | GPTQ W4A16 g128 | AWQ W4A16 g128 |
+| --- | ---: | ---: | ---: | ---: |
+| MMLU-Pro | 74.6 | 74.3 (−0.3) | 71.4 (−3.2) | 71.9 (−2.7) |
+| GSM8K | 83.2 | 83.5 (+0.3) | 81.9 (−1.3) | 82.6 (−0.6) |
+| MATH-500 | 83.4 | 82.6 (−0.8) | 75.8 (−7.6) | 73.4 (−10.0) |
+| IFEval | 82.3 | 82.1 (−0.2) | 80.8 (−1.5) | 79.3 (−3.0) |
+| HellaSwag | 65.4 | 65.2 (−0.2) | 64.3 (−1.1) | 64.8 (−0.6) |
+| ARC-Challenge | 51.1 | 49.7 (−1.4) | 50.8 (−0.3) | 50.0 (−1.1) |
+| WikiText-2 ppl (lower is better) | 10.95 | 11.09 | 11.43 | 11.55 |
+| MMBench (dev, EN v1.1) | 85.4 | 83.7 (−1.7) | 84.1 (−1.3) | 82.9 (−2.5) |
+| MMMU (val) | 69.6 | 67.7 (−1.9) | 64.9 (−4.7) | 65.7 (−3.9) |
+| MathVista (mini) | 81.0 | 81.8 (+0.8) | 78.0 (−3.0) | 78.0 (−3.0) |
+| OCRBench | 86.3 | 87.5 (+1.2) | 86.0 (−0.3) | 87.1 (+0.8) |
+| DocVQA (val) | 95.3 | 95.3 (0.0) | 94.8 (−0.5) | 95.1 (−0.2) |
+| TextVQA (val) | 82.8 | 82.2 (−0.6) | 81.7 (−1.1) | 81.8 (−1.0) |
+| Checkpoint size | 9.32 GB | 5.51 GB (1.69×) | 3.78 GB (2.47×) | 3.79 GB (2.46×) |
+
+Findings:
+
+- **INT8 W8A8 is close to lossless:** every text task is within about a point. The largest drops
+  are on vision reasoning (MMBench −1.7, MMMU −1.9), although the vision encoder is not quantized.
+- **4-bit costs long reasoning, not short answers.** Both W4A16 variants hold short-answer and OCR
+  tasks within about 1.5 points but lose 7.6–10 points on MATH-500 and 3–5 on MMMU and MathVista.
+- **Much of the 4-bit loss is answers that never finish.** On MATH-500, mean answer length grows
+  from 1,384 tokens (BF16) to 1,500 (INT8), 1,663 (AWQ) and 1,696 (GPTQ), and the share of answers
+  that loop into the 8,192 cap from 3.6% to 5.4%, 6.4% and 8.0%. For GPTQ that accounts for about
+  5 of its 7.6 points. AWQ loops less, but gives more wrong final answers.
+- **AWQ is not better than GPTQ on this model:** slightly ahead on MMLU-Pro and GSM8K, behind on
+  MATH-500 and IFEval, and level on vision.
+- **Answers that hit the cap with no answer stay open:** MMMU has 4 (BF16), 6 (INT8), 7 (GPTQ) and
+  4 (AWQ) answers like this, which VLMEvalKit fills with a random option (at most 0.8 points).
 
 ### Earlier BF16 record: 2,048-token cap (superseded)
 
@@ -115,6 +154,7 @@ Raw results are ignored by Git and live under `logs/jarvis/`:
 | BF16 vision at 2,048, including one aborted attempt | L4, ₹41.31/h | ₹145.57 (~$1.51) |
 | BF16 limit-10 pilot, and a full run lost when a watcher misread a status glitch | A30, ₹38.88/h | ₹112.49 (~$1.17) |
 | BF16 full run at 8,192 | A30, ₹38.88/h | ₹212.27 (~$2.20) |
+| INT8, GPTQ, AWQ: three A30s in parallel, each a pilot then the full suite, plus one AWQ attempt that ran out of memory | A30, ₹38.88/h | ₹774.72 (~$8.04) |
 
 USD at ₹96.3. The A30 replaced the L4: generation here is limited by memory bandwidth, and the A30
 has about 3× the L4's for less per hour. Measured: about 1,600 output tokens/s, 1.75–1.9× the L4.
@@ -149,12 +189,12 @@ run ends or fails, and it stops the run at a hard budget deadline.
 
 ### Next
 
-1. Run INT8 W8A8, GPTQ W4A16 g128, and AWQ W4A16 g128 on the instruct track (running: three A30s in
-   parallel, each a limit-10 pilot and then the full suite with `--pilot-limit 10`).
-2. Build the comparison table from `plan.md`: change from BF16 and compression ratio, for text and
-   vision.
-3. Run the thinking track for BF16 and the best variant on one instance.
-4. Component sensitivity and a mixed-precision recipe, then the 9B validation.
+1. Decide how to score an answer that hits the cap with no answer: wrong, or VLMEvalKit's random
+   option.
+2. Run the thinking track for BF16 and a 4-bit variant on one instance. The card's
+   `presence_penalty=1.5` may cut the 4-bit looping.
+3. Component sensitivity (which layers cost the 4-bit reasoning loss) and a mixed-precision recipe,
+   then the 9B validation.
 
 ## Setup
 
