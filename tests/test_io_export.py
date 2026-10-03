@@ -33,3 +33,11 @@ def test_export_manifest_detects_mutation(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "model.safetensors").write_bytes(b"changed")
     with pytest.raises(ValueError, match="digest mismatch"):
         verify_export(tmp_path, variant)
+
+
+def test_packing_joins_sequences_into_equal_blocks() -> None:
+    from qwen35_compression.calibration import pack_token_ids
+
+    blocks = pack_token_ids([[1, 2, 3], [4, 5], [6, 7, 8, 9], [10]], 4)
+    assert blocks == [[1, 2, 3, 4], [5, 6, 7, 8]]
+    assert pack_token_ids([[1, 2]], 4) == []
