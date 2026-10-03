@@ -10,7 +10,7 @@ each record.
 | [1. BF16 baseline](experiments/01-bf16-baseline.md) | The reference every compressed model is measured against |
 | [2. Quantization baselines](experiments/02-quantization-baselines.md) | INT8 W8A8, GPTQ W4A16 and AWQ W4A16 on the full suite |
 | [3. Drift study](experiments/03-drift-study.md) | Where and how quantization error appears, token by token and by component |
-| [4. AutoRound](experiments/04-autoround.md) | Attempts to run AutoRound on Qwen3.5-4B and what blocked them |
+| [4. AutoRound](experiments/04-autoround.md) | AutoRound W4A16 g128: the strongest 4-bit baseline on the drift measure, and its memory needs |
 | [Engineering notes](engineering-notes.md) | Pitfalls when evaluating and quantizing Qwen3.5 with vLLM, lm-eval, VLMEvalKit and llm-compressor |
 
 ## Summary

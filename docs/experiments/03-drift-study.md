@@ -34,8 +34,8 @@ to the Linear layers of one component and keep the rest in BF16:
 
 | | |
 | --- | --- |
-| Code | `0172f24` (BF16 and the published variants), `8c6cd54` (component variants) |
-| Hardware | One NVIDIA A30 (24 GB) |
+| Code | `0172f24` (BF16 and the published variants), `8c6cd54` (component variants), `c3a16a0` (AutoRound) |
+| Hardware | One NVIDIA A30 (24 GB); AutoRound on one A100 (40 GB) |
 
 ## Results
 
@@ -43,6 +43,7 @@ to the Linear layers of one component and keep the rest in BF16:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | BF16 (noise floor) | 0.35% | 0.128 | 0.47 | 0.34 | 0.40 | 0.36 | 0.35 | 0.32 |
 | INT8 W8A8 | 2.42% | 0.139 | 3.07 | 2.77 | 2.59 | 2.55 | 2.45 | 2.30 |
+| AutoRound W4A16 g128 | 4.96% | 0.170 | 5.70 | 5.37 | 5.26 | 5.34 | 5.33 | 5.24 |
 | AWQ W4A16 g128 | 5.42% | 0.178 | 6.55 | 6.14 | 5.84 | 5.65 | 5.59 | 5.43 |
 | GPTQ W4A16 g128 | 5.70% | 0.182 | 6.68 | 6.32 | 6.07 | 6.12 | 6.14 | 5.95 |
 | GPTQ, DeltaNet only | 3.03% | 0.143 | 3.52 | 3.36 | 3.31 | 3.35 | 3.27 | 3.17 |
