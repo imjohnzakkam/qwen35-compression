@@ -83,6 +83,22 @@ def run_redacted(command: list[str], cwd: Path, env: dict[str, str], secret: str
         raise subprocess.CalledProcessError(process.returncode, command[:2])
 
 
+def run_suite(run_manifest: dict, default: Path):
+    """The suite the run was evaluated with (a panel run scores only its own datasets).
+
+    The manifest records the suite's path on the machine that ran it and its SHA-256; the file is
+    looked up by name under configs/evaluation and must hash the same.
+    """
+    recorded = run_manifest.get("benchmark_suite") or {}
+    if not recorded.get("path"):
+        return load_benchmark_suite(default)
+    path = ROOT / "configs" / "evaluation" / Path(recorded["path"]).name
+    suite = load_benchmark_suite(path)
+    if recorded.get("sha256") and suite.digest != recorded["sha256"]:
+        raise ValueError(f"{path} differs from the suite the run used (sha256 mismatch)")
+    return suite
+
+
 def find_predictions(run_dir: Path, tasks: tuple[str, ...]) -> tuple[str, dict[str, Path]]:
     vision = run_dir / "vision"
     if not vision.is_dir():
@@ -126,12 +142,12 @@ def main() -> None:
     config = load_config(args.config)
     if config.evaluation.suite_path is None:
         raise ValueError("the config has no benchmark suite")
-    suite = load_benchmark_suite(config.evaluation.suite_path)
     run_dir = args.run_dir.resolve()
     manifests = list(run_dir.rglob("run_manifest.json"))
     if len(manifests) != 1:
         raise ValueError(f"expected one run_manifest.json under {run_dir}, found {len(manifests)}")
     run_manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+    suite = run_suite(run_manifest, config.evaluation.suite_path)
     if run_manifest.get("status") != "passed":
         raise ValueError(f"run did not pass: {run_manifest.get('status')}")
     if not args.allow_pilot and run_manifest.get("research_result") is not True:

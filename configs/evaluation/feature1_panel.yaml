@@ -1,0 +1,30 @@
+# Reasoning panel: a short screen for candidate compressions, run before the full suite.
+#
+# The tasks where 4-bit weights cost Qwen3.5-4B the most on the instruct track: MMLU-Pro (the fixed
+# 1001-question subset the thinking track uses), MATH-500, IFEval and MMMU. Every setting matches
+# configs/evaluation/feature1.yaml, so a panel score equals the same tasks scored from a full run,
+# and BF16 or any finished variant needs no rerun (scripts/panel_scores.py).
+text_tasks:
+  - mmlu_pro
+  - minerva_math500
+  - ifeval
+
+vision_tasks:
+  - MMMU_DEV_VAL
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+max_model_len: 12288
+vision_max_model_len: 32768
+vision_answer_extractor: gpt-4o-mini
+vision_extracted_tasks:
+  - MMMU_DEV_VAL
+gpu_memory_utilization: 0.85
+limit: null
+samples_path: feature1_thinking_samples.json
+seed: 42
+enable_thinking: false
+generation:
+  do_sample: false
+  max_gen_toks: 8192

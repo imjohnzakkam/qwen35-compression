@@ -51,7 +51,11 @@ def test_feature1_plan_covers_baselines_sensitivity_and_mixed_precision() -> Non
         "sensitivity_ffn_w4a16_g128",
         "sensitivity_vision_w4a16_g128",
         "mixed_w8_sensitive_w4_standard",
+        "autoround_w4a16_g128",
     } <= names
+    autoround = plan.variant("autoround_w4a16_g128")
+    assert (autoround.method, autoround.bits, autoround.group_size) == ("autoround", 4, 128)
+    assert "lm_head" in autoround.ignore
 
     mixed = plan.variant("mixed_w8_sensitive_w4_standard")
     assert mixed.method == "mixed"
@@ -400,6 +404,40 @@ def test_score_vision_dry_run_finds_saved_predictions(tmp_path: Path) -> None:
     assert command[command.index("--work-dir") + 1] == plan["output"]
 
 
+def test_score_vision_scores_the_suite_the_run_used(tmp_path: Path) -> None:
+    from qwen35_compression.feature1 import suite_record
+
+    run = tmp_path / "feature1-autoround-panel"
+    model_dir = run / "vision" / "Qwen3.5-4B-pinned" / "T20261003-000000"
+    model_dir.mkdir(parents=True)
+    (model_dir / "Qwen3.5-4B-pinned_MMMU_DEV_VAL.xlsx").write_bytes(b"x")
+    panel = load_benchmark_suite(Path("configs/evaluation/feature1_panel.yaml"))
+    remote = "/remote/checkout/configs/evaluation/feature1_panel.yaml"
+    record = {**suite_record(panel), "path": remote}
+    manifest = {"status": "passed", "research_result": True, "benchmark_suite": record}
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/score_vision.py", "--run-dir", str(run), "--dry-run"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    assert sorted(plan["predictions"]) == ["MMMU_DEV_VAL"]
+    command = plan["command"]
+    assert command[command.index("--data") + 1 : command.index("--work-dir")] == ["MMMU_DEV_VAL"]
+
+    record["sha256"] = "0" * 64
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    mismatch = subprocess.run(
+        [sys.executable, "scripts/score_vision.py", "--run-dir", str(run), "--dry-run"],
+        capture_output=True,
+        text=True,
+    )
+    assert mismatch.returncode != 0 and "sha256 mismatch" in mismatch.stderr
+
+
 def test_score_vision_redacts_the_api_key_from_written_files(tmp_path: Path) -> None:
     import importlib.util
 
@@ -516,3 +554,58 @@ def test_bf16_driver_runs_the_thinking_track_text_only_into_its_own_directory() 
     record = plan["benchmark_suite"]
     assert record["enable_thinking"] is True and record["seeds"] == [42, 43]
     assert record["samples"]["path"].endswith("feature1_thinking_samples.json")
+
+
+def test_sensitivity_targets_hit_only_their_linear_layers() -> None:
+    import re
+
+    plan = load_config(Path("configs/feature1.yaml"))
+    modules = [
+        "model.language_model.layers.0.linear_attn.in_proj_qkv",
+        "model.language_model.layers.0.linear_attn.in_proj_a",
+        "model.language_model.layers.0.linear_attn.out_proj",
+        "model.language_model.layers.0.linear_attn.conv1d",
+        "model.language_model.layers.0.linear_attn.norm",
+        "model.language_model.layers.3.self_attn.q_proj",
+        "model.language_model.layers.3.self_attn.o_proj",
+        "model.language_model.layers.3.self_attn.q_norm",
+        "model.language_model.layers.3.mlp.down_proj",
+        "model.visual.blocks.0.mlp.linear_fc1",
+        "model.visual.blocks.0.attn.qkv",
+        "lm_head",
+    ]
+
+    def hits(variant: str) -> set[str]:
+        patterns = [t.removeprefix("re:") for t in plan.variant(variant).targets]
+        return {m for m in modules if any(re.match(p, m) for p in patterns)}
+
+    assert hits("sensitivity_deltanet_w4a16_g128") == {
+        "model.language_model.layers.0.linear_attn.in_proj_qkv",
+        "model.language_model.layers.0.linear_attn.in_proj_a",
+        "model.language_model.layers.0.linear_attn.out_proj",
+    }
+    assert hits("sensitivity_attention_w4a16_g128") == {
+        "model.language_model.layers.3.self_attn.q_proj",
+        "model.language_model.layers.3.self_attn.o_proj",
+    }
+    assert hits("sensitivity_ffn_w4a16_g128") == {"model.language_model.layers.3.mlp.down_proj"}
+
+
+def test_panel_suite_matches_the_instruct_protocol() -> None:
+    panel = load_benchmark_suite(Path("configs/evaluation/feature1_panel.yaml"))
+    main = load_benchmark_suite(Path("configs/evaluation/feature1.yaml"))
+    assert panel.text_tasks == ("mmlu_pro", "minerva_math500", "ifeval")
+    assert panel.vision_tasks == panel.vision_extracted_tasks == ("MMMU_DEV_VAL",)
+    shared = (
+        "max_model_len",
+        "vision_max_model_len",
+        "generation",
+        "enable_thinking",
+        "fewshot",
+        "seed",
+        "vision_answer_extractor",
+    )
+    for field in shared:
+        assert getattr(panel, field) == getattr(main, field), field
+    assert panel.samples_path is not None
+    assert panel.samples_path.name == "feature1_thinking_samples.json"

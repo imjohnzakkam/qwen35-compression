@@ -54,6 +54,25 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
             ),
         ]
 
+    if variant.method == "autoround":
+        from llmcompressor.modifiers.autoround import AutoRoundModifier
+
+        return [
+            # Tunes each block's weight rounding and clipping by signed gradient descent against
+            # the BF16 block's outputs (AutoRound's default 200 steps per block). torch.compile is
+            # off: it only speeds up tuning and is untested on Qwen3.5's linear-attention layers.
+            AutoRoundModifier(
+                config_groups={
+                    "group_0": _scheme(
+                        variant.scheme or "W4A16", variant.targets, variant.group_size
+                    )
+                },
+                ignore=list(variant.ignore),
+                iters=200,
+                enable_torch_compile=False,
+            )
+        ]
+
     if variant.method == "int8":
         from llmcompressor.modifiers.gptq import GPTQModifier
         from llmcompressor.modifiers.transform.smoothquant import SmoothQuantModifier
