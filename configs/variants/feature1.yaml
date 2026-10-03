@@ -49,14 +49,16 @@ variants:
   # Sensitivity: GPTQ W4A16 g128 on one component of the language model, the rest left in BF16.
   # Targets name exactly the Linear layers the full GPTQ variant quantizes in that component; a
   # looser pattern would also catch the DeltaNet conv1d and norm, the q/k norms, or the vision
-  # tower's MLPs.
+  # tower's MLPs. They match on "layers.N.<component>.<projection>" only: transformers names these
+  # model.language_model.layers.N... while vLLM names them language_model.model.layers.N... and
+  # matches its fused projections (in_proj_qkvz, qkv_proj, gate_up_proj) through their parts.
   - name: sensitivity_deltanet_w4a16_g128
     method: gptq
     scheme: W4A16
     bits: 4
     group_size: 128
     targets:
-      - "re:.*language_model\\.layers\\.\\d+\\.linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)$"
+      - "re:.*layers\\.\\d+\\.linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)$"
 
   - name: sensitivity_attention_w4a16_g128
     method: gptq
@@ -64,7 +66,7 @@ variants:
     bits: 4
     group_size: 128
     targets:
-      - "re:.*language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$"
+      - "re:.*layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$"
 
   - name: sensitivity_ffn_w4a16_g128
     method: gptq
@@ -72,7 +74,7 @@ variants:
     bits: 4
     group_size: 128
     targets:
-      - "re:.*language_model\\.layers\\.\\d+\\.mlp\\.(gate_proj|up_proj|down_proj)$"
+      - "re:.*layers\\.\\d+\\.mlp\\.(gate_proj|up_proj|down_proj)$"
 
   - name: sensitivity_vision_w4a16_g128
     method: gptq
@@ -88,15 +90,16 @@ variants:
     ignore:
       - lm_head
       - "re:.*embed_tokens.*"
+    # Same component patterns as the sensitivity variants (see there).
     groups:
       - name: sensitive_w8
         targets:
-          - "re:.*linear_attn.*"
+          - "re:.*layers\\.\\d+\\.linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)$"
         scheme: W8A16
         group_size: 128
       - name: standard_w4
         targets:
-          - "re:.*self_attn.*"
-          - "re:.*mlp.*"
+          - "re:.*layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$"
+          - "re:.*layers\\.\\d+\\.mlp\\.(gate_proj|up_proj|down_proj)$"
         scheme: W4A16
         group_size: 128
