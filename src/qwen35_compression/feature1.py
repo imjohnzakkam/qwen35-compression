@@ -461,6 +461,27 @@ def run_command(command: Sequence[str]) -> None:
 # harness alive indefinitely after results were written. An in-process engine exits.
 EVALUATOR_ENV = {"VLLM_ENABLE_V1_MULTIPROCESSING": "0"}
 
+# flash-linear-attention replaces transformers' PyTorch fallback for Qwen3.5's DeltaNet layers,
+# which needs about a third more memory in forward and backward passes. Installed only for methods
+# that backpropagate through the model, so GPTQ, AWQ and INT8 exports stay reproducible as built.
+FLA_VERSION = "0.5.2"
+FLA_METHODS = frozenset({"autoround"})
+
+
+def fla_install_command(python: str | Path) -> list[str]:
+    """Pinned install that leaves the environment's torch untouched (--no-deps)."""
+    return [
+        "uv",
+        "pip",
+        "install",
+        "--no-deps",
+        "--python",
+        str(python),
+        f"fla-core=={FLA_VERSION}",
+        f"flash-linear-attention=={FLA_VERSION}",
+        "einops",
+    ]
+
 
 def run_logged(command: Sequence[str], log_path: Path, cwd: Path) -> float:
     """Run a step, tee its output to the run log, and return its wall-clock seconds."""

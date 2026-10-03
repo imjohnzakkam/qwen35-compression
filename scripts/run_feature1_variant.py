@@ -16,9 +16,12 @@ from qwen35_compression.config import ExperimentConfig, VariantConfig, load_conf
 from qwen35_compression.export import verify_export
 from qwen35_compression.feature1 import (
     EVALUATOR_ENV,
+    FLA_METHODS,
+    FLA_VERSION,
     BenchmarkSuite,
     build_text_eval_commands,
     build_vlm_eval_command,
+    fla_install_command,
     load_benchmark_suite,
     run_logged,
     suite_label,
@@ -163,6 +166,11 @@ def run(
                     "text_preflight": text_preflight,
                     "vision_preflight": None if args.text_only else vision_preflight,
                     "quantize": None if export_exists else quantize_command,
+                    "flash_linear_attention": (
+                        fla_install_command(sys.executable)
+                        if variant.method in FLA_METHODS and not export_exists
+                        else None
+                    ),
                     "benchmark_suite": suite_record(suite),
                     "runtime_smoke": smoke_command,
                     "text": dict(text_commands),
@@ -218,6 +226,9 @@ def run(
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"= reusing existing export {export_dir}\n")
         else:
+            if variant.method in FLA_METHODS:
+                run_logged(fla_install_command(sys.executable), log_path, ROOT)
+                manifest["flash_linear_attention"] = FLA_VERSION
             durations["quantize"] = run_logged(quantize_command, log_path, ROOT)
         export_manifest = verify_export(export_dir, variant)
         manifest["export"] = {

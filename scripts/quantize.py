@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import argparse
+import os
 
-import _bootstrap  # noqa: F401
+# Must be set before torch initializes CUDA. AutoRound's out-of-memory errors left 2.5-3.2 GiB
+# reserved but unallocated; expandable segments recover that without changing results.
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
-from qwen35_compression.config import load_config
-from qwen35_compression.runner import quantize
+import _bootstrap  # noqa: E402, F401
+
+from qwen35_compression.config import load_config  # noqa: E402
+from qwen35_compression.runner import quantize  # noqa: E402
 
 
 def main() -> None:

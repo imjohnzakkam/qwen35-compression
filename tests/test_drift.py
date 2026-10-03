@@ -109,3 +109,30 @@ def test_drift_study_rejects_unknown_models() -> None:
         text=True,
     )
     assert result.returncode != 0 and "unknown models" in result.stderr
+
+
+def test_drift_study_quantizes_configured_variants() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_drift_study.py",
+            "--components",
+            "",
+            "--published",
+            "",
+            "--variants",
+            "autoround_w4a16_g128",
+            "--skip-bf16",
+            "--dry-run",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(result.stdout)["full"]["quantized"] == ["autoround_w4a16_g128"]
+    rejected = subprocess.run(
+        [sys.executable, "scripts/run_drift_study.py", "--variants", "nope", "--dry-run"],
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode != 0 and "unknown models" in rejected.stderr

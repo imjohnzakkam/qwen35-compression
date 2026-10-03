@@ -43,6 +43,8 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
     # the same conversations, packed into max_sequence_length blocks.
     pack = variant.method == "autoround"
     dataset, collator = build_calibration_dataset(processor, calibration, pack=pack)
+    if variant.calibration_samples is not None:
+        dataset = dataset.select(range(min(variant.calibration_samples, len(dataset))))
     recipe = build_recipe(variant)
     output_dir = config.paths.outputs / variant.name
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -57,7 +59,7 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
         recipe=recipe,
         dataset=dataset,
         max_seq_length=calibration.max_sequence_length,
-        num_calibration_samples=len(dataset) if pack else calibration.num_samples,
+        num_calibration_samples=len(dataset),
         data_collator=collator,
     )
     model.save_pretrained(output_dir, safe_serialization=True, save_compressed=True)
