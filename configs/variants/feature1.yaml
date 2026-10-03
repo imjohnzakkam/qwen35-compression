@@ -49,6 +49,34 @@ variants:
     # It caches every sample's block inputs and outputs on the GPU, so the full set does not fit.
     calibration_samples: 128
 
+  # Glaze v1: AutoRound's export with its group scales and norm weights retrained end to end
+  # against BF16 (KL on next-token distributions). Trained on the same 128 packed calibration
+  # blocks AutoRound used, so only the objective differs; the next 32 blocks are the dev set.
+  - name: glaze_v1_w4a16_g128
+    method: glaze
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    init: autoround_w4a16_g128
+    glaze:
+      data: calibration
+      train_blocks: 128
+      dev_blocks: 32
+      epochs: 4
+      tokens_per_step: 16384
+      micro_batch_tokens: 8192
+      scale_learning_rates: [0.0001, 0.0003, 0.001]
+      probe_steps: 8
+      norm_learning_rate: 0.0001
+      warmup_steps: 3
+      train_norms: true
+      logit_chunk_tokens: 512
+      eval_every_steps: 16
+      seed: 42
+      max_memory_fraction: 0.85
+      max_train_minutes: 30
+
   # Sensitivity: GPTQ W4A16 g128 on one component of the language model, the rest left in BF16.
   # Targets name exactly the Linear layers the full GPTQ variant quantizes in that component; a
   # looser pattern would also catch the DeltaNet conv1d and norm, the q/k norms, or the vision

@@ -1,0 +1,19 @@
+# MATH-500 alone, with the instruct track's settings: the free-generation check for candidate
+# compressions (accuracy and answers that reach the 8,192-token cap). Every setting matches
+# configs/evaluation/feature1.yaml, so a score here equals MATH-500 from a full run.
+text_tasks:
+  - minerva_math500
+
+vision_tasks: []
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+max_model_len: 12288
+gpu_memory_utilization: 0.85
+limit: null
+seed: 42
+enable_thinking: false
+generation:
+  do_sample: false
+  max_gen_toks: 8192

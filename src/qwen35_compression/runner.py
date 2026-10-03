@@ -19,6 +19,11 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
         raise ValueError(
             "BF16 is evaluated from the pinned source checkpoint and is not re-exported"
         )
+    if variant.method == "glaze":
+        # Glaze refines its init's export instead of quantizing the BF16 model.
+        from qwen35_compression.glaze.train import refine
+
+        return refine(config, variant)
     calibration = config.calibration
     if variant.requires_multimodal_calibration:
         multimodal = config.multimodal_calibration

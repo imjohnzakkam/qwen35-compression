@@ -133,6 +133,60 @@ def bucket(position: int) -> int | None:
     return None
 
 
+def answer_record(task: str, doc_id: int, ranks: list[int], logprobs: list[float]) -> dict:
+    """One answer's token count, flips and summed NLL, over the positions the tallies count."""
+    kept = [
+        (rank, logprob)
+        for position, (rank, logprob) in enumerate(zip(ranks, logprobs, strict=True))
+        if bucket(position) is not None
+    ]
+    return {
+        "task": task,
+        "doc_id": doc_id,
+        "tokens": len(kept),
+        "flips": sum(rank != 1 for rank, _ in kept),
+        "nll": -sum(logprob for _, logprob in kept),
+    }
+
+
+def paired_difference(
+    base: dict, other: dict, resamples: int = 2000, seed: int = 0
+) -> dict[str, dict[str, float]]:
+    """`other` minus `base` in token-weighted mean NLL and flip rate, with a paired bootstrap.
+
+    Both results must carry per-answer records for the same answers. Answers are resampled with
+    replacement, and each resample's difference uses the same answers for both models, so the
+    interval reflects only how the two models differ on shared answers.
+    """
+    import numpy as np
+
+    def records(result: dict) -> dict[tuple[str, int], dict]:
+        if "per_answer" not in result:
+            raise ValueError(f"{result.get('name')}: no per-answer records (rescore it)")
+        return {(row["task"], row["doc_id"]): row for row in result["per_answer"]}
+
+    left, right = records(base), records(other)
+    if set(left) != set(right):
+        raise ValueError("the two results do not cover the same answers")
+    keys = sorted(left)
+    tokens = np.array([left[key]["tokens"] for key in keys], dtype=np.float64)
+    if not np.array_equal(tokens, [right[key]["tokens"] for key in keys]):
+        raise ValueError("the two results tokenized the answers differently")
+    nll = np.array([right[key]["nll"] - left[key]["nll"] for key in keys])
+    flips = np.array([right[key]["flips"] - left[key]["flips"] for key in keys], dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    draws = rng.integers(0, len(keys), size=(resamples, len(keys)))
+    resampled_tokens = tokens[draws].sum(axis=1)
+    out = {}
+    for name, values in (("mean_nll", nll), ("flip_rate", flips)):
+        observed = values.sum() / tokens.sum()
+        boot = values[draws].sum(axis=1) / resampled_tokens
+        low, high = np.percentile(boot, [2.5, 97.5])
+        out[name] = {"difference": float(observed), "low": float(low), "high": float(high)}
+    out["answers"] = {"count": len(keys), "tokens": int(tokens.sum())}
+    return out
+
+
 def cohorts(answer_tokens: int) -> list[str]:
     """Which summaries an answer of this many tokens counts towards."""
     names = ["all"]
@@ -177,6 +231,7 @@ def score(args: argparse.Namespace) -> None:
     )
 
     tallies: dict[str, dict[str, Tally]] = {}
+    per_answer: list[dict] = []
     for start in range(0, len(encoded), args.batch):
         chunk = encoded[start : start + args.batch]
         prompts = [TokensPrompt(prompt_token_ids=prompt + answer) for _, prompt, answer in chunk]
@@ -188,6 +243,7 @@ def score(args: argparse.Namespace) -> None:
                 entry = output.prompt_logprobs[position][ids[position]]
                 ranks.append(int(entry.rank))
                 logprobs.append(float(entry.logprob))
+            per_answer.append(answer_record(trace.task, trace.doc_id, ranks, logprobs))
             task = "math500" if trace.task.startswith("minerva") else "mmlu_pro"
             for group in (task, "both"):
                 for cohort in cohorts(len(answer)):
@@ -207,6 +263,8 @@ def score(args: argparse.Namespace) -> None:
             group: {cohort: tally.summary() for cohort, tally in by_cohort.items()}
             for group, by_cohort in tallies.items()
         },
+        # Per-answer totals, for paired comparisons between models (`report --vs`).
+        "per_answer": per_answer,
     }
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
@@ -235,11 +293,35 @@ def report_rows(results: list[dict], group: str = "both", cohort: str = "long") 
     return lines
 
 
+def paired_rows(base: dict, results: list[dict]) -> list[str]:
+    """A Markdown table of each model's change from `base`, with paired 95% intervals."""
+    lines = [
+        f"change from {base['name']} on the same answers (paired bootstrap, 95% interval)",
+        "| model | mean NLL | flip rate (points) |",
+        "| --- | ---: | ---: |",
+    ]
+    for result in results:
+        if result is base:
+            continue
+        diff = paired_difference(base, result)
+        nll, flips = diff["mean_nll"], diff["flip_rate"]
+        lines.append(
+            f"| {result['name']} "
+            f"| {nll['difference']:+.4f} [{nll['low']:+.4f}, {nll['high']:+.4f}] "
+            f"| {100 * flips['difference']:+.2f} [{100 * flips['low']:+.2f}, "
+            f"{100 * flips['high']:+.2f}] |"
+        )
+    return lines
+
+
 def report(args: argparse.Namespace) -> None:
     results = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.results]
     for cohort in ("long", "finished", "all"):
         print("\n".join(report_rows(results, args.group, cohort)))
         print()
+    if args.vs:
+        base = json.loads(Path(args.vs).read_text(encoding="utf-8"))
+        print("\n".join(paired_rows(base, results)))
 
 
 def main() -> None:
@@ -259,6 +341,7 @@ def main() -> None:
     show = commands.add_parser("report", help="Compare scored models")
     show.add_argument("results", nargs="+")
     show.add_argument("--group", default="both", choices=("both", "math500", "mmlu_pro"))
+    show.add_argument("--vs", help="Also report each model's paired change from this result")
     args = parser.parse_args()
     score(args) if args.command == "score" else report(args)
 
