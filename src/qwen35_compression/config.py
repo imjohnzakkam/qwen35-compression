@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-ALLOWED_METHODS = {"bf16", "int8", "gptq", "awq", "mixed"}
+ALLOWED_METHODS = {"bf16", "int8", "gptq", "awq", "autoround", "mixed"}
 
 
 @dataclass(frozen=True)
@@ -257,7 +257,7 @@ def _validate(
     for variant in variants:
         if variant.method not in ALLOWED_METHODS:
             raise ValueError(f"unsupported method: {variant.method}")
-        if variant.method in {"gptq", "awq"}:
+        if variant.method in {"gptq", "awq", "autoround"}:
             if variant.bits != 4 or variant.group_size not in {32, 64, 128}:
                 raise ValueError(f"invalid W4A16 settings for {variant.name}")
         if variant.method == "mixed" and not variant.groups:

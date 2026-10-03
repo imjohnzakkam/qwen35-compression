@@ -101,6 +101,31 @@ Findings:
 - **Answers that hit the cap with no answer stay open:** MMMU has 4 (BF16), 6 (INT8), 7 (GPTQ) and
   4 (AWQ) answers like this, which VLMEvalKit fills with a random option (at most 0.8 points).
 
+### Reasoning panel
+
+`configs/evaluation/feature1_panel.yaml` screens candidate compressions before the full suite. It
+runs the tasks where 4-bit weights cost the most: MMLU-Pro (the fixed 1,001-question subset),
+MATH-500, IFEval and MMMU, with every instruct-track setting unchanged. `scripts/panel_scores.py`
+scores a panel run, or a full run on the same questions, so finished models need no rerun:
+
+| Model | MMLU-Pro (1,001) | MATH-500 | IFEval | MMMU (val) | MATH-500 at cap | MMLU-Pro at cap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 73.6 | 83.4 | 82.3 | 69.6 | 3.6% | 5.7% |
+| INT8 W8A8 | 73.7 | 82.6 | 82.1 | 67.7 | 5.4% | 7.0% |
+| GPTQ W4A16 g128 | 70.1 | 75.8 | 80.8 | 64.9 | 8.0% | 8.0% |
+| AWQ W4A16 g128 | 71.1 | 73.4 | 79.3 | 65.7 | 6.4% | 9.4% |
+
+```bash
+uv run python scripts/run_feature1_variant.py --variant autoround_w4a16_g128 \
+  --suite configs/evaluation/feature1_panel.yaml --pilot-limit 10
+uv run python scripts/panel_scores.py --run bf16=logs/jarvis/<bf16-run> \
+  --run autoround=logs/jarvis/<autoround-run>/results --loops
+```
+
+Panel candidates: `autoround_w4a16_g128` (AutoRound tunes each block's rounding and clipping
+against BF16's outputs, same size as GPTQ g128), and the sensitivity variants, which apply GPTQ
+W4A16 g128 to one language-model component (DeltaNet, attention or FFN) and keep the rest in BF16.
+
 ### Earlier BF16 record: 2,048-token cap (superseded)
 
 All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers, including the
@@ -191,10 +216,12 @@ run ends or fails, and it stops the run at a hard budget deadline.
 
 1. Decide how to score an answer that hits the cap with no answer: wrong, or VLMEvalKit's random
    option.
-2. Run the thinking track for BF16 and a 4-bit variant on one instance. The card's
+2. Screen AutoRound W4A16 g128 and the DeltaNet, attention and FFN sensitivity variants on the
+   reasoning panel, then pick the 4-bit recipe (AutoRound, mixed precision, or quantization-aware
+   training) for the full suite.
+3. Run the thinking track for BF16 and the chosen 4-bit variant on one instance. The card's
    `presence_penalty=1.5` may cut the 4-bit looping.
-3. Component sensitivity (which layers cost the 4-bit reasoning loss) and a mixed-precision recipe,
-   then the 9B validation.
+4. The 9B validation.
 
 ## Setup
 
