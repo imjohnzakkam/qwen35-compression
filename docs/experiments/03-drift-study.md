@@ -28,14 +28,14 @@ to the Linear layers of one component and keep the rest in BF16:
 
 | Component | Layers | Share of the 4-bit weights |
 | --- | --- | ---: |
-| DeltaNet | 24 linear-attention layers: `in_proj_qkv`, `in_proj_z`, `in_proj_a`, `in_proj_b`, `out_proj` | 27.5% |
-| Attention | 8 full-attention layers: `q_proj`, `k_proj`, `v_proj`, `o_proj` | 9.0% |
+| DeltaNet | 24 linear-attention layers: `in_proj_qkv`, `in_proj_z`, `in_proj_a`, `in_proj_b`, `out_proj` | 28.3% |
+| Attention | 8 full-attention layers: `q_proj`, `k_proj`, `v_proj`, `o_proj` | 8.2% |
 | FFN | 32 MLPs: `gate_proj`, `up_proj`, `down_proj` | 63.5% |
 
 | | |
 | --- | --- |
-| Code | `0172f24` (BF16 and the published variants), `8c6cd54` (component variants) |
-| Hardware | One NVIDIA A30 (24 GB) |
+| Code | `0172f24` (BF16 and the published variants), `8c6cd54` (component variants), `c3a16a0` (AutoRound) |
+| Hardware | One NVIDIA A30 (24 GB); AutoRound on one A100 (40 GB) |
 
 ## Results
 
@@ -43,6 +43,7 @@ to the Linear layers of one component and keep the rest in BF16:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | BF16 (noise floor) | 0.35% | 0.128 | 0.47 | 0.34 | 0.40 | 0.36 | 0.35 | 0.32 |
 | INT8 W8A8 | 2.42% | 0.139 | 3.07 | 2.77 | 2.59 | 2.55 | 2.45 | 2.30 |
+| AutoRound W4A16 g128 | 4.96% | 0.170 | 5.70 | 5.37 | 5.26 | 5.34 | 5.33 | 5.24 |
 | AWQ W4A16 g128 | 5.42% | 0.178 | 6.55 | 6.14 | 5.84 | 5.65 | 5.59 | 5.43 |
 | GPTQ W4A16 g128 | 5.70% | 0.182 | 6.68 | 6.32 | 6.07 | 6.12 | 6.14 | 5.95 |
 | GPTQ, DeltaNet only | 3.03% | 0.143 | 3.52 | 3.36 | 3.31 | 3.35 | 3.27 | 3.17 |
@@ -60,8 +61,8 @@ components.
 
 | Component | Share of 4-bit weights | Share of GPTQ's excess loss | Per parameter |
 | --- | ---: | ---: | ---: |
-| Attention | 9.0% | 18% | 2.0× |
-| DeltaNet | 27.5% | 27% | 1.0× |
+| Attention | 8.2% | 18% | 2.2× |
+| DeltaNet | 28.3% | 27% | 1.0× |
 | FFN | 63.5% | 56% | 0.9× |
 
 ## Findings
@@ -76,7 +77,7 @@ components.
   disagreement rises along the answer (2.5% to 2.9%). This fits softmax attention over a growing
   context of quantized keys and values. It is small next to the whole-model error.
 - **No component dominates.** Only the full-attention layers are disproportionately sensitive, and
-  they are 9% of the weights. Keeping them at 8 bits would add about 0.17 GB and remove at most
+  they are 8% of the weights. Keeping them at 8 bits would add about 0.15 GB and remove at most
   about 18% of GPTQ's excess loss.
 - **The measure is more sensitive than the benchmarks.** INT8 changes 2.4% of top choices (7× the
   noise floor) with no measurable benchmark change. AWQ (5.42%) and GPTQ (5.70%) separate cleanly

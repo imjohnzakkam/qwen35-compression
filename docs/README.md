@@ -10,7 +10,7 @@ each record.
 | [1. BF16 baseline](experiments/01-bf16-baseline.md) | The reference every compressed model is measured against |
 | [2. Quantization baselines](experiments/02-quantization-baselines.md) | INT8 W8A8, GPTQ W4A16 and AWQ W4A16 on the full suite |
 | [3. Drift study](experiments/03-drift-study.md) | Where and how quantization error appears, token by token and by component |
-| [4. AutoRound](experiments/04-autoround.md) | Attempts to run AutoRound on Qwen3.5-4B and what blocked them |
+| [4. AutoRound](experiments/04-autoround.md) | AutoRound W4A16 g128: the strongest 4-bit baseline on the drift measure, and its memory needs |
 | [Engineering notes](engineering-notes.md) | Pitfalls when evaluating and quantizing Qwen3.5 with vLLM, lm-eval, VLMEvalKit and llm-compressor |
 
 ## Summary
@@ -26,8 +26,8 @@ and up to 8,192 generated tokens.
 - **The 4-bit error is local:** replayed along BF16's own answers, quantized models disagree with
   BF16 at a constant rate from the first token to the 8,000th. Nothing compounds through the
   DeltaNet recurrent state.
-- **No component dominates the 4-bit error:** by excess loss, attention contributes 18% from 9% of
-  the weights, DeltaNet 27% from 27.5%, and FFN 56% from 63.5%.
+- **No component dominates the 4-bit error:** by excess loss, attention contributes 18% from 8.2% of
+  the weights, DeltaNet 27% from 28.3%, and FFN 56% from 63.5%.
 
 ## Released artifacts
 

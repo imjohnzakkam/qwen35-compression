@@ -59,7 +59,7 @@ and llm-compressor, with the fixes used in this repository. Versions are those p
   mixture-of-experts models). With 512 × 2,048-token samples it filled a 24 GB GPU at the second
   layer. `AWQModifier(offload_device=torch.device("cpu"))` moves the cache without changing the
   scales.
-- **AutoRound** needs calibration samples of one length, and more GPU memory than AWQ or GPTQ on
+- **AutoRound** needs calibration samples of one length, and a 40 GB GPU with flash-linear-attention on
   this model; see [AutoRound](experiments/04-autoround.md).
 
 ## flash-linear-attention
