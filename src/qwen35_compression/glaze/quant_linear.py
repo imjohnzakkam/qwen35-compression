@@ -37,10 +37,9 @@ def dequantize_groups(codes: torch.Tensor, scales: torch.Tensor, group_size: int
 class GroupQuantLinear(nn.Module):
     """W4A16 Linear: frozen INT4 codes times trainable group scales, without bias.
 
-    The scale of group g is `base_scale[g] * exp(log_scale[g])`, rounded to the scale's storage
-    dtype in the forward pass. The cast's gradient is the identity, so training updates the
-    fp32 log-scales straight through the rounding while the forward pass computes exactly the
-    weights the exported, rounded scales give.
+    `scales` holds the scales in fp32 at values of their storage dtype's grid, so the forward
+    pass computes exactly the weights the exported scales give. Glaze moves them one grid step
+    at a time (see glaze.grid); `initial_scales` keeps the export's values for comparison.
     """
 
     def __init__(self, codes: torch.Tensor, scales: torch.Tensor, group_size: int) -> None:
@@ -58,7 +57,7 @@ class GroupQuantLinear(nn.Module):
         if int(codes.min()) < INT4_MIN or int(codes.max()) > INT4_MAX:
             raise ValueError("codes are outside the INT4 range [-8, 7]")
         # Scales may be negative: AutoRound's symmetric INT4 uses the full [-8, 7] range, giving
-        # each group the sign of its largest-magnitude weight. exp(log_scale) keeps the sign.
+        # each group the sign of its largest-magnitude weight. Grid steps keep the sign.
         if not bool(torch.isfinite(scales).all()):
             raise ValueError("group scales must be finite")
         self.in_features = columns
@@ -66,12 +65,13 @@ class GroupQuantLinear(nn.Module):
         self.group_size = group_size
         self.storage_dtype = scales.dtype
         self.register_buffer("codes", codes.contiguous())
-        self.register_buffer("base_scales", scales.detach().to(torch.float32).contiguous())
-        self.log_scale = nn.Parameter(torch.zeros_like(self.base_scales))
+        self.register_buffer("initial_scales", scales.detach().clone().contiguous())
+        working = torch.float64 if scales.dtype is torch.float64 else torch.float32
+        self.scales = nn.Parameter(scales.detach().to(working).contiguous())
 
     def stored_scales(self) -> torch.Tensor:
-        """The scales as the export stores them (storage dtype), differentiable in log_scale."""
-        return (self.base_scales * torch.exp(self.log_scale)).to(self.storage_dtype)
+        """The scales as the export stores them; exact, and differentiable in `scales`."""
+        return self.scales.to(self.storage_dtype)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         weight = dequantize_groups(self.codes, self.stored_scales(), self.group_size)

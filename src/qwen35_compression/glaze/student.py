@@ -109,8 +109,8 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
     """Copy the teacher's text model, swapping each quantized Linear for its export's codes.
 
     The embedding is shared with the teacher (it is not quantized). Every other parameter is
-    loaded from the init export, so with all log-scales at zero the student computes exactly what
-    the init export does. Only the log-scales, and with `train_norms` the RMSNorm weights, train.
+    loaded from the init export, so the student starts out computing exactly what the init export
+    does. Only the group scales, and with `train_norms` the RMSNorm weights, train.
     """
     modules = dict(teacher.named_modules())
     embedding = teacher.get_input_embeddings().weight
@@ -139,10 +139,13 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
         setattr(parent, child, GroupQuantLinear(codes, scales, init.group_size))
 
     expected = {key for key in init.tensors if not key.endswith(QUANTIZATION_SUFFIXES)}
+    scale_ids = {
+        id(module.scales) for module in student.modules() if isinstance(module, GroupQuantLinear)
+    }
     loaded = set()
     with torch.no_grad():
         for name, parameter in student.named_parameters():
-            if parameter is embedding or name.endswith("log_scale"):
+            if parameter is embedding or id(parameter) in scale_ids:
                 continue
             source = init.tensors.get(name)
             if source is None:
@@ -161,7 +164,7 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
     student.requires_grad_(False)
     for module in student.modules():
         if isinstance(module, GroupQuantLinear):
-            module.log_scale.requires_grad_(True)
+            module.scales.requires_grad_(True)
     if train_norms:
         for module in student.modules():
             if type(module).__name__ in NORM_CLASSES:
@@ -174,7 +177,7 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
 
 
 def trainable_state(student: nn.Module) -> dict[str, torch.Tensor]:
-    """A CPU copy of every trainable parameter (log-scales and norm masters)."""
+    """A CPU copy of every trainable parameter (scales and norm masters)."""
     return {
         name: parameter.detach().to("cpu", copy=True)
         for name, parameter in student.named_parameters()

@@ -97,10 +97,12 @@ class GlazeConfig:
     epochs: int = 4
     tokens_per_step: int = 16384
     micro_batch_tokens: int = 8192
-    # Candidate learning rates for the log-scale parameters; a short probe on the dev set picks one.
-    scale_learning_rates: tuple[float, ...] = (1e-4, 3e-4, 1e-3)
+    # Trained values move one BF16 grid step at a time (qwen35_compression.glaze.grid). Each
+    # step moves this fraction of them, the most promising first; a short probe on the dev set
+    # picks one of the candidates.
+    flip_fractions: tuple[float, ...] = (1e-4, 4e-4, 1.6e-3)
+    momentum: float = 0.9
     probe_steps: int = 8
-    norm_learning_rate: float = 1e-4
     warmup_steps: int = 3
     train_norms: bool = True
     logit_chunk_tokens: int = 512
@@ -164,9 +166,8 @@ def _glaze_config(raw: Any, variant: str) -> GlazeConfig | None:
     if unknown:
         raise ValueError(f"unknown glaze settings for {variant}: {unknown}")
     values = dict(raw)
-    if "scale_learning_rates" in values:
-        rates = values["scale_learning_rates"]
-        values["scale_learning_rates"] = tuple(float(rate) for rate in rates)
+    if "flip_fractions" in values:
+        values["flip_fractions"] = tuple(float(value) for value in values["flip_fractions"])
     return GlazeConfig(**values)
 
 
@@ -366,9 +367,11 @@ def _validate_glaze(
             raise ValueError(f"glaze {field_name} must be positive: {name}")
     if glaze.probe_steps < 0 or glaze.warmup_steps < 0:
         raise ValueError(f"glaze probe_steps and warmup_steps must not be negative: {name}")
-    rates = (*glaze.scale_learning_rates, glaze.norm_learning_rate)
-    if not glaze.scale_learning_rates or any(rate <= 0 for rate in rates):
-        raise ValueError(f"glaze learning rates must be positive: {name}")
+    fractions = glaze.flip_fractions
+    if not fractions or any(not 0 < fraction <= 1 for fraction in fractions):
+        raise ValueError(f"glaze flip fractions must be in (0, 1]: {name}")
+    if not 0 <= glaze.momentum < 1:
+        raise ValueError(f"glaze momentum must be in [0, 1): {name}")
     if not 0 < glaze.max_memory_fraction <= 1 or glaze.max_train_minutes <= 0:
         raise ValueError(f"glaze memory fraction and time budget must be positive: {name}")
     block = calibration.max_sequence_length

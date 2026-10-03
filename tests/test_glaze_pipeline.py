@@ -48,7 +48,7 @@ def test_glaze_v1_is_configured_on_autorounds_own_data() -> None:
     # Same 128 blocks AutoRound calibrated on, and 32 it never saw.
     assert glaze.train_blocks == init.calibration_samples == 128
     assert glaze.dev_blocks == 32
-    assert glaze.scale_learning_rates == (0.0001, 0.0003, 0.001)
+    assert glaze.flip_fractions == (0.0001, 0.0004, 0.0016) and glaze.momentum == 0.9
     assert config.variant("gptq_w4a16_g128").glaze is None
 
 
@@ -81,8 +81,9 @@ def _glaze(items: dict) -> dict:
         (lambda v: _glaze(v).update(typo=1), "unknown glaze settings"),
         (lambda v: _glaze(v).update(data="answers"), "unsupported glaze data"),
         (lambda v: _glaze(v).update(epochs=0), "epochs must be positive"),
-        (lambda v: _glaze(v).update(scale_learning_rates=[]), "learning rates"),
-        (lambda v: _glaze(v).update(norm_learning_rate=-1.0), "learning rates"),
+        (lambda v: _glaze(v).update(flip_fractions=[]), "flip fractions"),
+        (lambda v: _glaze(v).update(flip_fractions=[0.0, 0.1]), "flip fractions"),
+        (lambda v: _glaze(v).update(momentum=1.0), "momentum"),
         (lambda v: _glaze(v).update(micro_batch_tokens=3000), "multiple of the 2048-token"),
         (lambda v: _glaze(v).update(tokens_per_step=12288), "divide"),
         (lambda v: _glaze(v).update(dev_blocks=30), "whole steps"),
@@ -390,8 +391,11 @@ def test_refine_trains_and_writes_a_verified_export(
     record = manifest["glaze"]
     assert record["init"]["variant"] == "autoround_w4a16_g128"
     assert record["data"]["train_blocks"] == 128 and record["data"]["dev_blocks"] == 32
-    assert record["scale_learning_rate"] in variant.glaze.scale_learning_rates
-    assert set(record["probe_dev_kl"]) == {repr(r) for r in variant.glaze.scale_learning_rates}
+    assert record["flip_fraction"] in variant.glaze.flip_fractions
+    assert set(record["probe_dev_kl"]) == {repr(f) for f in variant.glaze.flip_fractions}
+    changed = record["changed"]
+    assert 0 < changed["scales_total"] and changed["scales"] <= changed["scales_total"]
+    assert 0 < changed["norm_values_total"]
     assert record["dev_best"]["mean_kl"] <= record["dev_at_init"]["mean_kl"]
     assert len(record["history"]) == 32
     # The whole manifest is plain JSON, as written.
@@ -414,5 +418,6 @@ def test_refine_pilot_writes_its_own_export(
     )
     assert output_dir == pilot_dir and verify_export(pilot_dir, variant)
     assert len(manifest["glaze"]["pilot"]["train_kl"]) == 3
+    assert manifest["glaze"]["pilot"]["flip_fraction"] == min(variant.glaze.flip_fractions)
     assert "best_step" not in manifest["glaze"]
     assert not (config.paths.outputs / GLAZE).exists()

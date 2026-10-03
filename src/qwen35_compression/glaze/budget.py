@@ -32,8 +32,9 @@ def memory_estimate_gib(
         "teacher_quantizable_weights": quantized_params * 2 / GIB,
         "shared_embedding": embedding_params * 2 / GIB,
         "student_codes": quantized_params / GIB,
-        "scale_parameters_adam_grad": scales * 4 * 4 / GIB,
-        "base_scales": scales * 2 / GIB,
+        # fp32 scales, gradients, gradient averages, and the grid step's targets.
+        "scale_parameters_and_optimizer": scales * 4 * 4 / GIB,
+        "initial_scales": scales * 2 / GIB,
         "checkpointed_layer_inputs": layers * micro_batch_tokens * hidden * 2 / GIB,
         "layer_recompute_backward": micro_batch_tokens * intermediate * 2 * 4 / GIB
         + deltanet_layer_gib,
