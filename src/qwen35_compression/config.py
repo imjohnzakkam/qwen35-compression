@@ -91,6 +91,8 @@ class VariantConfig:
     targets: tuple[str, ...] = ("Linear",)
     groups: tuple[QuantizationGroupConfig, ...] = field(default_factory=tuple)
     requires_multimodal_calibration: bool = False
+    # Use only the first N calibration samples (after packing, for methods that pack).
+    calibration_samples: int | None = None
 
 
 @dataclass(frozen=True)
@@ -199,6 +201,7 @@ def load_config(path: str | Path) -> ExperimentConfig:
             requires_multimodal_calibration=bool(
                 item.get("requires_multimodal_calibration", False)
             ),
+            calibration_samples=item.get("calibration_samples"),
         )
         for item in variants_raw
     )
@@ -260,6 +263,8 @@ def _validate(
         if variant.method in {"gptq", "awq", "autoround"}:
             if variant.bits != 4 or variant.group_size not in {32, 64, 128}:
                 raise ValueError(f"invalid W4A16 settings for {variant.name}")
+        if variant.calibration_samples is not None and variant.calibration_samples <= 0:
+            raise ValueError(f"calibration_samples must be positive: {variant.name}")
         if variant.method == "mixed" and not variant.groups:
             raise ValueError(f"mixed variant requires groups: {variant.name}")
         if variant.method != "mixed" and variant.groups:

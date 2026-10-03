@@ -45,6 +45,9 @@ variants:
     bits: 4
     group_size: 128
     ignore: *text_calibration_ignore
+    # AutoRound's own default: 128 samples of 2,048 tokens (the first 128 of the packed set).
+    # It caches every sample's block inputs and outputs on the GPU, so the full set does not fit.
+    calibration_samples: 128
 
   # Sensitivity: GPTQ W4A16 g128 on one component of the language model, the rest left in BF16.
   # Targets name exactly the Linear layers the full GPTQ variant quantizes in that component; a

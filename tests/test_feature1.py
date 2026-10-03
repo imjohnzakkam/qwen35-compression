@@ -56,6 +56,9 @@ def test_feature1_plan_covers_baselines_sensitivity_and_mixed_precision() -> Non
     autoround = plan.variant("autoround_w4a16_g128")
     assert (autoround.method, autoround.bits, autoround.group_size) == ("autoround", 4, 128)
     assert "lm_head" in autoround.ignore
+    # AutoRound's own default sample count; the other methods use the whole calibration set.
+    assert autoround.calibration_samples == 128
+    assert plan.variant("gptq_w4a16_g128").calibration_samples is None
 
     mixed = plan.variant("mixed_w8_sensitive_w4_standard")
     assert mixed.method == "mixed"
@@ -649,3 +652,35 @@ def test_panel_suite_matches_the_instruct_protocol() -> None:
         assert getattr(panel, field) == getattr(main, field), field
     assert panel.samples_path is not None
     assert panel.samples_path.name == "feature1_thinking_samples.json"
+
+
+def test_fla_installs_pinned_without_touching_torch() -> None:
+    from qwen35_compression.feature1 import FLA_METHODS, FLA_VERSION, fla_install_command
+
+    command = fla_install_command("py")
+    assert command[:5] == ["uv", "pip", "install", "--no-deps", "--python"]
+    assert (
+        f"fla-core=={FLA_VERSION}" in command
+        and f"flash-linear-attention=={FLA_VERSION}" in command
+    )
+    assert FLA_METHODS == {"autoround"}
+
+
+def test_calibration_samples_must_be_positive(tmp_path: Path) -> None:
+    import yaml
+
+    raw = yaml.safe_load(Path("configs/feature1.yaml").read_text(encoding="utf-8"))
+    variants = yaml.safe_load(Path("configs/variants/feature1.yaml").read_text(encoding="utf-8"))
+    variants["variants"][1]["calibration_samples"] = 0
+    (tmp_path / "variants.yaml").write_text(yaml.safe_dump(variants), encoding="utf-8")
+    raw["variants_path"] = str(tmp_path / "variants.yaml")
+    for key in ("calibration", "multimodal_calibration", "evaluation", "paths"):
+        section = raw.get(key)
+        if isinstance(section, dict):
+            for field in ("path", "lock_path", "suite_path", "outputs", "results"):
+                if field in section and not Path(section[field]).is_absolute():
+                    section[field] = str(Path("configs").resolve() / section[field])
+    config = tmp_path / "feature1.yaml"
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="calibration_samples must be positive"):
+        load_config(config)

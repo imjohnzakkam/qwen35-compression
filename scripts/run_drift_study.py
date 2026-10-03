@@ -33,7 +33,12 @@ import _bootstrap  # noqa: E402, F401
 
 from qwen35_compression.config import load_config  # noqa: E402
 from qwen35_compression.export import verify_export  # noqa: E402
-from qwen35_compression.feature1 import run_logged  # noqa: E402
+from qwen35_compression.feature1 import (  # noqa: E402
+    FLA_METHODS,
+    FLA_VERSION,
+    fla_install_command,
+    run_logged,
+)
 from qwen35_compression.io import write_json  # noqa: E402
 from qwen35_compression.models import download_model  # noqa: E402
 from qwen35_compression.provenance import git_revision  # noqa: E402
@@ -51,7 +56,6 @@ COMPONENTS = {
     "ffn": "sensitivity_ffn_w4a16_g128",
 }
 TEXT_PYTHON = ROOT / ".venv-gpu-text" / "bin" / "python"
-FLA_VERSION = "0.5.2"
 
 
 def fetch_published(repo: str) -> tuple[Path, str]:
@@ -107,10 +111,11 @@ def study(
     args: argparse.Namespace,
     output: Path,
     limit: int | None,
-    components: list[str],
+    quantized: list[tuple[str, str]],
     published: list[str],
     fla: bool,
 ) -> dict:
+    """Score BF16, published variants and (name, config variant) pairs quantized here."""
     config = load_config(args.config)
     output.mkdir(parents=True, exist_ok=True)
     log = output / "run.log"
@@ -160,11 +165,16 @@ def study(
             continue
         score(name, path)
 
-    for component in components:
-        variant = COMPONENTS[component]
+    for component, variant in quantized:
         export = config.paths.outputs / variant
         started = time.perf_counter()
         try:
+            if (
+                config.variant(variant).method in FLA_METHODS
+                and "flash_linear_attention" not in manifest
+            ):
+                run_logged(fla_install_command(sys.executable), log, ROOT)
+                manifest["flash_linear_attention"] = FLA_VERSION
             if not (export.is_dir() and any(export.iterdir())):
                 run_logged(
                     [
@@ -191,29 +201,14 @@ def study(
             )
             continue
         if not score(component, export):
-            # Every component variant is served the same way; the rest would fail alike after
+            # Every quantized variant is served the same way; the rest would fail alike after
             # ~25 minutes of quantization each.
-            record(component, note="later components skipped after this one failed to score")
+            record(component, note="later variants skipped after this one failed to score")
             break
 
     if fla:
         try:
-            # --no-deps: fla must not replace the pinned torch; einops is its one other need.
-            run_logged(
-                [
-                    "uv",
-                    "pip",
-                    "install",
-                    "--no-deps",
-                    "--python",
-                    sys.executable,
-                    f"fla-core=={FLA_VERSION}",
-                    f"flash-linear-attention=={FLA_VERSION}",
-                    "einops",
-                ],
-                log,
-                ROOT,
-            )
+            run_logged(fla_install_command(sys.executable), log, ROOT)
             run_logged(
                 [
                     sys.executable,
@@ -260,6 +255,11 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=Path("configs/feature1.yaml"))
     parser.add_argument("--output", type=Path, default=Path("results/feature1/drift"))
     parser.add_argument("--components", default=",".join(COMPONENTS))
+    parser.add_argument(
+        "--variants",
+        default="",
+        help="Comma-separated variants from the config to quantize here and score",
+    )
     parser.add_argument("--published", default=",".join(PUBLISHED))
     parser.add_argument(
         "--pilot-limit",
@@ -283,9 +283,13 @@ def main() -> None:
     os.environ["QWEN35_CODE_REVISION"] = args.code_revision
     components = [c for c in args.components.split(",") if c]
     published = [p for p in args.published.split(",") if p]
+    variants = [v for v in args.variants.split(",") if v]
     unknown = (set(components) - set(COMPONENTS)) | (set(published) - set(PUBLISHED))
+    configured = {variant.name for variant in load_config(args.config).variants}
+    unknown |= set(variants) - configured
     if unknown:
         raise ValueError(f"unknown models: {sorted(unknown)}")
+    quantized = [(c, COMPONENTS[c]) for c in components] + [(v, v) for v in variants]
     output = args.output.resolve()
 
     if args.dry_run:
@@ -303,7 +307,7 @@ def main() -> None:
                     "full": {
                         "output": str(output),
                         "published": published,
-                        "components": components,
+                        "quantized": [variant for _, variant in quantized],
                         "fla_check": not args.skip_fla,
                     },
                     "score_example": score_command(
@@ -343,7 +347,7 @@ def main() -> None:
             or pilot["models"].get("gptq_w4a16_g128", {}).get("status") != "scored"
         ):
             raise SystemExit("pilot failed; the full study was not started")
-    manifest = study(args, output, None, components, published, fla=not args.skip_fla)
+    manifest = study(args, output, None, quantized, published, fla=not args.skip_fla)
     if manifest["status"] != "passed":
         raise SystemExit("drift study failed")
 
