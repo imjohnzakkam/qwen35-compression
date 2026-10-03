@@ -663,7 +663,7 @@ def test_fla_installs_pinned_without_touching_torch() -> None:
         f"fla-core=={FLA_VERSION}" in command
         and f"flash-linear-attention=={FLA_VERSION}" in command
     )
-    assert FLA_METHODS == {"autoround"}
+    assert FLA_METHODS == {"autoround", "glaze"}
 
 
 def test_calibration_samples_must_be_positive(tmp_path: Path) -> None:

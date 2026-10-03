@@ -8,7 +8,10 @@ from typing import Any
 
 import yaml
 
-ALLOWED_METHODS = {"bf16", "int8", "gptq", "awq", "autoround", "mixed"}
+ALLOWED_METHODS = {"bf16", "int8", "gptq", "awq", "autoround", "mixed", "glaze"}
+# Exports Glaze can start from: symmetric INT4 group-quantized weights in compressed-tensors.
+GLAZE_INIT_METHODS = {"gptq", "autoround"}
+GLAZE_DATA = {"calibration"}
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,34 @@ class QuantizationGroupConfig:
 
 
 @dataclass(frozen=True)
+class GlazeConfig:
+    """End-to-end distillation of a W4A16 export's group scales and norm weights against BF16.
+
+    The INT4 codes of the init export stay frozen. `data: calibration` trains on the init's own
+    packed calibration blocks: the first `train_blocks`, with the next `dev_blocks` held out.
+    """
+
+    data: str = "calibration"
+    train_blocks: int = 128
+    dev_blocks: int = 32
+    epochs: int = 4
+    tokens_per_step: int = 16384
+    micro_batch_tokens: int = 8192
+    # Candidate learning rates for the log-scale parameters; a short probe on the dev set picks one.
+    scale_learning_rates: tuple[float, ...] = (1e-4, 3e-4, 1e-3)
+    probe_steps: int = 8
+    norm_learning_rate: float = 1e-4
+    warmup_steps: int = 3
+    train_norms: bool = True
+    logit_chunk_tokens: int = 512
+    eval_every_steps: int = 16
+    seed: int = 42
+    # Stop instead of running out of memory or time mid-run.
+    max_memory_fraction: float = 0.85
+    max_train_minutes: float = 30.0
+
+
+@dataclass(frozen=True)
 class VariantConfig:
     name: str
     method: str
@@ -93,6 +124,9 @@ class VariantConfig:
     requires_multimodal_calibration: bool = False
     # Use only the first N calibration samples (after packing, for methods that pack).
     calibration_samples: int | None = None
+    # Glaze: the variant whose export it refines, and its training settings.
+    init: str | None = None
+    glaze: GlazeConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +152,22 @@ class ExperimentConfig:
 def _resolve_path(value: str, root: Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else (root / path).resolve()
+
+
+def _glaze_config(raw: Any, variant: str) -> GlazeConfig | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"glaze settings must be a mapping: {variant}")
+    known = set(GlazeConfig.__dataclass_fields__)
+    unknown = sorted(set(raw) - known)
+    if unknown:
+        raise ValueError(f"unknown glaze settings for {variant}: {unknown}")
+    values = dict(raw)
+    if "scale_learning_rates" in values:
+        rates = values["scale_learning_rates"]
+        values["scale_learning_rates"] = tuple(float(rate) for rate in rates)
+    return GlazeConfig(**values)
 
 
 def load_config(path: str | Path) -> ExperimentConfig:
@@ -202,6 +252,8 @@ def load_config(path: str | Path) -> ExperimentConfig:
                 item.get("requires_multimodal_calibration", False)
             ),
             calibration_samples=item.get("calibration_samples"),
+            init=item.get("init"),
+            glaze=_glaze_config(item.get("glaze"), item["name"]),
         )
         for item in variants_raw
     )
@@ -269,3 +321,68 @@ def _validate(
             raise ValueError(f"mixed variant requires groups: {variant.name}")
         if variant.method != "mixed" and variant.groups:
             raise ValueError(f"only mixed variants may define groups: {variant.name}")
+        if variant.method == "glaze":
+            _validate_glaze(variant, {item.name: item for item in variants}, calibration)
+        elif variant.init is not None or variant.glaze is not None:
+            raise ValueError(f"only glaze variants may set init or glaze: {variant.name}")
+
+
+def _validate_glaze(
+    variant: VariantConfig,
+    by_name: dict[str, VariantConfig],
+    calibration: CalibrationConfig,
+) -> None:
+    name = variant.name
+    if variant.init is None or variant.glaze is None:
+        raise ValueError(f"glaze variant requires init and glaze settings: {name}")
+    init = by_name.get(variant.init)
+    if init is None:
+        raise ValueError(f"glaze init {variant.init!r} is not a configured variant: {name}")
+    if init.method not in GLAZE_INIT_METHODS:
+        raise ValueError(
+            f"glaze init must be one of {sorted(GLAZE_INIT_METHODS)}, got {init.method}: {name}"
+        )
+    # The refined export reuses the init's codes, so it must describe the same quantization.
+    if (variant.scheme, variant.bits, variant.group_size) != ("W4A16", 4, init.group_size):
+        raise ValueError(f"glaze variant must match its init's W4A16 settings: {name}")
+    if variant.ignore != init.ignore:
+        raise ValueError(
+            f"glaze variant must leave the same layers unquantized as its init: {name}"
+        )
+    glaze = variant.glaze
+    if glaze.data not in GLAZE_DATA:
+        raise ValueError(f"unsupported glaze data {glaze.data!r}: {name}")
+    counts = {
+        "train_blocks": glaze.train_blocks,
+        "dev_blocks": glaze.dev_blocks,
+        "epochs": glaze.epochs,
+        "tokens_per_step": glaze.tokens_per_step,
+        "micro_batch_tokens": glaze.micro_batch_tokens,
+        "logit_chunk_tokens": glaze.logit_chunk_tokens,
+        "eval_every_steps": glaze.eval_every_steps,
+    }
+    for field_name, value in counts.items():
+        if value <= 0:
+            raise ValueError(f"glaze {field_name} must be positive: {name}")
+    if glaze.probe_steps < 0 or glaze.warmup_steps < 0:
+        raise ValueError(f"glaze probe_steps and warmup_steps must not be negative: {name}")
+    rates = (*glaze.scale_learning_rates, glaze.norm_learning_rate)
+    if not glaze.scale_learning_rates or any(rate <= 0 for rate in rates):
+        raise ValueError(f"glaze learning rates must be positive: {name}")
+    if not 0 < glaze.max_memory_fraction <= 1 or glaze.max_train_minutes <= 0:
+        raise ValueError(f"glaze memory fraction and time budget must be positive: {name}")
+    block = calibration.max_sequence_length
+    if glaze.micro_batch_tokens % block or glaze.tokens_per_step % glaze.micro_batch_tokens:
+        raise ValueError(
+            f"glaze micro_batch_tokens must be a multiple of the {block}-token block and divide "
+            f"tokens_per_step: {name}"
+        )
+    blocks_per_step = glaze.tokens_per_step // block
+    blocks_per_micro = glaze.micro_batch_tokens // block
+    if glaze.train_blocks % blocks_per_step or glaze.dev_blocks % blocks_per_micro:
+        raise ValueError(f"glaze block counts must fill whole steps and micro-batches: {name}")
+    if glaze.warmup_steps >= glaze.train_blocks // blocks_per_step * glaze.epochs:
+        raise ValueError(f"glaze warmup must be shorter than training: {name}")
+    if init.method == "autoround" and glaze.train_blocks != init.calibration_samples:
+        # B1's premise: the same calibration data as the init, so only the objective differs.
+        raise ValueError(f"glaze train_blocks must equal the init's calibration samples: {name}")

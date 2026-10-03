@@ -37,6 +37,9 @@ dev = [
     "ruff>=0.13,<0.14",
     "pytest>=8.4,<9",
     "ipykernel",
+    # Glaze's format tests read and write compressed-tensors' packed INT4 on every platform; on
+    # Linux the same version also comes with llmcompressor.
+    "compressed-tensors==0.18.0",
 ]
 
 [tool.ruff]

@@ -465,7 +465,7 @@ EVALUATOR_ENV = {"VLLM_ENABLE_V1_MULTIPROCESSING": "0"}
 # which needs about a third more memory in forward and backward passes. Installed only for methods
 # that backpropagate through the model, so GPTQ, AWQ and INT8 exports stay reproducible as built.
 FLA_VERSION = "0.5.2"
-FLA_METHODS = frozenset({"autoround"})
+FLA_METHODS = frozenset({"autoround", "glaze"})
 
 
 def fla_install_command(python: str | Path) -> list[str]:

@@ -18,6 +18,7 @@ def write_export_manifest(
     model_revision: str,
     elapsed_seconds: float,
     peak_memory_bytes: int | None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     files = inventory(output_dir, excluded_names=(MANIFEST_NAME,))
     manifest = {
@@ -40,6 +41,11 @@ def write_export_manifest(
         "total_bytes": sum(item["bytes"] for item in files),
         "files": files,
     }
+    # Method-specific records (e.g. Glaze's training history) sit beside the common fields.
+    clashes = set(extra or {}) & set(manifest)
+    if clashes:
+        raise ValueError(f"extra manifest fields clash with standard ones: {sorted(clashes)}")
+    manifest.update(extra or {})
     write_json(output_dir / MANIFEST_NAME, manifest)
     return manifest
 

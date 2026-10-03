@@ -32,6 +32,13 @@ from pathlib import Path  # noqa: E402
 import _bootstrap  # noqa: E402, F401
 
 from qwen35_compression.config import load_config  # noqa: E402
+from qwen35_compression.drift import (  # noqa: E402
+    TEXT_PYTHON,
+    TRACES_REPO,
+    fetch_published,
+    fetch_traces,
+    score_command,
+)
 from qwen35_compression.export import verify_export  # noqa: E402
 from qwen35_compression.feature1 import (  # noqa: E402
     FLA_METHODS,
@@ -44,7 +51,6 @@ from qwen35_compression.models import download_model  # noqa: E402
 from qwen35_compression.provenance import git_revision  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-TRACES_REPO = "lazybrick/kiln-evals"
 PUBLISHED = {
     "int8_w8a8": "lazybrick/Qwen3.5-4B-Kiln-INT8-W8A8",
     "gptq_w4a16_g128": "lazybrick/Qwen3.5-4B-Kiln-GPTQ-W4A16-g128",
@@ -55,56 +61,6 @@ COMPONENTS = {
     "attention": "sensitivity_attention_w4a16_g128",
     "ffn": "sensitivity_ffn_w4a16_g128",
 }
-TEXT_PYTHON = ROOT / ".venv-gpu-text" / "bin" / "python"
-
-
-def fetch_published(repo: str) -> tuple[Path, str]:
-    """Download a published Kiln variant without its README; return the path and revision."""
-    from huggingface_hub import HfApi, snapshot_download
-
-    revision = HfApi().model_info(repo).sha
-    path = snapshot_download(
-        repo, revision=revision, ignore_patterns=["README.md", ".gitattributes"]
-    )
-    return Path(path), revision
-
-
-def fetch_traces(destination: Path) -> str:
-    """BF16's lm-eval answers from the published evaluation record; return its revision."""
-    from huggingface_hub import HfApi, snapshot_download
-
-    revision = HfApi().dataset_info(TRACES_REPO).sha
-    snapshot_download(
-        TRACES_REPO,
-        repo_type="dataset",
-        revision=revision,
-        allow_patterns=["bf16/text/samples/minerva_math500.jsonl", "bf16/text/samples/mmlu_pro_*"],
-        local_dir=destination,
-    )
-    return revision
-
-
-def score_command(
-    model: Path | str, name: str, traces: Path, output: Path, limit: int | None, tokenizer: Path
-) -> list[str]:
-    command = [
-        str(TEXT_PYTHON),
-        "scripts/drift_scores.py",
-        "score",
-        "--model",
-        str(model),
-        "--name",
-        name,
-        "--traces",
-        str(traces),
-        "--tokenizer",
-        str(tokenizer),
-        "--output",
-        str(output),
-    ]
-    if limit:
-        command.extend(("--limit", str(limit)))
-    return command
 
 
 def study(
