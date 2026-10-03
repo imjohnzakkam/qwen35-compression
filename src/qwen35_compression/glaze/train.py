@@ -15,6 +15,7 @@ from torch import nn
 from qwen35_compression.config import ExperimentConfig, GlazeConfig, VariantConfig
 from qwen35_compression.glaze.budget import check_memory, check_time, memory_estimate_gib
 from qwen35_compression.glaze.data import blocks_digest, epoch_order, groups
+from qwen35_compression.glaze.grid import GridDescent
 from qwen35_compression.glaze.losses import DistillStats, distill_step
 from qwen35_compression.glaze.quant_linear import GroupQuantLinear
 from qwen35_compression.glaze.student import load_trainable_state, trainable_state
@@ -86,7 +87,7 @@ class FitResult:
 
 
 class GlazeTrainer:
-    """Trains a student's log-scales (and norm masters) against a frozen teacher."""
+    """Moves a student's scales and norm weights along their BF16 grid to match a teacher."""
 
     def __init__(
         self,
@@ -102,25 +103,25 @@ class GlazeTrainer:
         self.glaze = glaze
         self.log = log
         self.device = head_weight.device
-        self.scale_params = [
-            module.log_scale for module in student.modules() if isinstance(module, GroupQuantLinear)
-        ]
-        scale_ids = {id(parameter) for parameter in self.scale_params}
-        self.norm_params = [
-            parameter
-            for parameter in student.parameters()
-            if parameter.requires_grad and id(parameter) not in scale_ids
-        ]
-        if not self.scale_params:
+        layers = [module for module in student.modules() if isinstance(module, GroupQuantLinear)]
+        if not layers:
             raise ValueError("the student has no quantized layers to train")
+        dtypes = {layer.storage_dtype for layer in layers}
+        if len(dtypes) != 1:
+            raise ValueError(f"quantized layers store scales in several dtypes: {dtypes}")
+        self.storage_dtype = dtypes.pop()
+        self.parameters = [p for p in student.parameters() if p.requires_grad]
 
-    def make_optimizer(self, scale_lr: float) -> torch.optim.Optimizer:
-        parameter_groups: list[dict[str, Any]] = [{"params": self.scale_params, "lr": scale_lr}]
-        if self.norm_params:
-            parameter_groups.append(
-                {"params": self.norm_params, "lr": self.glaze.norm_learning_rate}
-            )
-        return torch.optim.AdamW(parameter_groups, betas=(0.9, 0.95), eps=1e-8, weight_decay=0.0)
+    @property
+    def size(self) -> int:
+        """Number of trainable values (scales and norm weights)."""
+        return sum(parameter.numel() for parameter in self.parameters)
+
+    def flips(self, fraction: float) -> int:
+        return max(1, round(fraction * self.size))
+
+    def make_optimizer(self) -> GridDescent:
+        return GridDescent(self.parameters, self.storage_dtype, self.glaze.momentum)
 
     def _ids(self, blocks: Sequence[Sequence[int]], indices: Sequence[int]) -> torch.Tensor:
         return torch.tensor(
@@ -153,20 +154,21 @@ class GlazeTrainer:
 
     def _step(
         self,
-        optimizer: torch.optim.Optimizer,
+        optimizer: GridDescent,
         blocks: Sequence[Sequence[int]],
         indices: Sequence[int],
         schedule: Schedule,
-    ) -> DistillStats:
-        optimizer.zero_grad(set_to_none=True)
+        flips: int,
+    ) -> tuple[DistillStats, int]:
+        """Gradients from one step's blocks, then up to `flips` grid moves."""
+        optimizer.zero_grad()
         normalizer = float(len(indices) * schedule.block_tokens)
         stats = DistillStats()
         for micro in groups(indices, schedule.blocks_per_micro):
             stats.merge(self._micro_batch(self._ids(blocks, micro), normalizer, backward=True))
         if not math.isfinite(stats.kl):
             raise FloatingPointError(f"non-finite training KL: {stats.kl}")
-        optimizer.step()
-        return stats
+        return stats, optimizer.step(flips)
 
     def _check_memory(self) -> None:
         if self.device.type == "cuda":
@@ -177,18 +179,19 @@ class GlazeTrainer:
             )
 
     def pilot(
-        self, blocks: Sequence[Sequence[int]], schedule: Schedule, steps: int, scale_lr: float
+        self, blocks: Sequence[Sequence[int]], schedule: Schedule, steps: int, fraction: float
     ) -> list[float]:
         """A few steps on one fixed batch: the KL must stay finite and fall below its start."""
         if steps < 2:
             raise ValueError("a pilot needs at least 2 steps")
-        optimizer = self.make_optimizer(scale_lr)
+        optimizer = self.make_optimizer()
         indices = list(range(schedule.blocks_per_step))
         losses = []
         for step in range(steps):
-            losses.append(self._step(optimizer, blocks, indices, schedule).mean_kl)
+            stats, moved = self._step(optimizer, blocks, indices, schedule, self.flips(fraction))
+            losses.append(stats.mean_kl)
             self._check_memory()
-            self.log(f"pilot step {step + 1}/{steps}: KL {losses[-1]:.6f}")
+            self.log(f"pilot step {step + 1}/{steps}: KL {losses[-1]:.6f}, moved {moved}")
         if not min(losses[1:]) < losses[0]:
             raise PilotFailed(f"pilot KL did not fall on a fixed batch: {losses}")
         return losses
@@ -199,26 +202,26 @@ class GlazeTrainer:
         dev: Sequence[Sequence[int]],
         schedule: Schedule,
     ) -> tuple[float, dict[str, float]]:
-        """Pick the scale learning rate whose short run reaches the lowest dev KL."""
-        rates = self.glaze.scale_learning_rates
-        if len(rates) == 1 or self.glaze.probe_steps == 0:
-            return rates[0], {}
+        """Pick the flip fraction whose short run reaches the lowest dev KL."""
+        fractions = self.glaze.flip_fractions
+        if len(fractions) == 1 or self.glaze.probe_steps == 0:
+            return fractions[0], {}
         initial = trainable_state(self.student)
         order = epoch_order(len(train), 0, self.glaze.seed)
         steps = groups(order, schedule.blocks_per_step)[: self.glaze.probe_steps]
         results: dict[str, float] = {}
-        for rate in rates:
+        for fraction in fractions:
             load_trainable_state(self.student, initial)
-            optimizer = self.make_optimizer(rate)
+            optimizer = self.make_optimizer()
             for indices in steps:
-                self._step(optimizer, train, indices, schedule)
+                self._step(optimizer, train, indices, schedule, self.flips(fraction))
                 self._check_memory()
-            results[repr(rate)] = self.evaluate(dev, schedule).mean_kl
-            self.log(f"probe scale lr {rate:g}: dev KL {results[repr(rate)]:.6f}")
+            results[repr(fraction)] = self.evaluate(dev, schedule).mean_kl
+            self.log(f"probe flip fraction {fraction:g}: dev KL {results[repr(fraction)]:.6f}")
         load_trainable_state(self.student, initial)
-        finite = {rate: results[repr(rate)] for rate in rates if math.isfinite(results[repr(rate)])}
+        finite = {f: results[repr(f)] for f in fractions if math.isfinite(results[repr(f)])}
         if not finite:
-            raise PilotFailed("every probe learning rate diverged")
+            raise PilotFailed("every probe setting diverged")
         return min(finite, key=finite.__getitem__), results
 
     def fit(
@@ -226,14 +229,14 @@ class GlazeTrainer:
         train: Sequence[Sequence[int]],
         dev: Sequence[Sequence[int]],
         schedule: Schedule,
-        scale_lr: float,
+        fraction: float,
     ) -> FitResult:
-        """Train for the full schedule; keep the state with the lowest dev KL (the init counts)."""
-        optimizer = self.make_optimizer(scale_lr)
-        scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer,
-            lambda step: learning_rate_factor(step, self.glaze.warmup_steps, schedule.total_steps),
-        )
+        """Train for the full schedule; keep the state with the lowest dev KL (the init counts).
+
+        The number of grid moves per step follows a warmup and cosine decay, like a learning
+        rate.
+        """
+        optimizer = self.make_optimizer()
         initial = self.evaluate(dev, schedule)
         self.log(f"dev KL at init: {initial.mean_kl:.6f}")
         best_kl, best_step = initial.mean_kl, 0
@@ -245,9 +248,9 @@ class GlazeTrainer:
         for epoch in range(schedule.epochs):
             order = epoch_order(len(train), epoch, self.glaze.seed)
             for indices in groups(order, schedule.blocks_per_step):
-                rate = optimizer.param_groups[0]["lr"]
-                stats = self._step(optimizer, train, indices, schedule)
-                scheduler.step()
+                factor = learning_rate_factor(step, self.glaze.warmup_steps, schedule.total_steps)
+                flips = max(1, round(self.flips(fraction) * factor))
+                stats, moved = self._step(optimizer, train, indices, schedule, flips)
                 step += 1
                 self._check_memory()
                 # Pace from the second step on: the first one compiles the fla kernels.
@@ -260,7 +263,7 @@ class GlazeTrainer:
                         schedule.total_steps,
                         self.glaze.max_train_minutes,
                     )
-                entry: dict[str, Any] = {"step": step, "train_kl": stats.mean_kl, "scale_lr": rate}
+                entry: dict[str, Any] = {"step": step, "train_kl": stats.mean_kl, "moved": moved}
                 if step % self.glaze.eval_every_steps == 0 or step == schedule.total_steps:
                     dev_stats = self.evaluate(dev, schedule)
                     entry["dev"] = dev_stats.summary()
@@ -269,7 +272,8 @@ class GlazeTrainer:
                         best_state, best_dev = trainable_state(self.student), dev_stats.summary()
                 history.append(entry)
                 self.log(
-                    f"step {step}/{schedule.total_steps}: train KL {stats.mean_kl:.6f}"
+                    f"step {step}/{schedule.total_steps}: train KL {stats.mean_kl:.6f}, "
+                    f"moved {moved}"
                     + (f", dev KL {entry['dev']['mean_kl']:.6f}" if "dev" in entry else "")
                 )
         return FitResult(
@@ -280,6 +284,18 @@ class GlazeTrainer:
             history=history,
             seconds=time.perf_counter() - started,
         )
+
+
+def changed_values(
+    before: dict[str, torch.Tensor], after: dict[str, torch.Tensor]
+) -> dict[str, int]:
+    """How many scales and norm values the run moved, of how many."""
+    counts = {"scales": 0, "scales_total": 0, "norm_values": 0, "norm_values_total": 0}
+    for name, value in before.items():
+        kind = "scales" if name.endswith(".scales") else "norm_values"
+        counts[kind] += int((after[name] != value).sum())
+        counts[f"{kind}_total"] += value.numel()
+    return counts
 
 
 def plan(
@@ -293,8 +309,8 @@ def plan(
     schedule = make_schedule(glaze, config.calibration.max_sequence_length)
     trained_tokens = schedule.total_steps * glaze.tokens_per_step
     probe_tokens = (
-        len(glaze.scale_learning_rates) * glaze.probe_steps * glaze.tokens_per_step
-        if len(glaze.scale_learning_rates) > 1
+        len(glaze.flip_fractions) * glaze.probe_steps * glaze.tokens_per_step
+        if len(glaze.flip_fractions) > 1
         else 0
     )
     memory = memory_estimate_gib(
@@ -420,15 +436,19 @@ def refine(
         "schedule": {"steps": schedule.total_steps, "steps_per_epoch": schedule.steps_per_epoch},
     }
     if pilot_steps:
-        losses = trainer.pilot(train, schedule, pilot_steps, max(glaze.scale_learning_rates))
-        record["pilot"] = {"steps": pilot_steps, "train_kl": losses}
+        # The smallest setting: the pilot checks the machinery, not the step size.
+        fraction = min(glaze.flip_fractions)
+        losses = trainer.pilot(train, schedule, pilot_steps, fraction)
+        record["pilot"] = {"steps": pilot_steps, "flip_fraction": fraction, "train_kl": losses}
     else:
-        rate, probe = trainer.probe(train, dev, schedule)
-        result = trainer.fit(train, dev, schedule, rate)
+        initial = trainable_state(student)
+        fraction, probe = trainer.probe(train, dev, schedule)
+        result = trainer.fit(train, dev, schedule, fraction)
         load_trainable_state(student, result.best_state)
         record.update(
             {
-                "scale_learning_rate": rate,
+                "flip_fraction": fraction,
+                "changed": changed_values(initial, result.best_state),
                 "probe_dev_kl": probe,
                 "best_step": result.best_step,
                 "dev_at_init": result.initial_dev,

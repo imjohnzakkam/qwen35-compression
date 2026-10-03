@@ -52,7 +52,7 @@ def main() -> None:
     record = manifest["glaze"]
     summary = {
         key: record[key]
-        for key in ("scale_learning_rate", "best_step", "dev_at_init", "dev_best", "pilot")
+        for key in ("flip_fraction", "changed", "best_step", "dev_at_init", "dev_best", "pilot")
         if key in record
     }
     print(f"output={output_dir}")

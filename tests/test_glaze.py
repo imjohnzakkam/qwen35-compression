@@ -30,6 +30,7 @@ from qwen35_compression.glaze.budget import (
 )
 from qwen35_compression.glaze.data import blocks_digest, epoch_order, groups, split_blocks
 from qwen35_compression.glaze.export import write_refined_export
+from qwen35_compression.glaze.grid import GridDescent, grid_neighbor
 from qwen35_compression.glaze.losses import DistillStats, distill_step
 from qwen35_compression.glaze.quant_linear import (
     GroupQuantLinear,
@@ -97,7 +98,8 @@ def test_quantized_layer_starts_exactly_at_the_export() -> None:
     inputs = torch.randn(3, 5, 64, dtype=torch.bfloat16)
     expected = F.linear(inputs, dequantize_groups(codes, scales, 32))
     assert torch.equal(layer(inputs), expected)
-    assert [name for name, _ in layer.named_parameters()] == ["log_scale"]
+    assert [name for name, _ in layer.named_parameters()] == ["scales"]
+    assert layer.scales.dtype is torch.float32 and torch.equal(layer.initial_scales, scales)
 
 
 def test_scale_gradients_match_finite_differences() -> None:
@@ -106,22 +108,68 @@ def test_scale_gradients_match_finite_differences() -> None:
     layer = GroupQuantLinear(codes, scales, 8)
     inputs = torch.randn(3, 16, dtype=torch.float64)
 
-    def output(log_scale: torch.Tensor) -> torch.Tensor:
-        return torch.func.functional_call(layer, {"log_scale": log_scale}, (inputs,))
+    def output(values: torch.Tensor) -> torch.Tensor:
+        return torch.func.functional_call(layer, {"scales": values}, (inputs,))
 
-    start = (0.1 * torch.randn(4, 2, dtype=torch.float64)).requires_grad_(True)
+    start = scales.clone().requires_grad_(True)
     assert torch.autograd.gradcheck(output, (start,))
 
 
-def test_bf16_rounding_is_straight_through() -> None:
-    codes, scales = _codes(8, 64), _scales(8, 2)
-    layer = GroupQuantLinear(codes, scales, 32)
-    with torch.no_grad():
-        # Far below BF16's resolution: the stored scale cannot change yet.
-        layer.log_scale.fill_(1e-5)
-    assert torch.equal(layer.stored_scales(), scales)
-    layer(torch.randn(2, 64, dtype=torch.bfloat16)).float().pow(2).sum().backward()
-    assert layer.log_scale.grad is not None and layer.log_scale.grad.abs().sum() > 0
+def test_grid_neighbor_moves_one_bf16_point() -> None:
+    values = torch.tensor([1.0, -1.0, 0.0123, -0.0123, 3.0e-3]).to(torch.bfloat16).float()
+    for sign in (1.0, -1.0):
+        limit = torch.full_like(values, sign * float("inf")).to(torch.bfloat16)
+        expected = torch.nextafter(values.to(torch.bfloat16), limit).float()
+        moved = grid_neighbor(values, torch.full_like(values, sign), torch.bfloat16)
+        assert torch.equal(moved, expected)
+        # Results lie on the grid and keep their sign.
+        assert torch.equal(moved.to(torch.bfloat16).float(), moved)
+        assert torch.equal(torch.sign(moved), torch.sign(values))
+    up = grid_neighbor(values, torch.ones_like(values), torch.bfloat16)
+    assert up[0].item() == 1.0078125 and up[1].item() == -0.99609375
+
+
+def test_grid_neighbor_refuses_zero_sign_changes_and_overflow() -> None:
+    smallest = torch.tensor([9.183549615799121e-41])  # the smallest positive BF16 subnormal
+    assert torch.isnan(grid_neighbor(smallest, torch.tensor([-1.0]), torch.bfloat16)).all()
+    largest = torch.tensor([3.3895313892515355e38])
+    assert torch.isnan(grid_neighbor(largest, torch.tensor([1.0]), torch.bfloat16)).all()
+    zero, one = torch.tensor([0.0]), torch.tensor([1.0])
+    assert torch.isnan(grid_neighbor(zero, one, torch.bfloat16)).all()
+    assert torch.isnan(grid_neighbor(one, zero, torch.bfloat16)).all()
+    double = torch.tensor([1.0], dtype=torch.float64)
+    assert grid_neighbor(double, torch.tensor([1.0]), torch.float64).item() == 1 + 2**-52
+
+
+def _on_grid(*values: float) -> torch.Tensor:
+    return torch.tensor(values).to(torch.bfloat16).float()
+
+
+def test_grid_descent_moves_only_the_most_promising_values() -> None:
+    first = _on_grid(1.0, 1.0, 1.0).requires_grad_(True)
+    second = _on_grid(-0.5, 2.0).requires_grad_(True)
+    optimizer = GridDescent([first, second], torch.bfloat16, momentum=0.0)
+    first.grad = torch.tensor([0.1, -3.0, 0.0])
+    second.grad = torch.tensor([2.0, 0.5])
+    # Predicted decrease = |gradient| x one grid step: first[1] (3 x 2^-7) and second[0]
+    # (2 x 2^-8) beat second[1] (0.5 x 2^-7) and first[0] (0.1 x 2^-8).
+    assert optimizer.step(2) == 2
+    assert first.tolist() == [1.0, 1.0078125, 1.0]  # negative gradient: up
+    assert second.tolist() == [-0.50390625, 2.0]  # positive gradient: down, away from zero
+    assert optimizer.averages[0][1] == 0 and optimizer.averages[1][0] == 0
+    assert optimizer.averages[1][1] == 0.5  # not moved: its evidence is kept
+    # With no gradient there is no predicted gain, and nothing moves.
+    rested = GridDescent([_on_grid(1.0, 2.0).requires_grad_(True)], torch.bfloat16)
+    assert rested.step(10) == 0
+
+
+def test_grid_descent_needs_values_on_the_grid() -> None:
+    with pytest.raises(ValueError, match="grid"):
+        GridDescent([torch.tensor([1.001], requires_grad=True)], torch.bfloat16)
+    with pytest.raises(ValueError, match="momentum"):
+        GridDescent([_on_grid(1.0)], torch.bfloat16, momentum=1.0)
+    with pytest.raises(ValueError, match="nothing"):
+        GridDescent([], torch.bfloat16)
 
 
 def test_quantized_layer_rejects_bad_tensors() -> None:
@@ -145,8 +193,11 @@ def test_negative_scales_keep_their_sign() -> None:
     layer = GroupQuantLinear(codes, scales, 32)
     assert torch.equal(layer.stored_scales(), scales)
     with torch.no_grad():
-        layer.log_scale.fill_(0.1)
-    assert bool((layer.stored_scales()[0, 1] < 0).item())
+        layer.scales.copy_(layer.scales.to(torch.bfloat16).float())
+    optimizer = GridDescent([layer.scales], torch.bfloat16, momentum=0.0)
+    for sign in (1.0, -1.0):
+        layer.scales.grad = torch.full_like(layer.scales, sign)
+        assert optimizer.step(layer.scales.numel()) == layer.scales.numel()
     assert torch.equal(torch.sign(layer.stored_scales()), torch.sign(scales))
 
 
@@ -251,9 +302,9 @@ def test_student_trains_only_scales_and_norms(tiny) -> None:
     teacher, init_dir, names = tiny
     student = build_student(teacher, read_init_export(init_dir))
     trainable = [name for name, p in student.named_parameters() if p.requires_grad]
-    scales = [name for name in trainable if name.endswith("log_scale")]
+    scales = [name for name in trainable if name.endswith(".scales")]
     norms = [name for name in trainable if name.endswith("parametrizations.weight.original")]
-    assert sorted(scales) == sorted(f"{name}.log_scale" for name in names)
+    assert sorted(scales) == sorted(f"{name}.scales" for name in names)
     assert len(norms) == 4 * 2 + 3 + 2 + 1  # layer norms, DeltaNet norms, q/k norms, final norm
     assert sorted(trainable) == sorted(scales + norms)
     assert all(p.dtype is torch.float32 for n, p in student.named_parameters() if n in norms)
@@ -261,7 +312,7 @@ def test_student_trains_only_scales_and_norms(tiny) -> None:
     assert student.get_input_embeddings().weight is teacher.get_input_embeddings().weight
     without_norms = build_student(teacher, read_init_export(init_dir), train_norms=False)
     assert all(
-        n.endswith("log_scale") for n, p in without_norms.named_parameters() if p.requires_grad
+        n.endswith(".scales") for n, p in without_norms.named_parameters() if p.requires_grad
     )
 
 
@@ -401,9 +452,8 @@ def _glaze(**overrides) -> GlazeConfig:
         "epochs": 4,
         "tokens_per_step": 4 * BLOCK,
         "micro_batch_tokens": 2 * BLOCK,
-        "scale_learning_rates": (0.03,),
+        "flip_fractions": (0.05,),
         "probe_steps": 0,
-        "norm_learning_rate": 0.01,
         "warmup_steps": 1,
         "logit_chunk_tokens": 7,
         "eval_every_steps": 2,
@@ -429,16 +479,20 @@ def test_training_moves_the_student_toward_the_teacher(tiny) -> None:
     frozen = {
         name: tensor.clone()
         for name, tensor in student.state_dict().items()
-        if "log_scale" not in name and "original" not in name
+        if not name.endswith(".scales") and "original" not in name
     }
     train, _ = split_blocks(random_blocks(10, seed=7), glaze)
     schedule = make_schedule(glaze, BLOCK)
     # Scored on training blocks: random tokens share no structure a held-out set could test.
-    result = trainer.fit(train, train[:2], schedule, 0.03)
+    result = trainer.fit(train, train[:2], schedule, 0.05)
     assert result.best_step > 0
     assert result.best_dev["mean_kl"] < 0.9 * result.initial_dev["mean_kl"]
     assert len(result.history) == schedule.total_steps == 8
     assert [entry["step"] for entry in result.history if "dev" in entry] == [2, 4, 6, 8]
+    assert all(entry["moved"] >= 1 for entry in result.history)
+    # Every trained value is still a BF16 number the export can store exactly.
+    for parameter in trainer.parameters:
+        assert torch.equal(parameter.to(torch.bfloat16).float(), parameter)
     # Codes, base scales, embedding, conv and decay parameters never move.
     after = student.state_dict()
     for name, tensor in frozen.items():
@@ -453,24 +507,24 @@ def test_training_is_deterministic(tiny) -> None:
     states = []
     for _ in range(2):
         trainer, student = _trainer(tiny, glaze)
-        trainer.fit(train, dev, make_schedule(glaze, BLOCK), 0.03)
+        trainer.fit(train, dev, make_schedule(glaze, BLOCK), 0.05)
         states.append(trainable_state(student))
     assert states[0].keys() == states[1].keys()
     assert all(torch.equal(states[0][key], states[1][key]) for key in states[0])
 
 
 def test_probe_picks_the_better_rate_and_restores_the_init(tiny) -> None:
-    glaze = _glaze(scale_learning_rates=(1e-9, 0.03), probe_steps=2)
+    glaze = _glaze(flip_fractions=(1e-9, 0.05), probe_steps=2)
     trainer, student = _trainer(tiny, glaze)
     initial = trainable_state(student)
     train, _ = split_blocks(random_blocks(10, seed=9), glaze)
     dev = train[:2]  # fit data, so the useful rate is the one that lowers it
     rate, results = trainer.probe(train, dev, make_schedule(glaze, BLOCK))
-    assert rate == 0.03 and set(results) == {repr(1e-9), repr(0.03)}
+    assert rate == 0.05 and set(results) == {repr(1e-9), repr(0.05)}
     after = trainable_state(student)
     assert all(torch.equal(initial[key], after[key]) for key in initial)
     single = GlazeTrainer(student, tiny[0], tiny[0].get_input_embeddings().weight, _glaze())
-    assert single.probe(train, dev, make_schedule(glaze, BLOCK)) == (0.03, {})
+    assert single.probe(train, dev, make_schedule(glaze, BLOCK)) == (0.05, {})
 
 
 def test_pilot_passes_when_kl_falls_and_fails_when_it_does_not(tiny) -> None:
@@ -478,13 +532,22 @@ def test_pilot_passes_when_kl_falls_and_fails_when_it_does_not(tiny) -> None:
     trainer, _ = _trainer(tiny, glaze)
     train, _ = split_blocks(random_blocks(10, seed=10), glaze)
     schedule = make_schedule(glaze, BLOCK)
-    losses = trainer.pilot(train, schedule, 4, 0.03)
+    losses = trainer.pilot(train, schedule, 4, 0.05)
     assert len(losses) == 4 and min(losses[1:]) < losses[0]
-    stuck, _ = _trainer(tiny, _glaze(norm_learning_rate=1e-12))
+
+    class NoMoves:
+        def zero_grad(self) -> None:
+            pass
+
+        def step(self, flips: int) -> int:
+            return 0
+
+    stuck, _ = _trainer(tiny, glaze)
+    stuck.make_optimizer = NoMoves
     with pytest.raises(PilotFailed):
-        stuck.pilot(train, schedule, 3, 1e-12)
+        stuck.pilot(train, schedule, 3, 0.05)
     with pytest.raises(ValueError):
-        stuck.pilot(train, schedule, 1, 0.03)
+        stuck.pilot(train, schedule, 1, 0.05)
 
 
 def test_saved_state_round_trips(tiny) -> None:
@@ -562,3 +625,19 @@ def test_rtn_fixture_is_a_real_quantization() -> None:
     error = (dequantize_groups(codes, scales, GROUP).float() - weight.float()).abs()
     assert 0 < error.max() <= scales.float().max() / 2 + 1e-3
     assert len(quantized_names(tiny_teacher())) == 3 * 8 + 7
+
+
+@pytest.mark.parametrize("flips", [1, 7, 50])
+def test_grid_descent_bounds_each_step(flips: int) -> None:
+    # The pilot that failed moved every scale together; a step here moves at most `flips`
+    # values, each exactly one grid step against its gradient average.
+    generator = torch.Generator().manual_seed(flips)
+    values = (torch.randn(4, 25, generator=generator) * 0.02).to(torch.bfloat16).float()
+    parameter = values.clone().requires_grad_(True)
+    optimizer = GridDescent([parameter], torch.bfloat16, momentum=0.0)
+    parameter.grad = torch.randn(4, 25, generator=generator)
+    expected = grid_neighbor(values, -torch.sign(parameter.grad), torch.bfloat16)
+    moved = optimizer.step(flips)
+    changed = parameter.detach() != values
+    assert moved == int(changed.sum()) <= flips
+    assert torch.equal(parameter.detach()[changed], expected[changed])

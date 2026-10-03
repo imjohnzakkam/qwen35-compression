@@ -252,7 +252,14 @@ def study(args: argparse.Namespace, config: ExperimentConfig, variant: VariantCo
     exported = verify_export(export_dir, variant)
     manifest["glaze"] = {
         key: exported["glaze"].get(key)
-        for key in ("scale_learning_rate", "probe_dev_kl", "best_step", "dev_at_init", "dev_best")
+        for key in (
+            "flip_fraction",
+            "probe_dev_kl",
+            "changed",
+            "best_step",
+            "dev_at_init",
+            "dev_best",
+        )
     }
 
     drift = {}
