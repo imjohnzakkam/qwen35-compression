@@ -59,8 +59,11 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
 
         return [
             # Tunes each block's weight rounding and clipping by signed gradient descent against
-            # the BF16 block's outputs (AutoRound's default 200 steps per block). torch.compile is
-            # off: it only speeds up tuning and is untested on Qwen3.5's linear-attention layers.
+            # the BF16 block's outputs, with AutoRound's defaults (200 steps per block, batch 8).
+            # torch.compile is off: it only speeds up tuning and is untested on Qwen3.5's
+            # linear-attention layers. It caches every packed calibration sample's block inputs
+            # and BF16 outputs on the GPU, which needs more than a 24 GB card with this model
+            # (DeltaNet runs in transformers' PyTorch fallback): run it on a 40 GB GPU.
             AutoRoundModifier(
                 config_groups={
                     "group_0": _scheme(
@@ -70,10 +73,6 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
                 ignore=list(variant.ignore),
                 iters=200,
                 enable_torch_compile=False,
-                # AutoRound's default of 8 packed 2,048-token samples per step ran a 24 GB A30 out
-                # of memory: without flash-linear-attention, transformers runs the DeltaNet layers
-                # in a memory-hungry PyTorch fallback (run r_5f1ba0f6, 21 GB allocated).
-                batch_size=2,
             )
         ]
 
