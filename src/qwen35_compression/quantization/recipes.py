@@ -70,6 +70,10 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
                 ignore=list(variant.ignore),
                 iters=200,
                 enable_torch_compile=False,
+                # AutoRound's default of 8 packed 2,048-token samples per step ran a 24 GB A30 out
+                # of memory: without flash-linear-attention, transformers runs the DeltaNet layers
+                # in a memory-hungry PyTorch fallback (run r_5f1ba0f6, 21 GB allocated).
+                batch_size=2,
             )
         ]
 
