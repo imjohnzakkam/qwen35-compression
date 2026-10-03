@@ -39,7 +39,10 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
 
     revision = resolve_revision(config)
     model, processor = load_resolved_model(f"{config.model.id}@{revision}", config)
-    dataset, collator = build_calibration_dataset(processor, calibration)
+    # AutoRound stacks every sample's cached inputs into one tensor, so it needs one length:
+    # the same conversations, packed into max_sequence_length blocks.
+    pack = variant.method == "autoround"
+    dataset, collator = build_calibration_dataset(processor, calibration, pack=pack)
     recipe = build_recipe(variant)
     output_dir = config.paths.outputs / variant.name
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -54,7 +57,7 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
         recipe=recipe,
         dataset=dataset,
         max_seq_length=calibration.max_sequence_length,
-        num_calibration_samples=calibration.num_samples,
+        num_calibration_samples=len(dataset) if pack else calibration.num_samples,
         data_collator=collator,
     )
     model.save_pretrained(output_dir, safe_serialization=True, save_compressed=True)
