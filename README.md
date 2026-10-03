@@ -161,6 +161,48 @@ uv run python scripts/run_drift_study.py --pilot-limit 20
 uv run python scripts/drift_scores.py report results/feature1/drift/*.json
 ```
 
+Results (2,304,479 answer tokens from 1,501 BF16 answers). Flip rate is the share of answer tokens
+where the model's top choice is not BF16's token. Loss is the model's mean negative log-likelihood
+of BF16's tokens. The positions use the 187 long answers (2,048 tokens or more, finished), so every
+position is compared within the same answers.
+
+| Model | Flip rate | Loss | 0–256 | 256–512 | 512–1k | 1k–2k | 2k–4k | 4k–8k |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 (noise floor) | 0.35% | 0.128 | 0.47 | 0.34 | 0.40 | 0.36 | 0.35 | 0.32 |
+| INT8 W8A8 | 2.42% | 0.139 | 3.07 | 2.77 | 2.59 | 2.55 | 2.45 | 2.30 |
+| AWQ W4A16 g128 | 5.42% | 0.178 | 6.55 | 6.14 | 5.84 | 5.65 | 5.59 | 5.43 |
+| GPTQ W4A16 g128 | 5.70% | 0.182 | 6.68 | 6.32 | 6.07 | 6.12 | 6.14 | 5.95 |
+| GPTQ, DeltaNet layers only | 3.03% | 0.143 | 3.52 | 3.36 | 3.31 | 3.35 | 3.27 | 3.17 |
+| GPTQ, attention layers only | 2.47% | 0.138 | 2.52 | 2.55 | 2.53 | 2.77 | 2.92 | 2.93 |
+| GPTQ, FFN layers only | 4.20% | 0.158 | 5.28 | 4.79 | 4.56 | 4.46 | 4.39 | 4.16 |
+
+- **The error does not compound along the answer.** With BF16's tokens as input, disagreement is flat
+  or falling over 8,000 tokens for every whole-model variant; the DeltaNet state does not accumulate
+  quantization error. 4-bit damage is a local, per-token divergence (about 1 token in 18 for
+  GPTQ). In free generation each disagreement can change the path, which is where the extra looping
+  comes from. Attention-only is the one variant whose disagreement rises along the answer (2.5% to
+  2.9%), consistent with softmax attention over a growing context of quantized keys and values.
+- **The measure is far more sensitive than the benchmarks.** INT8 changes 2.4% of top choices (7×
+  the noise floor) with no measurable benchmark change, and it separates GPTQ from AWQ, which the
+  panel cannot.
+- **No component dominates.** Excess loss over BF16 adds up across components (27% + 18% + 56% =
+  101% of whole-model GPTQ). Flip shares do not add up (162%) and overstate small components, so
+  attribution uses loss:
+
+  | Component | Share of 4-bit weights | Share of GPTQ's excess loss | Per parameter |
+  | --- | ---: | ---: | ---: |
+  | Attention (8 layers) | 9.0% | 18% | 2.0× |
+  | DeltaNet (24 layers) | 27.5% | 27% | 1.0× |
+  | FFN (32 layers) | 63.5% | 56% | 0.9× |
+
+  Only the full-attention layers are disproportionately sensitive. Keeping them in 8-bit would add
+  about 0.17 GB and remove at most about 18% of the loss. Larger gains need a better 4-bit
+  algorithm everywhere, judged by output divergence rather than layer reconstruction.
+- **flash-linear-attention 0.5.2** is used by transformers once installed (with `--no-deps`). For one
+  DeltaNet layer, forward and backward on 8 × 2,048 tokens, it lowers peak memory from 17.1 to
+  11.3 GiB, and its output matches the PyTorch fallback to 0.3%. Its first call took 93 s against
+  8.9 s, which likely includes Triton compilation; steady-state speed was not measured.
+
 ### Earlier BF16 record: 2,048-token cap (superseded)
 
 All scores use `enable_thinking=False`. Do not compare them with thinking-mode numbers, including the
