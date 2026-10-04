@@ -96,9 +96,7 @@ def run_preflight(config_path: Path, profile: str = "local") -> dict[str, Any]:
     if config.multimodal_calibration is None:
         raise ValueError("Feature 1 requires multimodal calibration")
     image_lock = require_multimodal_lock(config.multimodal_calibration)
-    checks.append(
-        Check("calibration:multimodal", "passed", image_lock["content_sha256"])
-    )
+    checks.append(Check("calibration:multimodal", "passed", image_lock["content_sha256"]))
 
     if profile == "gpu-vision":
         # Only the text environment carries lm-eval; the vision profile checks its own suite.
@@ -176,12 +174,8 @@ def run_preflight(config_path: Path, profile: str = "local") -> dict[str, Any]:
 
             missing_vision = sorted(set(suite.vision_tasks) - set(SUPPORTED_DATASETS))
             if missing_vision:
-                raise ValueError(
-                    f"VLMEvalKit datasets are not registered: {missing_vision}"
-                )
-            checks.append(
-                Check("benchmarks:vision", "passed", ",".join(suite.vision_tasks))
-            )
+                raise ValueError(f"VLMEvalKit datasets are not registered: {missing_vision}")
+            checks.append(Check("benchmarks:vision", "passed", ",".join(suite.vision_tasks)))
         checks.append(Check("cuda", "passed", torch.cuda.get_device_name(0)))
     else:
         checks.append(

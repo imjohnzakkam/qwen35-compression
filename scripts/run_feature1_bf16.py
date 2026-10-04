@@ -100,9 +100,7 @@ def main() -> None:
         str(suite.max_model_len),
     ]
     if not args.text_only:
-        smoke_command.extend(
-            ("--image", "data/calibration/feature1_multimodal/images/0000.jpg")
-        )
+        smoke_command.extend(("--image", "data/calibration/feature1_multimodal/images/0000.jpg"))
     if args.dry_run:
         bootstrap = [sys.executable, "scripts/bootstrap_gpu.py"]
         if args.text_only:

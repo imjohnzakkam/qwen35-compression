@@ -94,12 +94,41 @@ def _glaze(items: dict) -> dict:
         (lambda v: _glaze(v).update(warmup_steps=64), "warmup"),
         (lambda v: _glaze(v).update(max_memory_fraction=1.5), "memory fraction"),
         (lambda v: _glaze(v).update(train_blocks=64), "init's calibration samples"),
+        (lambda v: _glaze(v).update(train_start=-8), "must not be negative"),
+        (lambda v: _glaze(v).update(dev_start=100), "overlap"),
+        (lambda v: _glaze(v).update(train_start=64), "start after the init's"),
+        (
+            lambda v: _glaze(v).update(train_start=160, train_blocks=120, dev_start=96),
+            "never calibrated on",
+        ),
+        (lambda v: v["autoround_w4a16_g128"].pop("calibration_samples"), "calibration_samples"),
         (lambda v: v["gptq_w4a16_g128"].update(init=GLAZE), "only glaze variants"),
     ],
 )
 def test_glaze_settings_are_validated(tmp_path: Path, change, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         load_config(_config_with(tmp_path, change))
+
+
+def test_glaze_v1b_differs_from_v1_only_in_its_training_blocks() -> None:
+    from dataclasses import asdict
+
+    config = load_config("configs/feature1.yaml")
+    v1, v1b = config.variant(GLAZE), config.variant("glaze_v1b_w4a16_g128")
+    assert (v1b.method, v1b.init, v1b.group_size, v1b.ignore) == (
+        v1.method,
+        v1.init,
+        v1.group_size,
+        v1.ignore,
+    )
+    assert v1b.glaze is not None and v1.glaze is not None
+    # Fresh blocks that calibrated nothing, and the same held-out blocks as B1.
+    assert (v1b.glaze.train_start, v1b.glaze.train_blocks) == (160, 120)
+    assert (v1b.glaze.dev_start, v1b.glaze.dev_blocks) == (128, 32)
+    assert (v1.glaze.train_start, v1.glaze.dev_start) == (0, None)
+    placement = {"train_start", "train_blocks", "dev_start"}
+    first, second = asdict(v1.glaze), asdict(v1b.glaze)
+    assert {key for key in first if first[key] != second[key]} == placement
 
 
 def test_glaze_defaults_describe_stage_b1() -> None:
@@ -496,14 +525,17 @@ def _tiny_study(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     import qwen35_compression.models as models
 
     def tiny_settings(variants: dict) -> None:
-        variants[GLAZE]["glaze"].update(
-            tokens_per_step=4 * glaze_tiny.BLOCK,
-            micro_batch_tokens=2 * glaze_tiny.BLOCK,
-            epochs=1,
-            probe_steps=2,
-            eval_every_steps=16,
-            logit_chunk_tokens=64,
-        )
+        # Every glaze variant must still validate at the tiny block length.
+        for item in variants.values():
+            if item.get("method") == "glaze":
+                item["glaze"].update(
+                    tokens_per_step=4 * glaze_tiny.BLOCK,
+                    micro_batch_tokens=2 * glaze_tiny.BLOCK,
+                    epochs=1,
+                    probe_steps=2,
+                    eval_every_steps=16,
+                    logit_chunk_tokens=64,
+                )
 
     path = _config_with(tmp_path, tiny_settings)
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -543,6 +575,7 @@ def test_refine_trains_and_writes_a_verified_export(
     record = manifest["glaze"]
     assert record["init"]["variant"] == "autoround_w4a16_g128"
     assert record["data"]["train_blocks"] == 128 and record["data"]["dev_blocks"] == 32
+    assert record["data"]["train_start"] == 0 and record["data"]["dev_start"] == 128
     assert record["flip_fraction"] in variant.glaze.flip_fractions
     assert set(record["probe_dev_kl"]) == {repr(f) for f in variant.glaze.flip_fractions}
     changed = record["changed"]

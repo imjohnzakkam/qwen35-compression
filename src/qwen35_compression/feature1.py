@@ -169,17 +169,12 @@ def prepare_calibration_dataset(config: CalibrationConfig) -> Mapping[str, Any]:
         revision=resolved_revision,
     )
     if len(dataset) < config.num_samples:
-        raise ValueError(
-            f"dataset has {len(dataset)} rows; {config.num_samples} were requested"
-        )
+        raise ValueError(f"dataset has {len(dataset)} rows; {config.num_samples} were requested")
 
     indices = random.Random(config.seed).sample(range(len(dataset)), config.num_samples)
-    records = [
-        _normalise_messages(dataset[index][source.messages_column]) for index in indices
-    ]
+    records = [_normalise_messages(dataset[index][source.messages_column]) for index in indices]
     encoded = "".join(
-        json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
-        for record in records
+        json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records
     ).encode("utf-8")
     contract = {
         "dataset_id": source.dataset_id,
@@ -203,16 +198,13 @@ def prepare_calibration_dataset(config: CalibrationConfig) -> Mapping[str, Any]:
     config.path.parent.mkdir(parents=True, exist_ok=True)
     config.lock_path.parent.mkdir(parents=True, exist_ok=True)
     config.path.write_bytes(encoded)
-    config.lock_path.write_text(
-        json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    config.lock_path.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return lock
 
 
 def _normalise_messages(messages: Iterable[Mapping[str, Any]]) -> Mapping[str, Any]:
     normalised = [
-        {"role": str(message["role"]), "content": str(message["content"])}
-        for message in messages
+        {"role": str(message["role"]), "content": str(message["content"])} for message in messages
     ]
     if not normalised:
         raise ValueError("calibration conversations must not be empty")
