@@ -48,7 +48,8 @@ def test_glaze_v1_is_configured_on_autorounds_own_data() -> None:
     # Same 128 blocks AutoRound calibrated on, and 32 it never saw.
     assert glaze.train_blocks == init.calibration_samples == 128
     assert glaze.dev_blocks == 32
-    assert glaze.flip_fractions == (0.0001, 0.0004, 0.0016) and glaze.momentum == 0.9
+    # B1's diagnosis: 2,805 moves per step overshoot, 281 (1e-5) lower the KL.
+    assert glaze.flip_fractions == (1e-5, 2e-5, 4e-5) and glaze.momentum == 0.9
     assert glaze.max_relative_change == 0.01
     assert config.variant("gptq_w4a16_g128").glaze is None
 
@@ -223,6 +224,97 @@ def test_gate_passes_stops_or_asks() -> None:
     assert study.evaluate_gate(flat, init_nll, math_ok)["decision"] == "stop"
     worse = {"difference": 0.002, "low": 0.001, "high": 0.003}
     assert study.evaluate_gate(worse, init_nll, math_ok)["decision"] == "stop"
+
+
+def test_scoring_needs_a_dev_kl_reduction() -> None:
+    record = {"dev_at_init": {"mean_kl": 0.0100}, "dev_best": {"mean_kl": 0.0097}}
+    assert study.dev_kl_reduction(record) == pytest.approx(0.03)
+    assert study.dev_kl_reduction(record) >= study.SCORE_MIN_DEV_REDUCTION
+    record["dev_best"] = {"mean_kl": 0.0099}
+    assert study.dev_kl_reduction(record) < study.SCORE_MIN_DEV_REDUCTION
+    # No step beat the init: the export is the init's, and nothing is gained.
+    record["dev_best"] = record["dev_at_init"]
+    assert study.dev_kl_reduction(record) == 0
+
+
+class _Scored(Exception):
+    """Raised by the fake runner when the study reaches drift scoring."""
+
+
+def _run_study(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dev_best: float):
+    """study() with every download and subprocess faked; training lowers dev KL to dev_best."""
+    import argparse
+
+    import qwen35_compression.models as models
+
+    path = _config_with(tmp_path, lambda variants: None)
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw["paths"] = {"outputs": str(tmp_path / "outputs"), "results": str(tmp_path / "results")}
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    config = load_config(path)
+    variant = config.variant(GLAZE)
+    ran: list[str] = []
+
+    def run_logged(command, log, root):
+        ran.append(" ".join(command))
+        if "drift_scores.py" in " ".join(command) and "pilot" not in " ".join(command):
+            raise _Scored(command)
+        return 0.0
+
+    record = {
+        "dev_at_init": {"mean_kl": 0.0100},
+        "dev_best": {"mean_kl": dev_best},
+        "flip_fraction": 1e-5,
+    }
+    monkeypatch.setattr(models, "download_model", lambda config: (tmp_path / "bf16", "rev"))
+    monkeypatch.setattr(study, "fetch_published", lambda repo: (tmp_path / "init", "initrev"))
+    monkeypatch.setattr(study, "install_init", lambda *args: {})
+    monkeypatch.setattr(study, "fetch_traces", lambda traces: "tracesrev")
+    monkeypatch.setattr(study, "run_logged", run_logged)
+    monkeypatch.setattr(study, "drift_summary", lambda p: {"flip_rate": 0.05, "mean_nll": 0.17})
+    monkeypatch.setattr(study, "verify_export", lambda directory, v: {"glaze": record})
+    args = argparse.Namespace(
+        skip_bootstrap=True,
+        pilot_steps=5,
+        pilot_limit=10,
+        code_revision="abc",
+        output=tmp_path / "out",
+        diagnose=False,
+    )
+    return config, variant, args, ran
+
+
+def test_study_stops_before_scoring_when_dev_kl_barely_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, variant, args, ran = _run_study(tmp_path, monkeypatch, dev_best=0.0099)
+    manifest = study.study(args, config, variant)
+    assert manifest["status"] == "stopped" and "1.00%" in manifest["stopped"]
+    assert manifest["glaze"]["dev_kl_reduction"] == pytest.approx(0.01)
+    assert set(manifest["steps"]) == {
+        "download_bf16",
+        "download_init",
+        "install_init",
+        "fla",
+        "traces",
+        "pilot_train",
+        "pilot_score",
+        "train",
+    }
+    assert not any("math500" in command or "init.json" in command for command in ran)
+    stored = json.loads((tmp_path / "out" / "run_manifest.json").read_text(encoding="utf-8"))
+    assert stored["status"] == "stopped"
+
+
+def test_study_scores_when_dev_kl_falls_enough(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, variant, args, ran = _run_study(tmp_path, monkeypatch, dev_best=0.0097)
+    with pytest.raises(_Scored):
+        study.study(args, config, variant)
+    stored = json.loads((tmp_path / "out" / "run_manifest.json").read_text(encoding="utf-8"))
+    assert stored["status"] == "failed" and stored["steps"]["drift:init"]["status"] == "failed"
+    assert stored["glaze"]["dev_kl_reduction"] == pytest.approx(0.03)
 
 
 def test_published_init_is_installed_exactly_as_its_manifest_lists(tmp_path: Path) -> None:
@@ -500,7 +592,12 @@ def test_prepare_and_diagnose_run_on_a_tiny_export(
     after = trainable_state(setup.student)
     assert all(torch.equal(before[key], after[key]) for key in before)
     assert report["batch"]["blocks"] == setup.schedule.blocks_per_step
-    assert set(report["pilots"]) == {"guarded_0.0001", "guarded_1e-05", "scales_only_0.0001"}
+    smallest = min(variant.glaze.flip_fractions)
+    assert set(report["pilots"]) == {
+        f"guarded_{smallest:g}",
+        f"guarded_{smallest / 10:g}",
+        f"scales_only_{smallest:g}",
+    }
     assert all(len(pilot["train_kl"]) == 5 for pilot in report["pilots"].values())
     # Nothing was written: a diagnosis leaves no export behind.
     assert not (config.paths.outputs / GLAZE).exists()

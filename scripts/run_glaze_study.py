@@ -6,7 +6,8 @@ Steps, stopping at the first failure:
    drift traces; install flash-linear-attention.
 2. Pilot: a few Glaze steps on one fixed batch (the KL must fall), exported and drift-scored on
    the first answers of each task (the export must load in vLLM and score like a 4-bit model).
-3. The full Glaze run.
+3. The full Glaze run. If it lowers the dev KL by less than 2%, the study stops here: scoring
+   costs about as much again and Gate 1 would not pass.
 4. Drift for the init and for Glaze, with per-answer records.
 5. MATH-500 free generation for both (accuracy and answers that reach the token cap).
 6. A report: paired drift intervals, MATH-500 deltas and the stage gate.
@@ -67,6 +68,14 @@ PILOT_MAX_FLIP_RATE = 0.10
 GATE_REDUCTION = 0.05
 GATE_FALLBACK_BELOW = 0.02
 GATE_MATH500_POINTS = -2.0
+# Below this dev-KL reduction a 5% drift reduction is out of reach, so drift and MATH-500 are not
+# scored (they cost about as much as training).
+SCORE_MIN_DEV_REDUCTION = 0.02
+
+
+def dev_kl_reduction(record: dict[str, Any]) -> float:
+    """How much of the init's dev KL the trained export removed (0.03 = 3% lower)."""
+    return 1 - record["dev_best"]["mean_kl"] / record["dev_at_init"]["mean_kl"]
 
 
 def install_init(snapshot: Path, init_dir: Path, variant: VariantConfig) -> dict[str, Any]:
@@ -298,6 +307,16 @@ def study(args: argparse.Namespace, config: ExperimentConfig, variant: VariantCo
             "dev_best",
         )
     }
+    reduction = dev_kl_reduction(exported["glaze"])
+    manifest["glaze"]["dev_kl_reduction"] = reduction
+    if reduction < SCORE_MIN_DEV_REDUCTION:
+        manifest["status"] = "stopped"
+        manifest["stopped"] = (
+            f"dev KL fell {reduction:.2%}, under the {SCORE_MIN_DEV_REDUCTION:.0%} needed to score"
+        )
+        save()
+        print(f"stopped: {manifest['stopped']}")
+        return manifest
 
     drift = {}
     for name, path in (("init", init_dir), ("glaze", export_dir)):

@@ -99,8 +99,9 @@ class GlazeConfig:
     micro_batch_tokens: int = 8192
     # Trained values move one BF16 grid step at a time (qwen35_compression.glaze.grid). Each
     # step moves this fraction of them, the most promising first; a short probe on the dev set
-    # picks one of the candidates.
-    flip_fractions: tuple[float, ...] = (1e-4, 4e-4, 1.6e-3)
+    # picks one of the candidates. The pilot uses the smallest. B1's diagnosis: 2,805 moves per
+    # step (1e-4) overshoot, since the best move is 0.2-0.4 of a grid step; 281 (1e-5) lower the KL.
+    flip_fractions: tuple[float, ...] = (1e-5, 2e-5, 4e-5)
     momentum: float = 0.9
     # No move may change the multiplier a value sets (a scale; 1 + w for Qwen3.5's RMSNorm) by
     # more than this fraction of itself. Scale steps are at most 2^-7 (0.78%), so it binds on

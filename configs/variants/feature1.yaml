@@ -67,7 +67,7 @@ variants:
       epochs: 4
       tokens_per_step: 16384
       micro_batch_tokens: 8192
-      flip_fractions: [0.0001, 0.0004, 0.0016]
+      flip_fractions: [0.00001, 0.00002, 0.00004]
       momentum: 0.9
       max_relative_change: 0.01
       probe_steps: 8
