@@ -14,6 +14,7 @@ variants:
       - "re:.*visual.*"
       - "re:.*embed_tokens$"
     calibration_samples: 16
+    autoround_iters: 10
 
   # B: AutoRound on Glaze v2's in-domain blocks (BF16's own answers): the data effect alone.
   - name: autoround_glaze2_data_w4a16_g128
@@ -24,6 +25,7 @@ variants:
     ignore: *text_calibration_ignore
     calibration_blocks: outputs/glaze2_proxy_pilot/data/calibration.jsonl
     calibration_samples: 16
+    autoround_iters: 10
 
   # C: Glaze v2's rounding on the same blocks, every Linear at 4-bit g128, vision tower in BF16.
   - name: glaze2_uniform_w4a16_g128

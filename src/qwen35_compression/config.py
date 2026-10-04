@@ -165,6 +165,8 @@ class VariantConfig:
     glaze: GlazeConfig | None = None
     # AutoRound: packed calibration blocks to use instead of the configured calibration set.
     calibration_blocks: Path | None = None
+    # AutoRound: tuning steps per block (its default, 200; a pilot only checks the plumbing).
+    autoround_iters: int = 200
     glaze2: Glaze2Config | None = None
 
 
@@ -311,6 +313,7 @@ def load_config(path: str | Path) -> ExperimentConfig:
                 if item.get("calibration_blocks")
                 else None
             ),
+            autoround_iters=int(item.get("autoround_iters", 200)),
             glaze2=_glaze2_config(item.get("glaze2"), item["name"], root),
         )
         for item in variants_raw
@@ -381,6 +384,10 @@ def _validate(
             raise ValueError(f"only mixed variants may define groups: {variant.name}")
         if variant.calibration_blocks is not None and variant.method != "autoround":
             raise ValueError(f"only autoround variants may set calibration_blocks: {variant.name}")
+        if variant.autoround_iters != 200 and variant.method != "autoround":
+            raise ValueError(f"only autoround variants may set autoround_iters: {variant.name}")
+        if variant.autoround_iters <= 0:
+            raise ValueError(f"autoround_iters must be positive: {variant.name}")
         if (variant.method == "glaze2") != (variant.glaze2 is not None):
             raise ValueError(f"glaze2 settings belong to glaze2 variants only: {variant.name}")
         if variant.method == "glaze2":

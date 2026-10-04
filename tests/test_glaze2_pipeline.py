@@ -63,6 +63,26 @@ def test_proxy_configs_describe_phase_one() -> None:
     pilot = load_config("configs/glaze2_proxy_pilot.yaml")
     assert pilot.paths.outputs != config.paths.outputs
     assert pilot.variant(FULL).glaze2.max_iters < full.max_iters
+    # The study runs AutoRound as published; only the pilot cuts its steps.
+    for name in ("autoround_w4a16_g128", "autoround_glaze2_data_w4a16_g128"):
+        assert config.variant(name).autoround_iters == 200
+        assert pilot.variant(name).autoround_iters < 200
+
+
+def test_autoround_recipe_takes_its_step_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    import types
+
+    from qwen35_compression.quantization.recipes import build_recipe
+
+    # llm-compressor lives in the GPU environment only; a stand-in records the arguments.
+    module = types.ModuleType("llmcompressor.modifiers.autoround")
+    module.AutoRoundModifier = lambda **kwargs: types.SimpleNamespace(**kwargs)
+    for name in ("llmcompressor", "llmcompressor.modifiers"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "llmcompressor.modifiers.autoround", module)
+    pilot = load_config("configs/glaze2_proxy_pilot.yaml")
+    (modifier,) = build_recipe(pilot.variant("autoround_w4a16_g128"))
+    assert modifier.iters == 10
 
 
 @pytest.mark.parametrize(
@@ -79,6 +99,8 @@ def test_proxy_configs_describe_phase_one() -> None:
         (lambda v: v[FULL]["glaze2"].update(margin_bytes=-1), "margin_bytes"),
         (lambda v: v[FULL]["glaze2"].update(budget_fraction=0), "budget_fraction"),
         (lambda v: v["bf16"].update(calibration_blocks="x.jsonl"), "calibration_blocks"),
+        (lambda v: v["bf16"].update(autoround_iters=10), "autoround_iters"),
+        (lambda v: v["autoround_w4a16_g128"].update(autoround_iters=0), "autoround_iters"),
         (lambda v: v["autoround_w4a16_g128"].update(glaze2={}), "glaze2 settings"),
     ],
 )

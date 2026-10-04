@@ -203,12 +203,17 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
             source = init.tensors.get(name)
             if source is None:
                 raise ValueError(f"init export has no tensor for the student's {name}")
-            if source.shape != parameter.shape or source.dtype != parameter.dtype:
+            # A tensor the export keeps at the checkpoint's own precision (Qwen3.5 stores A_log in
+            # float32) is cast as loading the model casts it; any other mismatch is an error.
+            same_kind = source.dtype == parameter.dtype or (
+                source.is_floating_point() and parameter.is_floating_point()
+            )
+            if source.shape != parameter.shape or not same_kind:
                 raise ValueError(
                     f"{name}: export {source.dtype} {tuple(source.shape)} does not match the "
                     f"model's {parameter.dtype} {tuple(parameter.shape)}"
                 )
-            parameter.copy_(source.to(parameter.device))
+            parameter.copy_(source.to(parameter.device, parameter.dtype))
             loaded.add(name)
     unused = sorted(expected - loaded)
     if unused:

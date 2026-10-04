@@ -24,6 +24,7 @@ for _name in ("brotli", "brotlicffi"):
 import argparse  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
+import shutil  # noqa: E402
 import subprocess  # noqa: E402
 import time  # noqa: E402
 from collections.abc import Callable  # noqa: E402
@@ -181,6 +182,9 @@ def study(args: argparse.Namespace) -> dict[str, Any]:
     answers = full_config.paths.outputs / "data" / "answers.jsonl"
     if not answers.exists():
         step("answers", lambda: run_logged(answers_command(full_config, snapshot), log, ROOT))
+    # Kept with the results, which are fetched even when a later step fails: generating them
+    # again costs a vLLM start and ~15 minutes of generation.
+    shutil.copyfile(answers, output / "answers.jsonl")
     for stage, config_path, sizes in (
         ("pilot", args.pilot_config, PILOT_SIZES),
         ("full", args.config, FULL_SIZES),

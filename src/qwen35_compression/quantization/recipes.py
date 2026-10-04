@@ -59,7 +59,8 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
 
         return [
             # Tunes each block's weight rounding and clipping by signed gradient descent against
-            # the BF16 block's outputs, with AutoRound's defaults (200 steps per block, batch 8).
+            # the BF16 block's outputs, with AutoRound's defaults (200 steps per block, batch 8;
+            # a pilot sets fewer steps).
             # torch.compile is off: it only speeds up tuning and is untested on Qwen3.5's
             # linear-attention layers. It caches every packed calibration sample's block inputs
             # and BF16 outputs on the GPU, which needs more than a 24 GB card with this model
@@ -71,7 +72,7 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
                     )
                 },
                 ignore=list(variant.ignore),
-                iters=200,
+                iters=variant.autoround_iters,
                 enable_torch_compile=False,
             )
         ]

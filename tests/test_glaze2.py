@@ -276,6 +276,10 @@ def _snapshot(teacher: nn.Module, directory: Path) -> Path:
 
     directory.mkdir(parents=True)
     tensors = {LANGUAGE_PREFIX + k: v.contiguous() for k, v in teacher.state_dict().items()}
+    # Qwen3.5's checkpoint stores DeltaNet's A_log in float32; the model loads it as BF16.
+    for key in [k for k in tensors if k.endswith(".A_log")]:
+        tensors[key] = tensors[key].float()
+    assert any(k.endswith(".A_log") for k in tensors)
     tensors["model.visual.blocks.0.attn.qkv.weight"] = torch.randn(384, 128).to(torch.bfloat16)
     tensors["model.visual.blocks.0.attn.qkv.bias"] = torch.randn(384).to(torch.bfloat16)
     tensors["model.visual.pos_embed.weight"] = torch.randn(16, 128).to(torch.bfloat16)
