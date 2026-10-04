@@ -30,7 +30,7 @@ from qwen35_compression.glaze.budget import (
 )
 from qwen35_compression.glaze.data import blocks_digest, epoch_order, groups, split_blocks
 from qwen35_compression.glaze.export import write_refined_export
-from qwen35_compression.glaze.grid import GridDescent, grid_neighbor
+from qwen35_compression.glaze.grid import GridDescent, grid_neighbor, guarded_neighbor
 from qwen35_compression.glaze.losses import DistillStats, distill_step
 from qwen35_compression.glaze.quant_linear import (
     GroupQuantLinear,
@@ -42,9 +42,11 @@ from qwen35_compression.glaze.student import (
     LANGUAGE_MODEL_PREFIX,
     build_student,
     exported_tensors,
+    family,
     init_group_size,
     load_trainable_state,
     read_init_export,
+    trainable_parameters,
     trainable_state,
 )
 from qwen35_compression.glaze.train import (
@@ -170,6 +172,56 @@ def test_grid_descent_needs_values_on_the_grid() -> None:
         GridDescent([_on_grid(1.0)], torch.bfloat16, momentum=1.0)
     with pytest.raises(ValueError, match="nothing"):
         GridDescent([], torch.bfloat16)
+
+
+def test_guarded_neighbor_protects_the_multiplier() -> None:
+    # Zero-centered norm weights: the multiplier is 1 + w. From left: a channel switched off
+    # (1 + w = 0), one at 2^-8, one just below zero, one at 0.1015625, one at 1.5.
+    w = _on_grid(-1.0, -0.99609375, -1.0078125, -0.9, 0.5)
+    up = guarded_neighbor(w, torch.ones_like(w), torch.bfloat16, 1.0, 0.05)
+    down = guarded_neighbor(w, -torch.ones_like(w), torch.bfloat16, 1.0, 0.05)
+    # The first three cannot move: they would reach zero, cross it, or double or halve.
+    assert torch.isnan(up[:3]).all() and torch.isnan(down[:3]).all()
+    # One step of w = -0.8984375 is 3.8% of its multiplier: allowed at 5%, refused at 1%.
+    assert up[3].item() == -0.89453125 and down[3].item() == -0.90234375
+    tight = guarded_neighbor(w, torch.ones_like(w), torch.bfloat16, 1.0, 0.01)
+    assert torch.isnan(tight[3]) and tight[4].item() == 0.50390625
+    assert down[4].item() == 0.498046875
+    # Unguarded (B1's first pilots), the stored value only keeps its own sign: w = -1 moves.
+    assert grid_neighbor(w, torch.ones_like(w), torch.bfloat16)[0].item() == -0.99609375
+    # A group scale is its own multiplier and one BF16 step is at most 2^-7 of it, so a 1% cap
+    # never refuses a scale's move.
+    generator = torch.Generator().manual_seed(3)
+    scales = (torch.randn(2000, generator=generator) * 0.01).to(torch.bfloat16).float()
+    for sign in (1.0, -1.0):
+        direction = torch.full_like(scales, sign)
+        expected = grid_neighbor(scales, direction, torch.bfloat16)
+        got = guarded_neighbor(scales, direction, torch.bfloat16, 0.0, 0.01)
+        assert torch.equal(torch.isnan(got), torch.isnan(expected))
+        assert torch.equal(got.nan_to_num(), expected.nan_to_num())
+
+
+def test_grid_descent_refuses_moves_that_switch_a_channel() -> None:
+    norm = _on_grid(-0.99609375, 0.5).requires_grad_(True)  # zero-centered: 1 + w
+    scale = _on_grid(0.01).requires_grad_(True)
+    grads = (torch.tensor([-100.0, 1.0]), torch.tensor([1.0]))
+    guarded = GridDescent(
+        [norm, scale], torch.bfloat16, 0.0, offsets=[1.0, 0.0], max_relative_change=0.01
+    )
+    norm.grad, scale.grad = grads
+    # The largest predicted gain would double a nearly switched-off channel: refused.
+    assert guarded.step(2) == 2 and guarded.moved == [1, 1]
+    assert norm.tolist() == [-0.99609375, 0.498046875]
+    assert scale.item() == grid_neighbor(_on_grid(0.01), torch.tensor([-1.0]), torch.bfloat16)
+    # Without offsets the old rule applies and that channel is the first to move.
+    norm2 = _on_grid(-0.99609375, 0.5).requires_grad_(True)
+    unguarded = GridDescent([norm2], torch.bfloat16, 0.0)
+    norm2.grad = grads[0]
+    assert unguarded.step(1) == 1 and norm2.tolist() == [-0.9921875, 0.5]
+    with pytest.raises(ValueError, match="offset"):
+        GridDescent([norm], torch.bfloat16, offsets=[1.0, 0.0])
+    with pytest.raises(ValueError, match="max_relative_change"):
+        GridDescent([norm], torch.bfloat16, max_relative_change=0.0)
 
 
 def test_quantized_layer_rejects_bad_tensors() -> None:
@@ -314,6 +366,49 @@ def test_student_trains_only_scales_and_norms(tiny) -> None:
     assert all(
         n.endswith(".scales") for n, p in without_norms.named_parameters() if p.requires_grad
     )
+
+
+def test_offsets_match_how_each_trained_tensor_scales(tiny) -> None:
+    from torch.nn.utils import parametrize
+
+    teacher, init_dir, names = tiny
+    student = build_student(teacher, read_init_export(init_dir))
+    trainable = trainable_parameters(student)
+    assert [name for name, _, _ in trainable] == [
+        name for name, parameter in student.named_parameters() if parameter.requires_grad
+    ]
+    offsets = {name: offset for name, _, offset in trainable}
+    assert all(offsets[f"{name}.scales"] == 0.0 for name in names)
+    gated = 0
+    for name, module in student.named_modules():
+        if not parametrize.is_parametrized(module, "weight"):
+            continue
+        master = module.parametrizations.weight.original
+        offset = offsets[f"{name}.parametrizations.weight.original"]
+        inputs = torch.randn(2, 3, master.shape[0], dtype=torch.bfloat16)
+        arguments = (inputs,)
+        if parametrize.type_before_parametrizations(module).__name__ == "Qwen3_5RMSNormGated":
+            gated += 1
+            arguments = (inputs, torch.randn_like(inputs))
+        saved = master.detach().clone()
+        with torch.no_grad():
+            # At value -offset the multiplier is zero: the norm's output vanishes...
+            master.fill_(-offset)
+            assert not module(*arguments).any(), name
+            # ...and one above it, the norm passes its normalised input through.
+            master.fill_(1.0 - offset)
+            assert module(*arguments).abs().sum() > 0, name
+            master.copy_(saved)
+    assert gated == 3 and set(offsets.values()) == {0.0, 1.0}
+
+
+def test_families_drop_the_layer_number() -> None:
+    assert family("layers.3.mlp.down_proj.scales") == "layers.N.mlp.down_proj.scales"
+    assert (
+        family("layers.12.self_attn.k_norm.parametrizations.weight.original")
+        == "layers.N.self_attn.k_norm.weight"
+    )
+    assert family("norm.parametrizations.weight.original") == "norm.weight"
 
 
 def test_untouched_student_exports_every_tensor_unchanged(tiny, tmp_path: Path) -> None:
@@ -536,8 +631,8 @@ def test_pilot_passes_when_kl_falls_and_fails_when_it_does_not(tiny) -> None:
     assert len(losses) == 4 and min(losses[1:]) < losses[0]
 
     class NoMoves:
-        def zero_grad(self) -> None:
-            pass
+        parameters: list = []
+        moved: list = []
 
         def step(self, flips: int) -> int:
             return 0
@@ -548,6 +643,31 @@ def test_pilot_passes_when_kl_falls_and_fails_when_it_does_not(tiny) -> None:
         stuck.pilot(train, schedule, 3, 0.05)
     with pytest.raises(ValueError):
         stuck.pilot(train, schedule, 1, 0.05)
+    # Unchecked, a pilot that does not train reports its losses instead.
+    flat = stuck.pilot(train, schedule, 3, 0.05, optimizer=NoMoves(), check=False)
+    assert flat[0] == flat[1] == flat[2]
+
+
+def test_optimizers_cover_chosen_tensors_with_or_without_the_guard(tiny) -> None:
+    glaze = _glaze(max_relative_change=0.02)
+    trainer, _ = _trainer(tiny, glaze)
+    everything = trainer.make_optimizer()
+    assert everything.parameters == trainer.parameters
+    assert everything.offsets == [offset for _, _, offset in trainer.trainable]
+    assert 1.0 in everything.offsets and everything.max_relative_change == 0.02
+    scales = trainer.make_optimizer(select=lambda name: name.endswith(".scales"))
+    names = {id(p): n for n, p, _ in trainer.trainable}
+    assert scales.parameters and all(names[id(p)].endswith(".scales") for p in scales.parameters)
+    unguarded = trainer.make_optimizer(guard=False)
+    assert set(unguarded.offsets) == {0.0} and unguarded.max_relative_change == math.inf
+    with pytest.raises(ValueError, match="selection"):
+        trainer.make_optimizer(select=lambda name: False)
+    # Moves are counted per tensor; norm_moves sums those in norm weights.
+    for parameter in everything.parameters:
+        parameter.grad = torch.ones_like(parameter)
+    moved = everything.step(10_000)
+    norms = sum(count for p, count in zip(everything.parameters, everything.moved) if p.ndim == 1)
+    assert sum(everything.moved) == moved and trainer.norm_moves(everything) == norms > 0
 
 
 def test_saved_state_round_trips(tiny) -> None:
@@ -641,3 +761,79 @@ def test_grid_descent_bounds_each_step(flips: int) -> None:
     changed = parameter.detach() != values
     assert moved == int(changed.sum()) <= flips
     assert torch.equal(parameter.detach()[changed], expected[changed])
+
+
+# ---------------------------------------------------------------- diagnosis
+
+
+def test_diagnosis_matches_a_pilot_step_and_restores_the_student(tiny) -> None:
+    from qwen35_compression.glaze.diagnose import diagnose
+
+    glaze = _glaze(flip_fractions=(0.02,))
+    trainer, student = _trainer(tiny, glaze)
+    train, _ = split_blocks(random_blocks(10, seed=7), glaze)
+    schedule = make_schedule(glaze, BLOCK)
+    before = trainable_state(student)
+    report = diagnose(trainer, train, schedule, log=lambda _: None)
+    after = trainable_state(student)
+    assert all(torch.equal(before[key], after[key]) for key in before)
+    kl = report["kl"]
+    assert kl["base"] == kl["repeat"] == pytest.approx(kl["with_gradient"])
+    count = trainer.flips(0.02)
+    moves = report["moves"]
+    assert set(moves) == {
+        f"unguarded_top_{count // 100 or 1}",
+        f"unguarded_top_{count // 10}",
+        f"unguarded_top_{count}",
+        f"refused_of_unguarded_top_{count}",
+        f"guarded_top_{count}",
+        f"scales_top_{count}",
+        f"norms_guarded_top_{count}",
+        f"random_scales_{count}",
+    }
+    for result in moves.values():
+        assert sum(result["by_family"].values()) == result["moves"]
+    assert moves[f"unguarded_top_{count}"]["moves"] == moves[f"random_scales_{count}"]["moves"]
+    assert moves[f"unguarded_top_{count}"]["moves"] == count
+    assert all(name.endswith(".scales") for name in moves[f"scales_top_{count}"]["by_family"])
+    assert all(name.endswith(".scales") for name in moves[f"random_scales_{count}"]["by_family"])
+    assert not any(
+        name.endswith(".scales") for name in moves[f"norms_guarded_top_{count}"]["by_family"]
+    )
+    # A pilot's first step is the diagnosis's downhill set, measured the same way.
+    pilots = report["pilots"]
+    assert set(pilots) == {"guarded_0.02", "guarded_0.002", "scales_only_0.02"}
+    assert pilots["guarded_0.02"]["train_kl"][0] == pytest.approx(kl["base"])
+    assert pilots["guarded_0.02"]["train_kl"][1] == pytest.approx(
+        moves[f"guarded_top_{count}"]["kl_down"], rel=1e-9
+    )
+    assert pilots["scales_only_0.02"]["train_kl"][1] == pytest.approx(
+        moves[f"scales_top_{count}"]["kl_down"], rel=1e-9
+    )
+    # Along the moves, the KL changes as the gradient predicts.
+    assert 0.5 < moves[f"unguarded_top_{count}"]["slope_seen_over_predicted"] < 1.5
+    json.dumps(report, allow_nan=False)
+
+
+def test_refused_moves_are_the_ones_the_guard_blocks(tiny) -> None:
+    from qwen35_compression.glaze.diagnose import Neighbors, breakdown, refused, top_indices
+
+    trainer, _ = _trainer(tiny, _glaze())
+    norm_at = next(i for i, (_, _, offset) in enumerate(trainer.trainable) if offset == 1.0)
+    scale_at = next(i for i, (n, _, _) in enumerate(trainer.trainable) if n.endswith(".scales"))
+    name = trainer.trainable[norm_at][0]
+    with torch.no_grad():
+        trainer.parameters[norm_at][0] = -0.99609375  # multiplier 2^-8: nearly switched off
+    gradients = [torch.zeros_like(parameter) for parameter in trainer.parameters]
+    gradients[norm_at][0] = -100.0  # by far the largest predicted gain: double that channel
+    gradients[scale_at].view(-1)[0] = 1.0
+    unguarded = Neighbors(trainer, gradients, guard=False)
+    guarded = Neighbors(trainer, gradients, guard=True)
+    top = top_indices(trainer, unguarded, 2)
+    assert top[norm_at].tolist() == [0] and top[scale_at].tolist() == [0]
+    assert sum(index.numel() for index in top) == 2
+    blocked = refused(trainer, unguarded, top)
+    assert blocked[norm_at].tolist() == [0] and sum(index.numel() for index in blocked) == 1
+    assert breakdown(trainer, blocked) == {family(name): 1}
+    assert guarded.gains[norm_at][0] == float("-inf")
+    assert top_indices(trainer, guarded, 2)[norm_at].numel() == 0

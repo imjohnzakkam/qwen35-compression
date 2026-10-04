@@ -11,7 +11,11 @@ Steps, stopping at the first failure:
 5. MATH-500 free generation for both (accuracy and answers that reach the token cap).
 6. A report: paired drift intervals, MATH-500 deltas and the stage gate.
 
+With --diagnose, only step 1 and the diagnosis run: measurements of the pilot batch's steps and
+short pilots of candidate settings (scripts/glaze_diagnose.py), with no export.
+
     python scripts/run_glaze_study.py --variant glaze_v1_w4a16_g128 --dry-run
+    python scripts/run_glaze_study.py --variant glaze_v1_w4a16_g128 --diagnose --dry-run
 """
 
 from __future__ import annotations
@@ -108,6 +112,19 @@ def evaluate_gate(
     }
 
 
+def diagnosis_summary(path: Path) -> dict[str, Any]:
+    """The headline numbers of a diagnosis report, for the run manifest."""
+    report = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "kl": report["kl"],
+        "moves": {
+            name: {key: result[key] for key in ("moves", "kl_down", "best_step_fraction")}
+            for name, result in report["moves"].items()
+        },
+        "pilots": {name: result["passed"] for name, result in report["pilots"].items()},
+    }
+
+
 def math500_record(run: Path, tokenizer: Any) -> dict[str, Any]:
     """MATH-500 accuracy, answers at the token cap, and per-question correctness of one run."""
     import panel_scores
@@ -134,6 +151,20 @@ def commands(
         "bootstrap": [sys.executable, "scripts/bootstrap_gpu.py", "--scope", "text"],
         "preflight": [str(TEXT_PYTHON), "scripts/preflight.py", "--profile", "gpu-text"],
         "fla": fla_install_command(sys.executable),
+    }
+    if args.diagnose:
+        steps["diagnose"] = [
+            sys.executable,
+            "scripts/glaze_diagnose.py",
+            "--config",
+            config_path,
+            "--variant",
+            variant.name,
+            "--output",
+            str(output / "diagnosis.json"),
+        ]
+        return steps
+    steps |= {
         "pilot": [
             *glaze,
             variant.name,
@@ -225,6 +256,12 @@ def study(args: argparse.Namespace, config: ExperimentConfig, variant: VariantCo
     step("install_init", lambda: install_init(init_path, init_dir, init_variant))
     step("fla", logged("fla"))
     manifest["flash_linear_attention"] = FLA_VERSION
+    if args.diagnose:
+        step("diagnose", logged("diagnose"))
+        manifest["diagnosis"] = diagnosis_summary(output / "diagnosis.json")
+        manifest["status"] = "passed"
+        save()
+        return manifest
     traces = output / "traces"
     manifest["traces"] = {
         "repo": TRACES_REPO,
@@ -315,6 +352,9 @@ def main() -> None:
         "--pilot-limit", type=int, default=10, help="Answers per task the pilot export scores"
     )
     parser.add_argument("--skip-bootstrap", action="store_true")
+    parser.add_argument(
+        "--diagnose", action="store_true", help="Only diagnose the pilot batch; export nothing"
+    )
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

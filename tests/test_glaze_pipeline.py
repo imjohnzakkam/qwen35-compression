@@ -49,6 +49,7 @@ def test_glaze_v1_is_configured_on_autorounds_own_data() -> None:
     assert glaze.train_blocks == init.calibration_samples == 128
     assert glaze.dev_blocks == 32
     assert glaze.flip_fractions == (0.0001, 0.0004, 0.0016) and glaze.momentum == 0.9
+    assert glaze.max_relative_change == 0.01
     assert config.variant("gptq_w4a16_g128").glaze is None
 
 
@@ -84,6 +85,8 @@ def _glaze(items: dict) -> dict:
         (lambda v: _glaze(v).update(flip_fractions=[]), "flip fractions"),
         (lambda v: _glaze(v).update(flip_fractions=[0.0, 0.1]), "flip fractions"),
         (lambda v: _glaze(v).update(momentum=1.0), "momentum"),
+        (lambda v: _glaze(v).update(max_relative_change=0), "max_relative_change"),
+        (lambda v: _glaze(v).update(max_relative_change=1.5), "max_relative_change"),
         (lambda v: _glaze(v).update(micro_batch_tokens=3000), "multiple of the 2048-token"),
         (lambda v: _glaze(v).update(tokens_per_step=12288), "divide"),
         (lambda v: _glaze(v).update(dev_blocks=30), "whole steps"),
@@ -281,6 +284,63 @@ def test_study_dry_run_lists_every_step() -> None:
     assert plan["glaze"]["schedule"]["steps"] == 64
 
 
+def test_study_diagnose_runs_only_setup_and_the_diagnosis() -> None:
+    result = _run(
+        "scripts/run_glaze_study.py",
+        "--variant",
+        GLAZE,
+        "--diagnose",
+        "--dry-run",
+        "--code-revision",
+        "abc",
+        "--output",
+        "results/feature1/glaze-diagnosis",
+    )
+    assert result.returncode == 0, result.stderr
+    commands = json.loads(result.stdout)["commands"]
+    assert list(commands) == ["bootstrap", "preflight", "fla", "diagnose"]
+    diagnose = commands["diagnose"]
+    assert diagnose[1] == "scripts/glaze_diagnose.py"
+    assert diagnose[diagnose.index("--variant") + 1] == GLAZE
+    assert diagnose[diagnose.index("--output") + 1].endswith("glaze-diagnosis/diagnosis.json")
+
+
+def test_diagnosis_summary_keeps_the_headline_numbers(tmp_path: Path) -> None:
+    report = {
+        "kl": {"base": 0.0075, "repeat": 0.0075, "with_gradient": 0.0075},
+        "moves": {
+            "guarded_top_2805": {
+                "moves": 2805,
+                "kl_down": 0.0074,
+                "kl_up": 0.0077,
+                "best_step_fraction": 0.8,
+                "by_family": {"layers.N.mlp.up_proj.scales": 2805},
+            }
+        },
+        "pilots": {"guarded_0.0001": {"train_kl": [0.0075, 0.0074], "passed": True}},
+    }
+    path = tmp_path / "diagnosis.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    assert study.diagnosis_summary(path) == {
+        "kl": report["kl"],
+        "moves": {
+            "guarded_top_2805": {"moves": 2805, "kl_down": 0.0074, "best_step_fraction": 0.8}
+        },
+        "pilots": {"guarded_0.0001": True},
+    }
+
+
+def test_diagnose_cli_checks_its_arguments(tmp_path: Path) -> None:
+    other = _run("scripts/glaze_diagnose.py", "--variant", "gptq_w4a16_g128", "--output", "x")
+    assert other.returncode != 0 and "not a glaze variant" in other.stderr
+    existing = tmp_path / "diagnosis.json"
+    existing.write_text("{}", encoding="utf-8")
+    again = _run("scripts/glaze_diagnose.py", "--variant", GLAZE, "--output", str(existing))
+    assert again.returncode != 0 and "refusing to overwrite" in again.stderr
+    missing = _run("scripts/glaze_diagnose.py", "--variant", GLAZE)
+    assert missing.returncode != 0 and "--output" in missing.stderr
+
+
 def test_study_rejects_variants_it_cannot_run() -> None:
     result = _run("scripts/run_glaze_study.py", "--variant", "gptq_w4a16_g128", "--dry-run")
     assert result.returncode != 0 and "not a glaze variant" in result.stderr
@@ -420,4 +480,27 @@ def test_refine_pilot_writes_its_own_export(
     assert len(manifest["glaze"]["pilot"]["train_kl"]) == 3
     assert manifest["glaze"]["pilot"]["flip_fraction"] == min(variant.glaze.flip_fractions)
     assert "best_step" not in manifest["glaze"]
+    assert not (config.paths.outputs / GLAZE).exists()
+
+
+def test_prepare_and_diagnose_run_on_a_tiny_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qwen35_compression.glaze.diagnose import diagnose
+    from qwen35_compression.glaze.student import trainable_state
+    from qwen35_compression.glaze.train import prepare
+
+    config = _tiny_study(tmp_path, monkeypatch)
+    variant = config.variant(GLAZE)
+    setup = prepare(config, variant, log=lambda _: None)
+    assert setup.init_variant.name == "autoround_w4a16_g128" and setup.revision == "rev"
+    assert len(setup.train) == 128 and len(setup.dev) == 32
+    before = trainable_state(setup.student)
+    report = diagnose(setup.trainer, setup.train, setup.schedule, log=lambda _: None)
+    after = trainable_state(setup.student)
+    assert all(torch.equal(before[key], after[key]) for key in before)
+    assert report["batch"]["blocks"] == setup.schedule.blocks_per_step
+    assert set(report["pilots"]) == {"guarded_0.0001", "guarded_1e-05", "scales_only_0.0001"}
+    assert all(len(pilot["train_kl"]) == 5 for pilot in report["pilots"].values())
+    # Nothing was written: a diagnosis leaves no export behind.
     assert not (config.paths.outputs / GLAZE).exists()
