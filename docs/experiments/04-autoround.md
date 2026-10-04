@@ -5,7 +5,8 @@ and clipping by signed gradient descent against the BF16 block's outputs. It is 
 post-training baseline for 4-bit weights.
 
 **Status:** quantized and scored with the token-level measure of the
-[drift study](03-drift-study.md). Not yet run on the benchmark suite.
+[drift study](03-drift-study.md), and on MATH-500 (74.6%, scored alongside
+[Glaze v1](05-glaze-v1.md)). Not yet run on the rest of the benchmark suite.
 
 ## Configuration
 
