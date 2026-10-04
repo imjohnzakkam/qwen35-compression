@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Glaze v2 phase 1 on one GPU: the Qwen3.5-0.8B proxy study, pilot first.
 
-For the pilot config and then the full config, stopping at the first failure:
-1. BF16 answers its calibration prompts (vLLM), packed into calibration and held-out blocks.
+BF16 answers all calibration prompts once (vLLM: its first start on a machine spends ~10 minutes
+compiling kernels, so it starts once). Then, for the pilot config and the full config in turn,
+stopping at the first failure:
+1. The answers packed into calibration and held-out blocks (the pilot's are tiny).
 2. Four exports at AutoRound's size: A AutoRound as configured, B AutoRound on the new blocks,
    C Glaze v2 rounding at uniform 4-bit g128, D Glaze v2 in full.
 3. Held-out KL to BF16 for all four, and phase 1's gate (D at least 15% below A in-domain).
@@ -46,17 +48,13 @@ VARIANTS = (
 )
 FULL_VARIANT = "glaze2_w4a16_g128"
 # The pilot's sizes: enough to run every stage, nothing more.
-PILOT_SIZES = {"answers": 400, "calibration_blocks": 16, "held_out_blocks": 8}
-FULL_SIZES = {"answers": None, "calibration_blocks": 512, "held_out_blocks": 64}
+PILOT_SIZES = {"calibration_blocks": 16, "held_out_blocks": 8}
+FULL_SIZES = {"calibration_blocks": 512, "held_out_blocks": 64}
 
 
-def stage_commands(
-    config: ExperimentConfig, sizes: dict[str, Any], snapshot: Path | str, results: Path
-) -> dict[str, list[str]]:
-    """Every subprocess of one stage (pilot or full), in order."""
-    config_path = str(config.source_path)
-    data = config.paths.outputs / "data"
-    answers = [
+def answers_command(config: ExperimentConfig, snapshot: Path | str) -> list[str]:
+    """BF16's answers to every prompt, written once for both stages."""
+    return [
         str(TEXT_PYTHON),
         "scripts/glaze2_answers.py",
         "--model",
@@ -64,19 +62,24 @@ def stage_commands(
         "--prompts",
         str(PROMPTS),
         "--output",
-        str(data / "answers.jsonl"),
+        str(config.paths.outputs / "data" / "answers.jsonl"),
     ]
-    if sizes["answers"]:
-        answers += ["--limit", str(sizes["answers"])]
+
+
+def stage_commands(
+    config: ExperimentConfig, sizes: dict[str, Any], answers: Path, results: Path
+) -> dict[str, list[str]]:
+    """Every subprocess of one stage (pilot or full), in order, from the shared answers."""
+    config_path = str(config.source_path)
+    data = config.paths.outputs / "data"
     steps = {
-        "answers": answers,
         "blocks": [
             sys.executable,
             "scripts/glaze2_blocks.py",
             "--config",
             config_path,
             "--answers",
-            str(data / "answers.jsonl"),
+            str(answers),
             "--output-dir",
             str(data),
             "--calibration-blocks",
@@ -172,15 +175,19 @@ def study(args: argparse.Namespace) -> dict[str, Any]:
         )
     step("fla", lambda: run_logged(fla_install_command(sys.executable), log, ROOT))
     manifest["flash_linear_attention"] = FLA_VERSION
+    full_config = load_config(args.config)
+    snapshot, revision = step("download_bf16", lambda: download_model(full_config))
+    manifest["base_model"] = {"id": full_config.model.id, "revision": revision}
+    answers = full_config.paths.outputs / "data" / "answers.jsonl"
+    if not answers.exists():
+        step("answers", lambda: run_logged(answers_command(full_config, snapshot), log, ROOT))
     for stage, config_path, sizes in (
         ("pilot", args.pilot_config, PILOT_SIZES),
         ("full", args.config, FULL_SIZES),
     ):
         config = load_config(config_path)
-        snapshot, revision = step(f"{stage}:download_bf16", lambda c=config: download_model(c))
-        manifest["base_model"] = {"id": config.model.id, "revision": revision}
         results = output / stage
-        for name, command in stage_commands(config, sizes, snapshot, results).items():
+        for name, command in stage_commands(config, sizes, answers, results).items():
             step(f"{stage}:{name}", lambda c=command: run_logged(c, log, ROOT))
         evaluation = json.loads((results / "evaluation.json").read_text(encoding="utf-8"))
         manifest[stage] = {"gate": evaluation["gate"], "bytes": evaluation["bytes"]}
@@ -210,15 +217,17 @@ def main() -> None:
     if not PROMPTS.exists() and not (ROOT / PROMPTS).exists():
         parser.error(f"missing {PROMPTS}: run scripts/glaze2_prompts.py first")
     if args.dry_run:
-        plan = {}
+        full_config = load_config(args.config)
+        plan: dict[str, Any] = {
+            "answers": answers_command(full_config, "<bf16 snapshot>"),
+        }
+        shared = full_config.paths.outputs / "data" / "answers.jsonl"
         for stage, config_path, sizes in (
             ("pilot", args.pilot_config, PILOT_SIZES),
             ("full", args.config, FULL_SIZES),
         ):
             config = load_config(config_path)
-            plan[stage] = stage_commands(
-                config, sizes, "<bf16 snapshot>", args.output.resolve() / stage
-            )
+            plan[stage] = stage_commands(config, sizes, shared, args.output.resolve() / stage)
         print(json.dumps(plan, indent=2))
         return
     study(args)

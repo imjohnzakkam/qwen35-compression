@@ -204,6 +204,14 @@ def chat_sample(
 
 
 def _ids(value: Any) -> list[int]:
-    if isinstance(value, dict):
+    """Token ids from what apply_chat_template returns: a list, or (transformers 5) a
+    BatchEncoding, which is a mapping but not a dict; a batch of one is unwrapped."""
+    if hasattr(value, "keys"):
         value = value["input_ids"]
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if value and isinstance(value[0], list):
+        if len(value) != 1:
+            raise ValueError(f"expected one sequence, got {len(value)}")
+        value = value[0]
     return [int(token) for token in value]

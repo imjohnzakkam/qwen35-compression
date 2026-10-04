@@ -90,7 +90,7 @@ def test_glaze2_settings_are_validated(tmp_path: Path, change, message: str) -> 
 # ---------------------------------------------------------------- driver and gate
 
 
-def test_proxy_dry_run_runs_the_pilot_before_the_study() -> None:
+def test_proxy_dry_run_answers_once_then_pilots_before_the_study() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/run_glaze2_proxy.py", "--dry-run", "--code-revision", "abc"],
         capture_output=True,
@@ -98,10 +98,11 @@ def test_proxy_dry_run_runs_the_pilot_before_the_study() -> None:
     )
     assert result.returncode == 0, result.stderr
     plan = json.loads(result.stdout)
-    assert list(plan) == ["pilot", "full"]
+    assert list(plan) == ["answers", "pilot", "full"]
+    assert "--limit" not in plan["answers"]
+    shared = plan["answers"][plan["answers"].index("--output") + 1]
     for stage in ("pilot", "full"):
         assert list(plan[stage]) == [
-            "answers",
             "blocks",
             "quantize:autoround_w4a16_g128",
             "quantize:autoround_glaze2_data_w4a16_g128",
@@ -110,10 +111,12 @@ def test_proxy_dry_run_runs_the_pilot_before_the_study() -> None:
             "evaluate",
             "vllm_check",
         ]
-    assert "--limit" in plan["pilot"]["answers"] and "--limit" not in plan["full"]["answers"]
-    blocks = plan["full"]["blocks"]
-    assert blocks[blocks.index("--calibration-blocks") + 1] == "512"
-    assert "glaze2_proxy_pilot" in plan["pilot"]["quantize:glaze2_w4a16_g128"][3]
+        blocks = plan[stage]["blocks"]
+        assert blocks[blocks.index("--answers") + 1] == shared
+    full = plan["full"]["blocks"]
+    assert full[full.index("--calibration-blocks") + 1] == "512"
+    pilot = plan["pilot"]["blocks"]
+    assert "glaze2_proxy_pilot" in pilot[pilot.index("--output-dir") + 1]
 
 
 def _scores(a: float, b: float, c: float, d: float, chat_d: float = 0.010) -> dict:
@@ -266,3 +269,17 @@ def test_gate_tolerates_a_domain_without_tokens() -> None:
         entry["chat"]["mean_kl"] = None
     result = evaluate_script.gate(scores, sizes)
     assert result["decision"] == "go" and result["chat_reduction"] is None
+
+
+def test_autoround_reads_glaze2_block_files(tmp_path: Path) -> None:
+    from qwen35_compression.runner import blocks_dataset
+
+    path = tmp_path / "blocks.jsonl"
+    save_blocks(path, PackedBlocks([[1, 2, 3], [4, 5, 6]], [[0, 1, 1]] * 2, [[0, 0, 0]] * 2))
+    dataset, collate = blocks_dataset(path)
+    assert len(dataset) == 2
+    batch = collate([dataset[1]])
+    assert batch["input_ids"].tolist() == [[4, 5, 6]]
+    assert batch["attention_mask"].tolist() == [[1, 1, 1]]
+    with pytest.raises(ValueError, match="batch size 1"):
+        collate([dataset[0], dataset[1]])

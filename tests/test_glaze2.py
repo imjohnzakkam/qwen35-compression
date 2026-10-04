@@ -443,3 +443,44 @@ def test_chat_samples_split_prompt_from_answer() -> None:
     sample = chat_sample(_Tokenizer(), "math", "hi", "42", {})
     assert "".join(map(chr, sample.prompt_ids)) == "<u>hi</u><a>"
     assert "".join(map(chr, sample.answer_ids)) == "42</a>"
+
+
+def _cached_tokenizer():
+    """Qwen3.5-0.8B's real tokenizer when the Hub cache has it (the chat template matters)."""
+    try:
+        from huggingface_hub import snapshot_download
+        from transformers import AutoTokenizer
+
+        path = snapshot_download(
+            "Qwen/Qwen3.5-0.8B",
+            revision="2fc06364715b967f1860aea9cf38778875588b17",
+            local_files_only=True,
+            allow_patterns=["tokenizer*", "*.jinja", "*.json"],
+        )
+        return AutoTokenizer.from_pretrained(path)
+    except Exception:
+        return None
+
+
+def test_chat_samples_with_the_real_qwen_template() -> None:
+    tokenizer = _cached_tokenizer()
+    if tokenizer is None:
+        pytest.skip("Qwen3.5-0.8B tokenizer not cached")
+    sample = chat_sample(tokenizer, "math", "What is 2+2?", "It is 4.", {"enable_thinking": False})
+    prompt = tokenizer.decode(sample.prompt_ids)
+    answer = tokenizer.decode(sample.answer_ids)
+    assert "What is 2+2?" in prompt and "It is 4." in answer
+    assert "What is 2+2?" not in answer and all(isinstance(t, int) for t in sample.answer_ids)
+
+
+def test_token_ids_come_out_of_every_return_shape() -> None:
+    from transformers import BatchEncoding
+
+    from qwen35_compression.glaze2.data import _ids
+
+    assert _ids([1, 2]) == [1, 2]
+    assert _ids(BatchEncoding({"input_ids": [3, 4]})) == [3, 4]
+    assert _ids({"input_ids": [[5, 6]]}) == [5, 6]
+    assert _ids(torch.tensor([[7, 8]])) == [7, 8]
+    with pytest.raises(ValueError):
+        _ids([[1], [2]])
