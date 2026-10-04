@@ -87,12 +87,16 @@ class QuantizationGroupConfig:
 class GlazeConfig:
     """End-to-end distillation of a W4A16 export's group scales and norm weights against BF16.
 
-    The INT4 codes of the init export stay frozen. `data: calibration` trains on the init's own
-    packed calibration blocks: the first `train_blocks`, with the next `dev_blocks` held out.
+    The INT4 codes of the init export stay frozen. `data: calibration` trains on packed
+    calibration blocks: `train_blocks` from block `train_start` (by default the init's own, from
+    0), with `dev_blocks` held out from block `dev_start` (by default right after training).
     """
 
     data: str = "calibration"
+    train_start: int = 0
     train_blocks: int = 128
+    # None: the block right after the training blocks.
+    dev_start: int | None = None
     dev_blocks: int = 32
     epochs: int = 4
     tokens_per_step: int = 16384
@@ -389,6 +393,32 @@ def _validate_glaze(
         raise ValueError(f"glaze block counts must fill whole steps and micro-batches: {name}")
     if glaze.warmup_steps >= glaze.train_blocks // blocks_per_step * glaze.epochs:
         raise ValueError(f"glaze warmup must be shorter than training: {name}")
-    if init.method == "autoround" and glaze.train_blocks != init.calibration_samples:
-        # B1's premise: the same calibration data as the init, so only the objective differs.
-        raise ValueError(f"glaze train_blocks must equal the init's calibration samples: {name}")
+    if glaze.train_start < 0 or (glaze.dev_start is not None and glaze.dev_start < 0):
+        raise ValueError(f"glaze train_start and dev_start must not be negative: {name}")
+    train = range(glaze.train_start, glaze.train_start + glaze.train_blocks)
+    dev_start = glaze_dev_start(glaze)
+    dev = range(dev_start, dev_start + glaze.dev_blocks)
+    if set(train) & set(dev):
+        raise ValueError(f"glaze training and dev blocks overlap: {name}")
+    if init.method == "autoround":
+        seen = init.calibration_samples
+        if seen is None:
+            # Without it there is no telling which blocks calibrated the init.
+            raise ValueError(f"glaze needs its autoround init's calibration_samples: {name}")
+        if glaze.train_start == 0 and glaze.train_blocks != seen:
+            # B1's premise: the same calibration data as the init, so only the objective differs.
+            raise ValueError(
+                f"glaze train_blocks must equal the init's calibration samples: {name}"
+            )
+        if 0 < glaze.train_start < seen:
+            # Otherwise the training blocks are fresh: none of them calibrated the init.
+            raise ValueError(f"glaze fresh training blocks must start after the init's: {name}")
+        if dev_start < seen:
+            raise ValueError(f"glaze dev blocks must be ones the init never calibrated on: {name}")
+
+
+def glaze_dev_start(glaze: GlazeConfig) -> int:
+    """The first held-out block: `dev_start`, or the block right after the training blocks."""
+    if glaze.dev_start is not None:
+        return glaze.dev_start
+    return glaze.train_start + glaze.train_blocks

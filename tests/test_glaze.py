@@ -711,6 +711,21 @@ def test_data_split_and_order() -> None:
     assert blocks_digest(blocks) == blocks_digest([list(b) for b in blocks]) != blocks_digest(dev)
 
 
+def test_fresh_training_blocks_come_after_the_dev_blocks() -> None:
+    # B1b: train on blocks 160-279, which calibrated nothing, and hold out B1's 128-159.
+    glaze = GlazeConfig(train_start=160, train_blocks=120, dev_start=128, dev_blocks=32)
+    blocks = [[i] * 3 for i in range(285)]
+    train, dev = split_blocks(blocks, glaze)
+    assert train == blocks[160:280] and dev == blocks[128:160]
+    with pytest.raises(ValueError, match="280 needed"):
+        split_blocks(blocks[:279], glaze)
+    # A short block anywhere in either range is refused; outside them it does not matter.
+    short = blocks[:200] + [[1, 2]] + blocks[201:]
+    with pytest.raises(ValueError, match="length"):
+        split_blocks(short, glaze)
+    assert split_blocks(blocks[:280] + [[1, 2]], glaze) == (train, dev)
+
+
 # ---------------------------------------------------------------- guards and estimates
 
 

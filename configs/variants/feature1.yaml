@@ -79,6 +79,37 @@ variants:
       max_memory_fraction: 0.85
       max_train_minutes: 30
 
+  # B1b: as B1, but trained on 120 packed blocks AutoRound never saw (160-279), with B1's dev set.
+  # AutoRound's export has KL ~0.008 on its own 128 calibration blocks and 0.035 on held-out ones;
+  # B1, trained where the init is already that close, never lowered the held-out KL.
+  - name: glaze_v1b_w4a16_g128
+    method: glaze
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    init: autoround_w4a16_g128
+    glaze:
+      data: calibration
+      train_start: 160
+      train_blocks: 120
+      dev_start: 128
+      dev_blocks: 32
+      epochs: 4
+      tokens_per_step: 16384
+      micro_batch_tokens: 8192
+      flip_fractions: [0.00001, 0.00002, 0.00004]
+      momentum: 0.9
+      max_relative_change: 0.01
+      probe_steps: 8
+      warmup_steps: 3
+      train_norms: true
+      logit_chunk_tokens: 512
+      eval_every_steps: 16
+      seed: 42
+      max_memory_fraction: 0.85
+      max_train_minutes: 30
+
   # Sensitivity: GPTQ W4A16 g128 on one component of the language model, the rest left in BF16.
   # Targets name exactly the Linear layers the full GPTQ variant quantizes in that component; a
   # looser pattern would also catch the DeltaNet conv1d and norm, the q/k norms, or the vision

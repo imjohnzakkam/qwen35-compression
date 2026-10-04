@@ -49,9 +49,11 @@ def to_processor_messages(
             if part["type"] == "text":
                 parts.append({"type": "text", "text": part["text"]})
             elif part["type"] == "image_url":
-                url = part["image_url"]["url"] if isinstance(part["image_url"], dict) else part[
-                    "image_url"
-                ]
+                url = (
+                    part["image_url"]["url"]
+                    if isinstance(part["image_url"], dict)
+                    else part["image_url"]
+                )
                 images.append(decode_image(url, max_pixels))
                 parts.append({"type": "image"})
             else:
@@ -87,9 +89,9 @@ class Backend:
         text = self.processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False, **template_kwargs
         )
-        inputs = self.processor(
-            text=[text], images=images or None, return_tensors="pt"
-        ).to(self.device)
+        inputs = self.processor(text=[text], images=images or None, return_tensors="pt").to(
+            self.device
+        )
         max_tokens = int(payload.get("max_tokens") or 256)
         temperature = float(payload.get("temperature") or 0.0)
         sampling: dict = {"do_sample": temperature > 0}

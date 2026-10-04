@@ -7,7 +7,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from qwen35_compression.config import CalibrationConfig, GlazeConfig
+from qwen35_compression.config import CalibrationConfig, GlazeConfig, glaze_dev_start
 
 
 def calibration_blocks(processor: Any, calibration: CalibrationConfig) -> list[list[int]]:
@@ -22,15 +22,17 @@ def calibration_blocks(processor: Any, calibration: CalibrationConfig) -> list[l
 def split_blocks(
     blocks: Sequence[Sequence[int]], glaze: GlazeConfig
 ) -> tuple[list[list[int]], list[list[int]]]:
-    """The first `train_blocks` (the init's own calibration) and the next `dev_blocks`."""
-    needed = glaze.train_blocks + glaze.dev_blocks
+    """`train_blocks` from `train_start` and `dev_blocks` from the dev start (see GlazeConfig)."""
+    dev_start = glaze_dev_start(glaze)
+    train_end, dev_end = glaze.train_start + glaze.train_blocks, dev_start + glaze.dev_blocks
+    needed = max(train_end, dev_end)
     if len(blocks) < needed:
         raise ValueError(f"{len(blocks)} calibration blocks, {needed} needed for train and dev")
-    lengths = {len(block) for block in blocks[:needed]}
+    train = [list(block) for block in blocks[glaze.train_start : train_end]]
+    dev = [list(block) for block in blocks[dev_start:dev_end]]
+    lengths = {len(block) for block in train + dev}
     if len(lengths) != 1:
         raise ValueError(f"calibration blocks differ in length: {sorted(lengths)}")
-    train = [list(block) for block in blocks[: glaze.train_blocks]]
-    dev = [list(block) for block in blocks[glaze.train_blocks : needed]]
     return train, dev
 
 

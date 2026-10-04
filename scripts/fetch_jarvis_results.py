@@ -51,9 +51,7 @@ def verify_download(destination: Path, allow_pilot: bool = False) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Copy a completed JarvisLabs run into local logs")
     parser.add_argument("--instance-id", type=int, required=True)
-    parser.add_argument(
-        "--remote-path", default="/home/qwen35-compression/results/feature1/bf16"
-    )
+    parser.add_argument("--remote-path", default="/home/qwen35-compression/results/feature1/bf16")
     parser.add_argument("--local-root", type=Path, default=Path("logs/jarvis"))
     parser.add_argument("--allow-pilot", action="store_true")
     parser.add_argument("--dry-run", action="store_true")

@@ -13,9 +13,7 @@ from qwen35_compression.preflight import run_preflight, write_preflight
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate the Feature 1 runtime before GPU work")
     parser.add_argument("--config", type=Path, default=Path("configs/feature1.yaml"))
-    parser.add_argument(
-        "--profile", choices=("local", "gpu-text", "gpu-vision"), default="local"
-    )
+    parser.add_argument("--profile", choices=("local", "gpu-text", "gpu-vision"), default="local")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 

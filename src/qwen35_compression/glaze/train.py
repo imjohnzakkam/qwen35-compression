@@ -12,7 +12,12 @@ from typing import Any
 import torch
 from torch import nn
 
-from qwen35_compression.config import ExperimentConfig, GlazeConfig, VariantConfig
+from qwen35_compression.config import (
+    ExperimentConfig,
+    GlazeConfig,
+    VariantConfig,
+    glaze_dev_start,
+)
 from qwen35_compression.glaze.budget import check_memory, check_time, memory_estimate_gib
 from qwen35_compression.glaze.data import blocks_digest, epoch_order, groups
 from qwen35_compression.glaze.grid import GridDescent
@@ -505,7 +510,9 @@ def refine(
         },
         "data": {
             "source": glaze.data,
+            "train_start": glaze.train_start,
             "train_blocks": len(train),
+            "dev_start": glaze_dev_start(glaze),
             "dev_blocks": len(dev),
             "block_tokens": schedule.block_tokens,
             "train_sha256": blocks_digest(train),

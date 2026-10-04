@@ -111,9 +111,7 @@ def test_result_download_targets_local_logs() -> None:
 
 
 def test_download_verification_rejects_pilot(tmp_path: Path) -> None:
-    verify_download = runpy.run_path("scripts/fetch_jarvis_results.py")[
-        "verify_download"
-    ]
+    verify_download = runpy.run_path("scripts/fetch_jarvis_results.py")["verify_download"]
     (tmp_path / "run_manifest.json").write_text(
         json.dumps({"status": "passed", "research_result": False}), encoding="utf-8"
     )

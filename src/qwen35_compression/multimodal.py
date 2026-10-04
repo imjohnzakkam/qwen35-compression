@@ -59,9 +59,7 @@ def prepare_multimodal_calibration(
         revision=resolved_revision,
     )
     if len(dataset) < config.num_samples:
-        raise ValueError(
-            f"dataset has {len(dataset)} rows; {config.num_samples} were requested"
-        )
+        raise ValueError(f"dataset has {len(dataset)} rows; {config.num_samples} were requested")
 
     indices = random.Random(config.seed).sample(range(len(dataset)), config.num_samples)
     config.assets_dir.mkdir(parents=True, exist_ok=True)
@@ -107,8 +105,7 @@ def prepare_multimodal_calibration(
         )
 
     encoded = "".join(
-        json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
-        for record in records
+        json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records
     ).encode("utf-8")
     contract = {
         "dataset_id": source.dataset_id,
@@ -132,9 +129,7 @@ def prepare_multimodal_calibration(
     }
     config.path.parent.mkdir(parents=True, exist_ok=True)
     config.path.write_bytes(encoded)
-    config.lock_path.write_text(
-        json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    config.lock_path.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return lock
 
 
