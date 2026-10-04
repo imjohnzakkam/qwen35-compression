@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,9 @@ from qwen35_compression.glaze.quant_linear import GroupQuantLinear, unpack_int4
 LANGUAGE_MODEL_PREFIX = "model.language_model."
 # RMSNorm modules whose weights Glaze trains, matched by class name.
 NORM_CLASSES = frozenset({"Qwen3_5RMSNorm", "Qwen3_5RMSNormGated"})
+# Of those, the ones that scale by 1 + weight (zero-centered); the gated DeltaNet norm uses weight.
+ZERO_CENTERED_NORMS = frozenset({"Qwen3_5RMSNorm"})
+MASTER_SUFFIX = ".parametrizations.weight.original"
 QUANTIZATION_SUFFIXES = (".weight_packed", ".weight_scale", ".weight_shape")
 
 
@@ -174,6 +178,35 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
                     module, "weight", StorageCast(stored.dtype), unsafe=True
                 )
     return student
+
+
+def trainable_parameters(student: nn.Module) -> list[tuple[str, nn.Parameter, float]]:
+    """Each trainable tensor with its name and the offset of the multiplier it sets.
+
+    The multiplier is offset + value: a group scale is its own (0), a zero-centered norm weight
+    w scales by 1 + w (1).
+    """
+    offsets: dict[str, float] = {}
+    for name, module in student.named_modules():
+        if isinstance(module, GroupQuantLinear):
+            offsets[f"{name}.scales"] = 0.0
+        elif parametrize.is_parametrized(module, "weight"):
+            # Parametrizing swaps the class for a generated subclass; the norm's own is needed.
+            kind = parametrize.type_before_parametrizations(module).__name__
+            offsets[name + MASTER_SUFFIX] = 1.0 if kind in ZERO_CENTERED_NORMS else 0.0
+    trainable = []
+    for name, parameter in student.named_parameters():
+        if parameter.requires_grad:
+            if name not in offsets:
+                raise ValueError(f"unexpected trainable parameter {name}")
+            trainable.append((name, parameter, offsets[name]))
+    return trainable
+
+
+def family(name: str) -> str:
+    """A trainable tensor's name without its layer number, e.g. "layers.N.mlp.up_proj.scales"."""
+    name = name.removesuffix(MASTER_SUFFIX) + (".weight" if name.endswith(MASTER_SUFFIX) else "")
+    return re.sub(r"(^|\.)layers\.\d+\.", r"\1layers.N.", name)
 
 
 def trainable_state(student: nn.Module) -> dict[str, torch.Tensor]:

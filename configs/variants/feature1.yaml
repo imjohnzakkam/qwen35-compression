@@ -69,6 +69,7 @@ variants:
       micro_batch_tokens: 8192
       flip_fractions: [0.0001, 0.0004, 0.0016]
       momentum: 0.9
+      max_relative_change: 0.01
       probe_steps: 8
       warmup_steps: 3
       train_norms: true

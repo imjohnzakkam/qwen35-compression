@@ -102,6 +102,10 @@ class GlazeConfig:
     # picks one of the candidates.
     flip_fractions: tuple[float, ...] = (1e-4, 4e-4, 1.6e-3)
     momentum: float = 0.9
+    # No move may change the multiplier a value sets (a scale; 1 + w for Qwen3.5's RMSNorm) by
+    # more than this fraction of itself. Scale steps are at most 2^-7 (0.78%), so it binds on
+    # norm weights near w = -1, where one step can switch a channel on or off.
+    max_relative_change: float = 0.01
     probe_steps: int = 8
     warmup_steps: int = 3
     train_norms: bool = True
@@ -205,11 +209,7 @@ def load_config(path: str | Path) -> ExperimentConfig:
         )
     evaluation_raw = raw["evaluation"]
     evaluation = EvaluationConfig(
-        path=(
-            _resolve_path(evaluation_raw["path"], root)
-            if evaluation_raw.get("path")
-            else None
-        ),
+        path=(_resolve_path(evaluation_raw["path"], root) if evaluation_raw.get("path") else None),
         max_samples=evaluation_raw.get("max_samples"),
         max_new_tokens=int(evaluation_raw["max_new_tokens"]),
         seed=int(evaluation_raw["seed"]),
@@ -372,6 +372,8 @@ def _validate_glaze(
         raise ValueError(f"glaze flip fractions must be in (0, 1]: {name}")
     if not 0 <= glaze.momentum < 1:
         raise ValueError(f"glaze momentum must be in [0, 1): {name}")
+    if not 0 < glaze.max_relative_change <= 1:
+        raise ValueError(f"glaze max_relative_change must be in (0, 1]: {name}")
     if not 0 < glaze.max_memory_fraction <= 1 or glaze.max_train_minutes <= 0:
         raise ValueError(f"glaze memory fraction and time budget must be positive: {name}")
     block = calibration.max_sequence_length

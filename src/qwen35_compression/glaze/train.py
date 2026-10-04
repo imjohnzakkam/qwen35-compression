@@ -18,7 +18,11 @@ from qwen35_compression.glaze.data import blocks_digest, epoch_order, groups
 from qwen35_compression.glaze.grid import GridDescent
 from qwen35_compression.glaze.losses import DistillStats, distill_step
 from qwen35_compression.glaze.quant_linear import GroupQuantLinear
-from qwen35_compression.glaze.student import load_trainable_state, trainable_state
+from qwen35_compression.glaze.student import (
+    load_trainable_state,
+    trainable_parameters,
+    trainable_state,
+)
 
 # Measured training throughput on one A100 40 GB, for the dry-run estimate only: AutoRound's
 # 26 s per layer for 200 steps of 16,384 tokens scales to 7.6 minutes per million tokens.
@@ -110,7 +114,10 @@ class GlazeTrainer:
         if len(dtypes) != 1:
             raise ValueError(f"quantized layers store scales in several dtypes: {dtypes}")
         self.storage_dtype = dtypes.pop()
-        self.parameters = [p for p in student.parameters() if p.requires_grad]
+        # (name, parameter, offset): each value sets the multiplier offset + value.
+        self.trainable = trainable_parameters(student)
+        self.parameters = [parameter for _, parameter, _ in self.trainable]
+        self._names = {id(parameter): name for name, parameter, _ in self.trainable}
 
     @property
     def size(self) -> int:
@@ -120,8 +127,32 @@ class GlazeTrainer:
     def flips(self, fraction: float) -> int:
         return max(1, round(fraction * self.size))
 
-    def make_optimizer(self) -> GridDescent:
-        return GridDescent(self.parameters, self.storage_dtype, self.glaze.momentum)
+    def make_optimizer(
+        self, select: Callable[[str], bool] | None = None, guard: bool = True
+    ) -> GridDescent:
+        """GridDescent over the trainable tensors whose names pass `select` (default: all).
+
+        With `guard`, no move changes a multiplier by more than `max_relative_change`; without
+        it, only the stored value's own sign and zero are protected (B1's first two pilots).
+        """
+        chosen = [item for item in self.trainable if select is None or select(item[0])]
+        if not chosen:
+            raise ValueError("no trainable tensor passes the selection")
+        return GridDescent(
+            [parameter for _, parameter, _ in chosen],
+            self.storage_dtype,
+            self.glaze.momentum,
+            offsets=[offset for _, _, offset in chosen] if guard else None,
+            max_relative_change=self.glaze.max_relative_change if guard else math.inf,
+        )
+
+    def norm_moves(self, optimizer: GridDescent) -> int:
+        """How many of the optimizer's last moves were norm weights (the rest were scales)."""
+        return sum(
+            moved
+            for parameter, moved in zip(optimizer.parameters, optimizer.moved, strict=True)
+            if not self._names[id(parameter)].endswith(".scales")
+        )
 
     def _ids(self, blocks: Sequence[Sequence[int]], indices: Sequence[int]) -> torch.Tensor:
         return torch.tensor(
@@ -152,6 +183,20 @@ class GlazeTrainer:
             stats.merge(self._micro_batch(ids, float(ids.numel()), backward=False))
         return stats
 
+    def gradient(
+        self, blocks: Sequence[Sequence[int]], indices: Sequence[int], schedule: Schedule
+    ) -> DistillStats:
+        """The mean KL over the indexed blocks, with its gradient left in every `.grad`."""
+        for parameter in self.parameters:
+            parameter.grad = None
+        normalizer = float(len(indices) * schedule.block_tokens)
+        stats = DistillStats()
+        for micro in groups(indices, schedule.blocks_per_micro):
+            stats.merge(self._micro_batch(self._ids(blocks, micro), normalizer, backward=True))
+        if not math.isfinite(stats.kl):
+            raise FloatingPointError(f"non-finite training KL: {stats.kl}")
+        return stats
+
     def _step(
         self,
         optimizer: GridDescent,
@@ -161,13 +206,7 @@ class GlazeTrainer:
         flips: int,
     ) -> tuple[DistillStats, int]:
         """Gradients from one step's blocks, then up to `flips` grid moves."""
-        optimizer.zero_grad()
-        normalizer = float(len(indices) * schedule.block_tokens)
-        stats = DistillStats()
-        for micro in groups(indices, schedule.blocks_per_micro):
-            stats.merge(self._micro_batch(self._ids(blocks, micro), normalizer, backward=True))
-        if not math.isfinite(stats.kl):
-            raise FloatingPointError(f"non-finite training KL: {stats.kl}")
+        stats = self.gradient(blocks, indices, schedule)
         return stats, optimizer.step(flips)
 
     def _check_memory(self) -> None:
@@ -179,20 +218,32 @@ class GlazeTrainer:
             )
 
     def pilot(
-        self, blocks: Sequence[Sequence[int]], schedule: Schedule, steps: int, fraction: float
+        self,
+        blocks: Sequence[Sequence[int]],
+        schedule: Schedule,
+        steps: int,
+        fraction: float,
+        optimizer: GridDescent | None = None,
+        check: bool = True,
     ) -> list[float]:
-        """A few steps on one fixed batch: the KL must stay finite and fall below its start."""
+        """A few steps on one fixed batch: the KL must stay finite and fall below its start.
+
+        Without `check`, a KL that does not fall is reported rather than raised.
+        """
         if steps < 2:
             raise ValueError("a pilot needs at least 2 steps")
-        optimizer = self.make_optimizer()
+        optimizer = optimizer or self.make_optimizer()
         indices = list(range(schedule.blocks_per_step))
         losses = []
         for step in range(steps):
             stats, moved = self._step(optimizer, blocks, indices, schedule, self.flips(fraction))
             losses.append(stats.mean_kl)
             self._check_memory()
-            self.log(f"pilot step {step + 1}/{steps}: KL {losses[-1]:.6f}, moved {moved}")
-        if not min(losses[1:]) < losses[0]:
+            self.log(
+                f"pilot step {step + 1}/{steps}: KL {losses[-1]:.6f}, moved {moved} "
+                f"(norms {self.norm_moves(optimizer)})"
+            )
+        if check and not min(losses[1:]) < losses[0]:
             raise PilotFailed(f"pilot KL did not fall on a fixed batch: {losses}")
         return losses
 
@@ -263,7 +314,12 @@ class GlazeTrainer:
                         schedule.total_steps,
                         self.glaze.max_train_minutes,
                     )
-                entry: dict[str, Any] = {"step": step, "train_kl": stats.mean_kl, "moved": moved}
+                entry: dict[str, Any] = {
+                    "step": step,
+                    "train_kl": stats.mean_kl,
+                    "moved": moved,
+                    "moved_norms": self.norm_moves(optimizer),
+                }
                 if step % self.glaze.eval_every_steps == 0 or step == schedule.total_steps:
                     dev_stats = self.evaluate(dev, schedule)
                     entry["dev"] = dev_stats.summary()
@@ -273,7 +329,7 @@ class GlazeTrainer:
                 history.append(entry)
                 self.log(
                     f"step {step}/{schedule.total_steps}: train KL {stats.mean_kl:.6f}, "
-                    f"moved {moved}"
+                    f"moved {moved} (norms {entry['moved_norms']})"
                     + (f", dev KL {entry['dev']['mean_kl']:.6f}" if "dev" in entry else "")
                 )
         return FitResult(
@@ -348,43 +404,39 @@ def _require_glaze(variant: VariantConfig) -> GlazeConfig:
     return variant.glaze
 
 
-def refine(
-    config: ExperimentConfig,
-    variant: VariantConfig,
-    *,
-    output_dir: Path | None = None,
-    pilot_steps: int | None = None,
-    log: Callable[[str], None] = print,
-) -> tuple[Path, dict[str, Any]]:
-    """Train a Glaze variant from its init export and write the refined export.
+@dataclass
+class Setup:
+    """The teacher and the student of one Glaze variant, loaded and ready to train."""
 
-    With `pilot_steps`, only a few steps on one fixed batch run (they must lower the KL), and the
-    resulting export exists to check that the whole path, vLLM loading included, works.
-    """
-    from qwen35_compression.export import verify_export, write_export_manifest
+    trainer: GlazeTrainer
+    student: nn.Module
+    train: list[list[int]]
+    dev: list[list[int]]
+    schedule: Schedule
+    init_variant: VariantConfig
+    init_dir: Path
+    init_manifest: dict[str, Any]
+    revision: str
+
+
+def prepare(
+    config: ExperimentConfig, variant: VariantConfig, log: Callable[[str], None] = print
+) -> Setup:
+    """Verify the init export, load BF16 as the teacher and the export as the student."""
+    from qwen35_compression.export import verify_export
     from qwen35_compression.feature1 import require_calibration_lock
     from qwen35_compression.glaze.data import calibration_blocks, split_blocks
-    from qwen35_compression.glaze.export import write_refined_export
-    from qwen35_compression.glaze.student import (
-        LANGUAGE_MODEL_PREFIX,
-        build_student,
-        exported_tensors,
-        read_init_export,
-    )
+    from qwen35_compression.glaze.student import build_student, read_init_export
     from qwen35_compression.models import load_resolved_model, resolve_revision
 
     glaze = _require_glaze(variant)
     init_variant = config.variant(str(variant.init))
     init_dir = config.paths.outputs / init_variant.name
-    output_dir = output_dir or config.paths.outputs / variant.name
-    if output_dir.exists() and any(output_dir.iterdir()):
-        raise FileExistsError(f"refusing to overwrite non-empty export: {output_dir}")
     init_manifest = verify_export(init_dir, init_variant)
     if config.calibration.lock_path is not None:
         require_calibration_lock(config.calibration)
 
     torch.manual_seed(glaze.seed)
-    started = time.perf_counter()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
     revision = resolve_revision(config)
@@ -414,12 +466,42 @@ def refine(
     train, dev = split_blocks(blocks, glaze)
     schedule = make_schedule(glaze, config.calibration.max_sequence_length)
     trainer = GlazeTrainer(student, teacher, head_weight, glaze, log=log)
+    return Setup(
+        trainer, student, train, dev, schedule, init_variant, init_dir, init_manifest, revision
+    )
+
+
+def refine(
+    config: ExperimentConfig,
+    variant: VariantConfig,
+    *,
+    output_dir: Path | None = None,
+    pilot_steps: int | None = None,
+    log: Callable[[str], None] = print,
+) -> tuple[Path, dict[str, Any]]:
+    """Train a Glaze variant from its init export and write the refined export.
+
+    With `pilot_steps`, only a few steps on one fixed batch run (they must lower the KL), and the
+    resulting export exists to check that the whole path, vLLM loading included, works.
+    """
+    from qwen35_compression.export import write_export_manifest
+    from qwen35_compression.glaze.export import write_refined_export
+    from qwen35_compression.glaze.student import LANGUAGE_MODEL_PREFIX, exported_tensors
+
+    glaze = _require_glaze(variant)
+    output_dir = output_dir or config.paths.outputs / variant.name
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise FileExistsError(f"refusing to overwrite non-empty export: {output_dir}")
+    started = time.perf_counter()
+    setup = prepare(config, variant, log)
+    trainer, student, schedule = setup.trainer, setup.student, setup.schedule
+    train, dev, init_variant = setup.train, setup.dev, setup.init_variant
     record: dict[str, Any] = {
         "init": {
             "variant": init_variant.name,
             "method": init_variant.method,
-            "code_revision": init_manifest.get("code_revision"),
-            "files": {item["path"]: item["sha256"] for item in init_manifest["files"]},
+            "code_revision": setup.init_manifest.get("code_revision"),
+            "files": {item["path"]: item["sha256"] for item in setup.init_manifest["files"]},
         },
         "data": {
             "source": glaze.data,
@@ -458,13 +540,15 @@ def refine(
             }
         )
 
-    write_refined_export(init_dir, output_dir, exported_tensors(student, LANGUAGE_MODEL_PREFIX))
+    write_refined_export(
+        setup.init_dir, output_dir, exported_tensors(student, LANGUAGE_MODEL_PREFIX)
+    )
     peak = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else None
     manifest = write_export_manifest(
         output_dir,
         config,
         variant,
-        revision,
+        setup.revision,
         time.perf_counter() - started,
         peak,
         extra={"glaze": record},
