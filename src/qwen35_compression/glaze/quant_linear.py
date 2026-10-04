@@ -9,11 +9,11 @@ from torch import nn
 INT4_MIN, INT4_MAX = -8, 7
 
 
-def unpack_int4(packed: torch.Tensor, shape: tuple[int, int]) -> torch.Tensor:
-    """compressed-tensors' packed int32 words to int8 codes in [-8, 7]."""
+def unpack_int4(packed: torch.Tensor, shape: tuple[int, int], bits: int = 4) -> torch.Tensor:
+    """compressed-tensors' packed int32 words to int8 codes ([-8, 7] for the default 4 bits)."""
     from compressed_tensors.compressors.pack_quantized.helpers import unpack_from_int32
 
-    return unpack_from_int32(packed, 4, torch.Size(shape))
+    return unpack_from_int32(packed, bits, torch.Size(shape))
 
 
 def pack_int4(codes: torch.Tensor) -> torch.Tensor:
@@ -42,7 +42,9 @@ class GroupQuantLinear(nn.Module):
     at a time (see glaze.grid); `initial_scales` keeps the export's values for comparison.
     """
 
-    def __init__(self, codes: torch.Tensor, scales: torch.Tensor, group_size: int) -> None:
+    def __init__(
+        self, codes: torch.Tensor, scales: torch.Tensor, group_size: int, bits: int = 4
+    ) -> None:
         super().__init__()
         if codes.dtype is not torch.int8 or codes.ndim != 2:
             raise ValueError("codes must be a 2-D int8 tensor")
@@ -54,8 +56,9 @@ class GroupQuantLinear(nn.Module):
                 f"scales must be floating point with shape {(rows, columns // group_size)}, "
                 f"got {scales.dtype} {tuple(scales.shape)}"
             )
-        if int(codes.min()) < INT4_MIN or int(codes.max()) > INT4_MAX:
-            raise ValueError("codes are outside the INT4 range [-8, 7]")
+        low, high = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+        if int(codes.min()) < low or int(codes.max()) > high:
+            raise ValueError(f"codes are outside the INT{bits} range [{low}, {high}]")
         # Scales may be negative: AutoRound's symmetric INT4 uses the full [-8, 7] range, giving
         # each group the sign of its largest-magnitude weight. Grid steps keep the sign.
         if not bool(torch.isfinite(scales).all()):
@@ -63,6 +66,7 @@ class GroupQuantLinear(nn.Module):
         self.in_features = columns
         self.out_features = rows
         self.group_size = group_size
+        self.bits = bits
         self.storage_dtype = scales.dtype
         self.register_buffer("codes", codes.contiguous())
         self.register_buffer("initial_scales", scales.detach().clone().contiguous())

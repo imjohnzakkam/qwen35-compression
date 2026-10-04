@@ -20,10 +20,10 @@ BLOCK = 16
 VOCAB = 96
 
 
-def tiny_config():
+def tiny_config(**overrides):
     from transformers import Qwen3_5TextConfig
 
-    return Qwen3_5TextConfig(
+    settings = dict(
         vocab_size=VOCAB,
         hidden_size=64,
         intermediate_size=128,
@@ -42,14 +42,26 @@ def tiny_config():
         # Wider than the default 0.02, so logits are peaked and 4-bit error shows in the KL.
         initializer_range=0.1,
     )
+    settings.update(overrides)
+    return Qwen3_5TextConfig(**settings)
 
 
-def tiny_teacher(seed: int = 0) -> nn.Module:
+# Every Linear input a multiple of 128, as Glaze v2's 4-bit g128 base needs.
+WIDE = dict(
+    hidden_size=128,
+    intermediate_size=256,
+    head_dim=64,
+    linear_key_head_dim=32,
+    linear_value_head_dim=32,
+)
+
+
+def tiny_teacher(seed: int = 0, **overrides) -> nn.Module:
     """A frozen BF16 text model with non-trivial norm weights."""
     from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextModel
 
     torch.manual_seed(seed)
-    model = Qwen3_5TextModel(tiny_config()).to(torch.bfloat16)
+    model = Qwen3_5TextModel(tiny_config(**overrides)).to(torch.bfloat16)
     with torch.no_grad():
         for name, parameter in model.named_parameters():
             if name.endswith("norm.weight"):
