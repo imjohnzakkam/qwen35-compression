@@ -21,6 +21,22 @@ def fetch_published(repo: str) -> tuple[Path, str]:
     return Path(path), revision
 
 
+def copy_published(repo: str, export_dir: Path) -> str:
+    """Copy a published export's files (not the Hub cache's links) into export_dir, which must
+    not exist yet; return the repo revision."""
+    import shutil
+
+    snapshot, revision = fetch_published(repo)
+    staging = export_dir.with_name(export_dir.name + ".partial")
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    for path in sorted(snapshot.iterdir()):
+        if path.is_file():
+            shutil.copyfile(path, staging / path.name)
+    staging.rename(export_dir)
+    return revision
+
+
 def fetch_traces(destination: Path) -> str:
     """BF16's lm-eval answers from the published evaluation record; return its revision."""
     from huggingface_hub import HfApi, snapshot_download

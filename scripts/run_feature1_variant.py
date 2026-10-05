@@ -165,7 +165,9 @@ def run(
     if limit:
         vision_command.extend(("--limit", str(limit)))
     if args.from_hub and not args.dry_run and not export_dir.exists():
-        fetch_export(args.from_hub, export_dir)
+        from qwen35_compression.drift import copy_published
+
+        copy_published(args.from_hub, export_dir)
     export_exists = export_dir.is_dir() and any(export_dir.iterdir())
 
     if args.dry_run:
@@ -264,22 +266,6 @@ def run(
         raise
     finally:
         write_json(output / "run_manifest.json", manifest)
-
-
-def fetch_export(repo: str, export_dir: Path) -> None:
-    """Copy a published export (its files, not the Hub's cache links) into export_dir."""
-    import shutil
-
-    from qwen35_compression.drift import fetch_published
-
-    snapshot, _ = fetch_published(repo)
-    staging = export_dir.with_name(export_dir.name + ".partial")
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
-    for path in sorted(snapshot.iterdir()):
-        if path.is_file():
-            shutil.copyfile(path, staging / path.name)
-    staging.rename(export_dir)
 
 
 if __name__ == "__main__":

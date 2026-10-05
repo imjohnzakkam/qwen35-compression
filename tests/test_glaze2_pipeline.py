@@ -165,6 +165,18 @@ def test_gate_needs_fifteen_percent_without_hurting_chat_or_size() -> None:
     assert evaluate_script.gate(_scores(0.040, 0.04, 0.04, 0.030), too_big)["decision"] == "stop"
 
 
+def test_gate_on_the_4b_scores_autoround_and_glaze2_alone() -> None:
+    scores = _scores(0.040, 0.04, 0.04, 0.030)
+    pair = {name: scores[name] for name in (evaluate_script.BASELINE, evaluate_script.FULL)}
+    result = evaluate_script.gate(pair, {name: 100 for name in pair})
+    assert result["decision"] == "go" and result["in_domain_reduction"] == pytest.approx(0.25)
+    assert result["ablations"] == {"H4_all (D vs A)": pytest.approx(0.25)}
+    assert (result["baseline"], result["candidate"]) == (
+        evaluate_script.BASELINE,
+        evaluate_script.FULL,
+    )
+
+
 # ---------------------------------------------------------------- end to end, tiny
 
 
@@ -305,3 +317,39 @@ def test_autoround_reads_glaze2_block_files(tmp_path: Path) -> None:
     assert batch["attention_mask"].tolist() == [[1, 1, 1]]
     with pytest.raises(ValueError, match="batch size 1"):
         collate([dataset[0], dataset[1]])
+
+
+def test_4b_driver_pilots_then_gates_before_the_suite() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/run_glaze2_4b.py", "--dry-run", "--code-revision", "abc"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    steps = json.loads(result.stdout)
+    assert list(steps) == [
+        "answers",
+        *(f"{stage}:{name}" for stage in ("pilot", "full") for name in STAGE_STEPS),
+        "drift",
+        "suite",
+    ]
+    pilot, full = steps["pilot:evaluate"], steps["full:evaluate"]
+    assert pilot[pilot.index("--variants") + 1] == "autoround_w4a16_g128,glaze2_pilot_w4a16_g128"
+    assert full[full.index("--variants") + 1] == "autoround_w4a16_g128,glaze2_w4a16_g128"
+    blocks = steps["full:blocks"]
+    assert blocks[blocks.index("--output-dir") + 1].endswith("outputs/feature1/glaze2/data")
+    assert steps["drift"][steps["drift"].index("--variants") + 1] == "glaze2_w4a16_g128"
+    assert "--skip-bf16" in steps["drift"]
+    suite = steps["suite"]
+    assert suite[suite.index("--variant") + 1] == "glaze2_w4a16_g128"
+    assert "--skip-bootstrap" in suite and "--pilot-limit" in suite
+    # The 4B spends every byte the 8-bit vision tower frees, and the pilot only cuts iterations.
+    config = load_config("configs/feature1.yaml")
+    full_settings = config.variant("glaze2_w4a16_g128").glaze2
+    pilot_settings = config.variant("glaze2_pilot_w4a16_g128").glaze2
+    assert full_settings.budget_fraction is None and full_settings.max_iters == 400
+    assert pilot_settings.max_iters < full_settings.max_iters
+    assert pilot_settings.byte_target == full_settings.byte_target == "autoround_w4a16_g128"
+
+
+STAGE_STEPS = ("blocks", "quantize", "evaluate", "vllm_check")

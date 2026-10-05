@@ -709,8 +709,6 @@ def test_variant_runner_scores_a_published_export_without_quantizing() -> None:
 
 
 def test_published_export_is_copied_as_files_and_verifies(tmp_path, monkeypatch) -> None:
-    import importlib.util
-
     import qwen35_compression.drift as drift
     from qwen35_compression.export import MANIFEST_NAME, inventory, verify_export
 
@@ -732,14 +730,8 @@ def test_published_export_is_copied_as_files_and_verifies(tmp_path, monkeypatch)
     (snapshot / MANIFEST_NAME).symlink_to(blobs / MANIFEST_NAME)
     monkeypatch.setattr(drift, "fetch_published", lambda repo: (snapshot, "rev"))
 
-    spec = importlib.util.spec_from_file_location(
-        "run_feature1_variant", "scripts/run_feature1_variant.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    monkeypatch.syspath_prepend("scripts")
-    spec.loader.exec_module(module)
     export_dir = tmp_path / "outputs" / "autoround_w4a16_g128"
-    module.fetch_export("lazybrick/x", export_dir)
+    assert drift.copy_published("lazybrick/x", export_dir) == "rev"
 
     assert not any(path.is_symlink() for path in export_dir.iterdir())
     assert not export_dir.with_name(export_dir.name + ".partial").exists()
