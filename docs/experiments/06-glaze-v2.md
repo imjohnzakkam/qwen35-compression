@@ -171,6 +171,10 @@ BF16 in parentheses.
 | TextVQA (val) | 82.8 | 81.7 | 81.8 | 82.5 | 82.2 (−0.6) |
 | Checkpoint size | 9.32 GB | 3.78 GB | 3.79 GB | 3.80 GB | 3.80 GB |
 
+![Benchmark scores of the 4-bit variants, each axis relative to BF16](../figures/benchmark-radar.png)
+
+The chart is drawn by `scripts/plot_benchmark_radar.py` from the scores above.
+
 Reasoning panel, change from BF16 and from AutoRound on the same questions (paired bootstrap,
 2,000 resamples):
 
