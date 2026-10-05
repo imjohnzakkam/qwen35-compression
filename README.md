@@ -38,6 +38,14 @@ variant but Glaze v2, which stores it at 8 bits.
   quantizes from BF16 on BF16's own answers to in-domain prompts, learns its rounding against a
   Fisher-weighted objective, and spends the bytes an 8-bit vision tower frees on the most
   sensitive layers ([record](docs/experiments/06-glaze-v2.md)).
+- **Most of that MATH-500 gain is the calibration data, not the quantizer.** AutoRound tuned on
+  Glaze v2's in-domain blocks reaches 80.2 (+7.0 over its UltraChat-calibrated export, paired
+  interval +2.8 to +11.0). Calibrating on the model's own answers to in-domain prompts is known to
+  help ([Williams et al., 2025](https://arxiv.org/abs/2410.17170);
+  [Liu et al., 2025](https://arxiv.org/abs/2504.04823)). The baselines above were calibrated on
+  general chat data, so the MATH-500 column compares calibration domains as well as methods. Glaze
+  v2's own stages add about 3 points on MATH-500 (interval −0.2 to +6.2) and 3.5 on IFEval (+0.7 to
+  +6.3), where the data alone does not help ([record](docs/experiments/07-glaze-controls.md)).
 
 Details are in [`docs/`](docs/README.md): the evaluation protocol, one record per experiment, and
 engineering notes.
@@ -79,6 +87,10 @@ uv run python scripts/panel_scores.py --run bf16=results/feature1/bf16 \
 # Glaze v2 on the 4B: BF16 answers, a pilot, quantization, a held-out gate against AutoRound's
 # published export, drift scores and the full suite (one 40 GB GPU)
 uv run python scripts/run_glaze2_4b.py
+
+# Glaze v2's controls: AutoRound on Glaze v2's calibration data, and AutoRound's own mixed
+# precision (AutoScheme) at Glaze v2's budget; MATH-500, IFEval and validation KL (one 40 GB GPU)
+uv run python scripts/run_glaze_controls.py
 
 # Drift study: token-level divergence from BF16, by position and by component
 uv run python scripts/run_drift_study.py --pilot-limit 20

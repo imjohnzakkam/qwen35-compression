@@ -93,7 +93,10 @@ The full control did not run, for two reasons in the run scripts:
 - **Most of Glaze v2's MATH-500 gain is its calibration data.** With nothing else changed,
   AutoRound on Glaze v2's blocks gains 7.0 of the 10.0 points, and its in-domain KL falls 42%. The
   data is in-domain by design (MATH training problems answered by BF16 itself), so this gain is
-  domain adaptation, not a better quantizer.
+  domain adaptation, not a better quantizer. It matches prior work: calibrating on a model's own
+  generations ([Williams et al., 2025](https://arxiv.org/abs/2410.17170)), and for reasoning models
+  on their own answers to math problems, which gained GPTQ 9.8 points over WikiText2
+  ([Liu et al., 2025](https://arxiv.org/abs/2504.04823)).
 - **The data alone does not help outside its domain.** Chat KL is unchanged (0.0440 against 0.0435),
   and IFEval is 1.3 points lower than AutoRound's (not significant).
 - **Glaze v2's own stages add a smaller, broader gain.** Over the data control they add 3.0 points
