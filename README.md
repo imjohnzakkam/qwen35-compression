@@ -26,6 +26,8 @@ variant but Glaze v2, which stores it at 8 bits.
 | TextVQA (val) | 82.8 | 82.2 | 81.7 | 81.8 | 82.5 | 82.2 |
 | Checkpoint size | 9.32 GB | 5.51 GB | 3.78 GB | 3.79 GB | 3.80 GB | 3.80 GB |
 
+![Benchmark scores of the 4-bit variants, each axis relative to BF16](docs/figures/benchmark-radar.png)
+
 - **INT8 W8A8 is effectively lossless.**
 - **Uniform 4-bit weights hold short answers but lose long reasoning** (GPTQ, AWQ, AutoRound:
   MATH-500 −7.6 to −10.2, MMMU −2.7 to −4.7), much of it answers that loop until the token limit.
