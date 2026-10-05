@@ -3,18 +3,24 @@
 
 from __future__ import annotations
 
-import argparse
-import json
-import os
-import subprocess
 import sys
-from pathlib import Path
 
-import _bootstrap  # noqa: F401
+# The GPU image's base Python ships brotlicffi, which breaks httpx downloads from the Hub
+# (run_drift_study.py); hidden before httpx loads.
+for _name in ("brotli", "brotlicffi"):
+    sys.modules.setdefault(_name, None)
 
-from qwen35_compression.config import ExperimentConfig, VariantConfig, load_config
-from qwen35_compression.export import verify_export
-from qwen35_compression.feature1 import (
+import argparse  # noqa: E402
+import json  # noqa: E402
+import os  # noqa: E402
+import subprocess  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import _bootstrap  # noqa: E402, F401
+
+from qwen35_compression.config import ExperimentConfig, VariantConfig, load_config  # noqa: E402
+from qwen35_compression.export import verify_export  # noqa: E402
+from qwen35_compression.feature1 import (  # noqa: E402
     EVALUATOR_ENV,
     FLA_METHODS,
     FLA_VERSION,
@@ -28,9 +34,9 @@ from qwen35_compression.feature1 import (
     suite_record,
     vision_protocol,
 )
-from qwen35_compression.io import write_json
-from qwen35_compression.models import resolve_revision
-from qwen35_compression.provenance import git_revision
+from qwen35_compression.io import write_json  # noqa: E402
+from qwen35_compression.models import resolve_revision  # noqa: E402
+from qwen35_compression.provenance import git_revision  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -62,6 +68,12 @@ def main() -> None:
         "--skip-bootstrap",
         action="store_true",
         help="Reuse evaluator environments already built on this machine",
+    )
+    parser.add_argument(
+        "--from-hub",
+        metavar="REPO",
+        help="Score this published Kiln export instead of quantizing (copied into the outputs "
+        "directory; its compression manifest must name the variant)",
     )
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
@@ -152,6 +164,10 @@ def run(
     vision_command[0] = str(vision_python)
     if limit:
         vision_command.extend(("--limit", str(limit)))
+    if args.from_hub and not args.dry_run and not export_dir.exists():
+        from qwen35_compression.drift import copy_published
+
+        copy_published(args.from_hub, export_dir)
     export_exists = export_dir.is_dir() and any(export_dir.iterdir())
 
     if args.dry_run:
@@ -161,14 +177,15 @@ def run(
                     "variant": variant.name,
                     "method": variant.method,
                     "pilot_limit": args.pilot_limit,
+                    "from_hub": args.from_hub,
                     "export_dir": str(export_dir),
                     "bootstrap": None if args.skip_bootstrap else bootstrap,
                     "text_preflight": text_preflight,
                     "vision_preflight": None if args.text_only else vision_preflight,
-                    "quantize": None if export_exists else quantize_command,
+                    "quantize": None if export_exists or args.from_hub else quantize_command,
                     "flash_linear_attention": (
                         fla_install_command(sys.executable)
-                        if variant.method in FLA_METHODS and not export_exists
+                        if variant.method in FLA_METHODS and not (export_exists or args.from_hub)
                         else None
                     ),
                     "benchmark_suite": suite_record(suite),
@@ -207,6 +224,7 @@ def run(
         "config_digest": config.digest,
         "benchmark_suite": suite_record(suite),
         "export_dir": str(export_dir),
+        "from_hub": args.from_hub,
         "scope": scope,
         "vision_protocol": None if args.text_only else vision_protocol(suite),
         "limit": limit,

@@ -1,0 +1,72 @@
+# Pilot of phase 1: the same variants on 16 calibration and 8 held-out blocks, 10 iterations.
+variants:
+  - name: bf16
+    method: bf16
+
+  # A: AutoRound as the 4B baseline is configured (128 packed ultrachat blocks).
+  - name: autoround_w4a16_g128
+    method: autoround
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: &text_calibration_ignore
+      - lm_head
+      - "re:.*visual.*"
+      - "re:.*embed_tokens$"
+    calibration_samples: 16
+    autoround_iters: 10
+
+  # B: AutoRound on Glaze v2's in-domain blocks (BF16's own answers): the data effect alone.
+  - name: autoround_glaze2_data_w4a16_g128
+    method: autoround
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    calibration_blocks: outputs/glaze2_proxy_pilot/data/calibration.jsonl
+    calibration_samples: 16
+    autoround_iters: 10
+
+  # C: Glaze v2's rounding on the same blocks, every Linear at 4-bit g128, vision tower in BF16.
+  - name: glaze2_uniform_w4a16_g128
+    method: glaze2
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    glaze2: &glaze2_settings
+      calibration_blocks: outputs/glaze2_proxy_pilot/data/calibration.jsonl
+      held_out_blocks: outputs/glaze2_proxy_pilot/data/held_out.jsonl
+      byte_target: autoround_w4a16_g128
+      allocate: false
+      margin_bytes: 2000000
+      blocks_per_batch: 8
+      max_iters: 10
+      min_iters: 5
+      eval_every: 5
+      lr: 0.005
+      fisher_chunk_tokens: 512
+      seed: 42
+
+  # D: Glaze v2 in full: C plus the byte-neutral allocation (vision tower at 8 bits).
+  - name: glaze2_w4a16_g128
+    method: glaze2
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    glaze2:
+      calibration_blocks: outputs/glaze2_proxy_pilot/data/calibration.jsonl
+      held_out_blocks: outputs/glaze2_proxy_pilot/data/held_out.jsonl
+      byte_target: autoround_w4a16_g128
+      allocate: true
+      # The 4B's allocation budget as a share of its language model (0.8B alone: 0.374).
+      budget_fraction: 0.176
+      margin_bytes: 2000000
+      blocks_per_batch: 8
+      max_iters: 10
+      min_iters: 5
+      eval_every: 5
+      lr: 0.005
+      fisher_chunk_tokens: 512
+      seed: 42

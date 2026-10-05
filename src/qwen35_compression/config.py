@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-ALLOWED_METHODS = {"bf16", "int8", "gptq", "awq", "autoround", "mixed", "glaze"}
+ALLOWED_METHODS = {"bf16", "int8", "gptq", "awq", "autoround", "mixed", "glaze", "glaze2"}
 # Exports Glaze can start from: symmetric INT4 group-quantized weights in compressed-tensors.
 GLAZE_INIT_METHODS = {"gptq", "autoround"}
 GLAZE_DATA = {"calibration"}
@@ -123,6 +123,31 @@ class GlazeConfig:
 
 
 @dataclass(frozen=True)
+class Glaze2Config:
+    """Glaze v2: quantize from BF16 with in-domain calibration blocks, a byte-budgeted precision
+    allocation and sensitivity-weighted block reconstruction (see qwen35_compression.glaze2)."""
+
+    calibration_blocks: Path
+    held_out_blocks: Path
+    # The variant whose export's size is the byte budget (AutoRound's, at equal size).
+    byte_target: str
+    # False: every language-model Linear at 4-bit g128 (no allocation; the vision tower stays BF16).
+    allocate: bool = True
+    # Cap on the allocation's extra bytes, as a fraction of the language model's 4-bit g128 bytes.
+    # A proxy sets the target model's ratio (Qwen3.5-4B: 0.176), since a smaller model's vision
+    # tower frees a larger share (0.8B: 0.374) and would overstate what allocation buys.
+    budget_fraction: float | None = None
+    margin_bytes: int = 2_000_000
+    blocks_per_batch: int = 8
+    max_iters: int = 400
+    min_iters: int = 50
+    eval_every: int = 25
+    lr: float = 5e-3
+    fisher_chunk_tokens: int = 512
+    seed: int = 42
+
+
+@dataclass(frozen=True)
 class VariantConfig:
     name: str
     method: str
@@ -138,6 +163,11 @@ class VariantConfig:
     # Glaze: the variant whose export it refines, and its training settings.
     init: str | None = None
     glaze: GlazeConfig | None = None
+    # AutoRound: packed calibration blocks to use instead of the configured calibration set.
+    calibration_blocks: Path | None = None
+    # AutoRound: tuning steps per block (its default, 200; a pilot only checks the plumbing).
+    autoround_iters: int = 200
+    glaze2: Glaze2Config | None = None
 
 
 @dataclass(frozen=True)
@@ -163,6 +193,24 @@ class ExperimentConfig:
 def _resolve_path(value: str, root: Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else (root / path).resolve()
+
+
+def _glaze2_config(raw: Any, variant: str, root: Path) -> Glaze2Config | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"glaze2 settings must be a mapping: {variant}")
+    unknown = sorted(set(raw) - set(Glaze2Config.__dataclass_fields__))
+    if unknown:
+        raise ValueError(f"unknown glaze2 settings for {variant}: {unknown}")
+    values = dict(raw)
+    for key in ("calibration_blocks", "held_out_blocks"):
+        if key not in values:
+            raise ValueError(f"glaze2 settings need {key}: {variant}")
+        values[key] = _resolve_path(values[key], root)
+    if "byte_target" not in values:
+        raise ValueError(f"glaze2 settings need byte_target: {variant}")
+    return Glaze2Config(**values)
 
 
 def _glaze_config(raw: Any, variant: str) -> GlazeConfig | None:
@@ -260,6 +308,13 @@ def load_config(path: str | Path) -> ExperimentConfig:
             calibration_samples=item.get("calibration_samples"),
             init=item.get("init"),
             glaze=_glaze_config(item.get("glaze"), item["name"]),
+            calibration_blocks=(
+                _resolve_path(item["calibration_blocks"], root)
+                if item.get("calibration_blocks")
+                else None
+            ),
+            autoround_iters=int(item.get("autoround_iters", 200)),
+            glaze2=_glaze2_config(item.get("glaze2"), item["name"], root),
         )
         for item in variants_raw
     )
@@ -327,10 +382,48 @@ def _validate(
             raise ValueError(f"mixed variant requires groups: {variant.name}")
         if variant.method != "mixed" and variant.groups:
             raise ValueError(f"only mixed variants may define groups: {variant.name}")
+        if variant.calibration_blocks is not None and variant.method != "autoround":
+            raise ValueError(f"only autoround variants may set calibration_blocks: {variant.name}")
+        if variant.autoround_iters != 200 and variant.method != "autoround":
+            raise ValueError(f"only autoround variants may set autoround_iters: {variant.name}")
+        if variant.autoround_iters <= 0:
+            raise ValueError(f"autoround_iters must be positive: {variant.name}")
+        if (variant.method == "glaze2") != (variant.glaze2 is not None):
+            raise ValueError(f"glaze2 settings belong to glaze2 variants only: {variant.name}")
+        if variant.method == "glaze2":
+            _validate_glaze2(variant, {v.name: v for v in variants})
         if variant.method == "glaze":
             _validate_glaze(variant, {item.name: item for item in variants}, calibration)
         elif variant.init is not None or variant.glaze is not None:
             raise ValueError(f"only glaze variants may set init or glaze: {variant.name}")
+
+
+def _validate_glaze2(variant: VariantConfig, by_name: dict[str, VariantConfig]) -> None:
+    name, settings = variant.name, variant.glaze2
+    assert settings is not None
+    if (variant.scheme, variant.bits, variant.group_size) != ("W4A16", 4, 128):
+        raise ValueError(f"glaze2 starts from W4A16 g128: {name}")
+    target = by_name.get(settings.byte_target)
+    if target is None or target.method != "autoround":
+        raise ValueError(f"glaze2 byte_target must be a configured autoround variant: {name}")
+    if variant.ignore != target.ignore:
+        raise ValueError(f"glaze2 must quantize the same layers as its byte target: {name}")
+    counts = {
+        "blocks_per_batch": settings.blocks_per_batch,
+        "max_iters": settings.max_iters,
+        "min_iters": settings.min_iters,
+        "eval_every": settings.eval_every,
+        "fisher_chunk_tokens": settings.fisher_chunk_tokens,
+    }
+    for key, value in counts.items():
+        if value <= 0:
+            raise ValueError(f"glaze2 {key} must be positive: {name}")
+    if settings.min_iters > settings.max_iters or not 0 < settings.lr < 1:
+        raise ValueError(f"glaze2 iterations or learning rate out of range: {name}")
+    if settings.margin_bytes < 0:
+        raise ValueError(f"glaze2 margin_bytes must not be negative: {name}")
+    if settings.budget_fraction is not None and not 0 < settings.budget_fraction <= 1:
+        raise ValueError(f"glaze2 budget_fraction must be in (0, 1]: {name}")
 
 
 def _validate_glaze(

@@ -1,0 +1,56 @@
+{
+  "path": "data/glaze2/prompts.jsonl",
+  "sha256": "d4ab56bc553a2928434e988a4e4806dd8208e7ed38456a33fa5a52427df649ff",
+  "prompts": 4419,
+  "seed": 42,
+  "ngram": 13,
+  "sources": {
+    "math_train": {
+      "repo": "EleutherAI/hendrycks_math",
+      "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3"
+    },
+    "math500": {
+      "repo": "HuggingFaceH4/MATH-500",
+      "revision": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be"
+    },
+    "mmlu_pro": {
+      "repo": "TIGER-Lab/MMLU-Pro",
+      "revision": "b189ec765aa7ed75c8acfea42df31fdae71f97be"
+    },
+    "arc": {
+      "repo": "allenai/ai2_arc",
+      "revision": "210d026faf9955653af8916fad021475a3f00453"
+    },
+    "sciq": {
+      "repo": "allenai/sciq",
+      "revision": "2c94ad3e1aafab77146f384e23536f97a4849815"
+    },
+    "chat": {
+      "repo": "HuggingFaceH4/ultrachat_200k",
+      "revision": "8049631c405ae6576f93f445c6b8166f76f5505a"
+    }
+  },
+  "counts": {
+    "math_train": {
+      "pool": 7500,
+      "removed": 172,
+      "kept": 1600
+    },
+    "arc": {
+      "pool": 1119,
+      "removed": 0,
+      "kept": 1119
+    },
+    "sciq": {
+      "pool": 11679,
+      "removed": 1,
+      "kept": 1100
+    },
+    "chat": {
+      "pool": 1200,
+      "removed": 0,
+      "kept": 600
+    }
+  },
+  "chat_skip": 20000
+}

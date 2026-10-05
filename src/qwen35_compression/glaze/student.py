@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +35,11 @@ class InitExport:
     quantized: tuple[str, ...]
     # Tensors without the language-model prefix; the embedding is left out (the teacher's is used).
     tensors: dict[str, torch.Tensor]
+    # Per quantized module: (bits, group size). One entry per module even for a single group.
+    schemes: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+    def scheme(self, name: str) -> tuple[int, int]:
+        return self.schemes.get(name, (4, self.group_size))
 
 
 def init_group_size(config_json: dict[str, Any]) -> int:
@@ -63,11 +68,53 @@ def init_group_size(config_json: dict[str, Any]) -> int:
     return int(weights["group_size"])
 
 
-def read_init_export(directory: Path, prefix: str = LANGUAGE_MODEL_PREFIX) -> InitExport:
+def export_schemes(
+    config_json: dict[str, Any], names: tuple[str, ...], prefix: str = LANGUAGE_MODEL_PREFIX
+) -> dict[str, tuple[int, int]]:
+    """(bits, group size) of each module of a symmetric INT, weight-only export, whose groups
+    target exact module names or the `Linear` class (several groups allowed, as Glaze v2 writes)."""
+    quantization = config_json.get("quantization_config") or {}
+    if (
+        quantization.get("quant_method") != "compressed-tensors"
+        or quantization.get("format") != "pack-quantized"
+    ):
+        raise ValueError("Glaze needs a pack-quantized compressed-tensors export")
+    by_name: dict[str, tuple[int, int]] = {}
+    by_class: tuple[int, int] | None = None
+    for group in (quantization.get("config_groups") or {}).values():
+        weights = group.get("weights") or {}
+        if (
+            weights.get("type") != "int"
+            or weights.get("symmetric") is not True
+            or weights.get("strategy") != "group"
+            or not weights.get("group_size")
+            or group.get("input_activations") is not None
+        ):
+            raise ValueError("Glaze needs symmetric INT group-quantized, weight-only groups")
+        scheme = (int(weights["num_bits"]), int(weights["group_size"]))
+        for target in group.get("targets") or []:
+            if target == "Linear":
+                by_class = scheme
+            else:
+                by_name[target] = scheme
+    schemes = {}
+    for name in names:
+        scheme = by_name.get(prefix + name, by_class)
+        if scheme is None:
+            raise ValueError(f"no quantization group targets {prefix + name}")
+        schemes[name] = scheme
+    return schemes
+
+
+def read_init_export(
+    directory: Path, prefix: str = LANGUAGE_MODEL_PREFIX, allow_mixed: bool = False
+) -> InitExport:
+    """An export's language-model tensors. Glaze v1 needs one 4-bit group (the default); Glaze
+    v2's evaluation reads mixed exports with `allow_mixed`."""
     from safetensors import safe_open
 
     config_json = json.loads((directory / "config.json").read_text(encoding="utf-8"))
-    group_size = init_group_size(config_json)
+    group_size = 0 if allow_mixed else init_group_size(config_json)
     files = sorted(directory.glob("*.safetensors"))
     if not files:
         raise FileNotFoundError(f"no safetensors files in {directory}")
@@ -90,7 +137,8 @@ def read_init_export(directory: Path, prefix: str = LANGUAGE_MODEL_PREFIX) -> In
                 raise ValueError(f"init export has {name}.weight_packed but no {name}{suffix}")
         if name + ".weight" in tensors:
             raise ValueError(f"init export has both packed and dense weights for {name}")
-    return InitExport(directory, group_size, quantized, tensors)
+    schemes = export_schemes(config_json, quantized, prefix)
+    return InitExport(directory, group_size, quantized, tensors, schemes)
 
 
 def layer_shape(init: InitExport, name: str) -> tuple[int, int]:
@@ -138,9 +186,10 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
         parent = student.get_submodule(parent_name) if parent_name else student
         # Unpacked where the model lives: on a GPU this is much faster than on the CPU.
         packed = init.tensors[name + ".weight_packed"].to(device)
-        codes = unpack_int4(packed, layer_shape(init, name))
+        bits, group = init.scheme(name)
+        codes = unpack_int4(packed, layer_shape(init, name), bits)
         scales = init.tensors[name + ".weight_scale"].to(device)
-        setattr(parent, child, GroupQuantLinear(codes, scales, init.group_size))
+        setattr(parent, child, GroupQuantLinear(codes, scales, group, bits))
 
     expected = {key for key in init.tensors if not key.endswith(QUANTIZATION_SUFFIXES)}
     scale_ids = {
@@ -154,12 +203,17 @@ def build_student(teacher: nn.Module, init: InitExport, train_norms: bool = True
             source = init.tensors.get(name)
             if source is None:
                 raise ValueError(f"init export has no tensor for the student's {name}")
-            if source.shape != parameter.shape or source.dtype != parameter.dtype:
+            # A tensor the export keeps at the checkpoint's own precision (Qwen3.5 stores A_log in
+            # float32) is cast as loading the model casts it; any other mismatch is an error.
+            same_kind = source.dtype == parameter.dtype or (
+                source.is_floating_point() and parameter.is_floating_point()
+            )
+            if source.shape != parameter.shape or not same_kind:
                 raise ValueError(
                     f"{name}: export {source.dtype} {tuple(source.shape)} does not match the "
                     f"model's {parameter.dtype} {tuple(parameter.shape)}"
                 )
-            parameter.copy_(source.to(parameter.device))
+            parameter.copy_(source.to(parameter.device, parameter.dtype))
             loaded.add(name)
     unused = sorted(expected - loaded)
     if unused:

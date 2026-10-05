@@ -14,6 +14,28 @@ from qwen35_compression.multimodal import require_multimodal_lock
 from qwen35_compression.quantization.recipes import build_recipe
 
 
+def blocks_dataset(path: Path) -> tuple[Any, Any]:
+    """Packed calibration blocks written by Glaze v2's data stage, as AutoRound takes them."""
+    import torch
+    from datasets import Dataset
+
+    from qwen35_compression.glaze2.data import load_blocks
+
+    blocks = load_blocks(path)
+    if not len(blocks):
+        raise ValueError(f"no calibration blocks in {path}")
+    dataset = Dataset.from_list(
+        [{"input_ids": [ids], "attention_mask": [[1] * len(ids)]} for ids in blocks.ids]
+    )
+
+    def collate(batch: list[dict[str, Any]]) -> dict[str, Any]:
+        if len(batch) != 1:
+            raise ValueError("compression calibration requires batch size 1")
+        return {key: torch.as_tensor(value) for key, value in batch[0].items()}
+
+    return dataset, collate
+
+
 def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, dict[str, Any]]:
     if variant.method == "bf16":
         raise ValueError(
@@ -24,6 +46,11 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
         from qwen35_compression.glaze.train import refine
 
         return refine(config, variant)
+    if variant.method == "glaze2":
+        # Glaze v2 quantizes from BF16 with its own data, allocation and rounding.
+        from qwen35_compression.glaze2.pipeline import quantize as glaze2_quantize
+
+        return glaze2_quantize(config, variant)
     calibration = config.calibration
     if variant.requires_multimodal_calibration:
         multimodal = config.multimodal_calibration
@@ -47,7 +74,10 @@ def quantize(config: ExperimentConfig, variant: VariantConfig) -> tuple[Path, di
     # AutoRound stacks every sample's cached inputs into one tensor, so it needs one length:
     # the same conversations, packed into max_sequence_length blocks.
     pack = variant.method == "autoround"
-    dataset, collator = build_calibration_dataset(processor, calibration, pack=pack)
+    if variant.calibration_blocks is not None:
+        dataset, collator = blocks_dataset(variant.calibration_blocks)
+    else:
+        dataset, collator = build_calibration_dataset(processor, calibration, pack=pack)
     if variant.calibration_samples is not None:
         dataset = dataset.select(range(min(variant.calibration_samples, len(dataset))))
     recipe = build_recipe(variant)

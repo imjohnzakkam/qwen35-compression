@@ -1,0 +1,28 @@
+# Pilot of the Glaze v2 proxy study: every stage at a tiny size, run before the real one.
+feature: glaze2_proxy_pilot
+variants_path: configs/variants/glaze2_proxy_pilot.yaml
+model:
+  id: Qwen/Qwen3.5-0.8B
+  revision: 2fc06364715b967f1860aea9cf38778875588b17
+  dtype: bfloat16
+  trust_remote_code: false
+calibration:
+  path: data/calibration/feature1.jsonl
+  lock_path: data/calibration/feature1.lock.json
+  num_samples: 512
+  max_sequence_length: 2048
+  seed: 42
+  source:
+    dataset_id: HuggingFaceH4/ultrachat_200k
+    revision: 8049631c405ae6576f93f445c6b8166f76f5505a
+    split: train_sft
+    messages_column: messages
+evaluation:
+  mode: benchmark
+  suite_path: configs/evaluation/feature1_math500.yaml
+  max_samples: null
+  max_new_tokens: 256
+  seed: 42
+paths:
+  outputs: outputs/glaze2_proxy_pilot
+  results: results/glaze2_proxy_pilot
