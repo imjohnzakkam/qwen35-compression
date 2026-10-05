@@ -76,7 +76,13 @@ ALLOCATION_SAMPLES = {"pilot": (2, 512), "full": (16, 2048)}
 SUITE_PILOT_LIMIT = 2
 
 
-def plan(config: ExperimentConfig, output: Path, code_revision: str) -> dict[str, list[str]]:
+def plan(
+    config: ExperimentConfig,
+    output: Path,
+    code_revision: str,
+    controls: tuple[str, ...] = tuple(CONTROLS),
+    pilot: bool = True,
+) -> dict[str, list[str]]:
     """Every command after setup, by step name, in run order."""
     config_path = str(config.source_path)
     data = config.paths.outputs / "glaze2" / "data"
@@ -98,8 +104,11 @@ def plan(config: ExperimentConfig, output: Path, code_revision: str) -> dict[str
             "--held-out-blocks",
             str(held_out),
         ]
-    for stage, index in (("pilot", 0), ("full", 1)):
+    stages = (("pilot", 0), ("full", 1)) if pilot else (("full", 1),)
+    for stage, index in stages:
         for control, variants in CONTROLS.items():
+            if control not in controls:
+                continue
             variant, allocated = variants[index], variants[2]
             if allocated:
                 nsamples, seqlen = ALLOCATION_SAMPLES[stage]
@@ -262,9 +271,11 @@ def study(args: argparse.Namespace) -> dict[str, Any]:
                         f"fetch:{name}", lambda r=repo, t=target: copy_published(r, t)
                     ),
                 }
-        steps = plan(config, output, args.code_revision)
+        steps = plan(config, output, args.code_revision, args.controls, not args.skip_pilot)
         for stage in BLOCKS:
-            step(f"blocks:{stage}", logged(steps[f"blocks:{stage}"]))
+            built = config.paths.outputs / BLOCKS[stage]["dir"] / "data" / "blocks.json"
+            if not built.exists():
+                step(f"blocks:{stage}", logged(steps[f"blocks:{stage}"]))
             manifest[f"blocks_{stage}"] = check_blocks(config, stage)
             save()
     except BaseException:
@@ -281,12 +292,15 @@ def study(args: argparse.Namespace) -> dict[str, Any]:
             manifest["skipped"].append(name)
             save()
             continue
-        if name == "evaluate" and failed_controls:
-            # Score only the exports that exist.
-            dropped = {CONTROLS[c][1] for c in failed_controls}
+        if name == "evaluate":
+            # Score only the exports that exist (a failed or skipped control has none).
             index = command.index("--variants") + 1
             command = list(command)
-            command[index] = ",".join(v for v in command[index].split(",") if v not in dropped)
+            command[index] = ",".join(
+                v
+                for v in command[index].split(",")
+                if (config.paths.outputs / v / "config.json").exists()
+            )
         try:
             step(name, logged(command))
         except subprocess.CalledProcessError:
@@ -314,9 +328,21 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=Path("configs/feature1.yaml"))
     parser.add_argument("--output", type=Path, default=Path("results/feature1/glaze_controls"))
     parser.add_argument("--skip-bootstrap", action="store_true")
+    parser.add_argument(
+        "--controls",
+        default=",".join(CONTROLS),
+        help="Comma-separated controls to run (default: all)",
+    )
+    parser.add_argument(
+        "--skip-pilot", action="store_true", help="Run the full controls without their pilot"
+    )
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    args.controls = tuple(name for name in args.controls.split(",") if name)
+    unknown = set(args.controls) - set(CONTROLS)
+    if unknown or not args.controls:
+        parser.error(f"--controls takes {', '.join(CONTROLS)}")
     args.code_revision = args.code_revision or git_revision(ROOT)
     if not args.code_revision:
         raise ValueError("producer code revision is required")
@@ -326,7 +352,10 @@ def main() -> None:
     if not args.dry_run and not answers.exists():
         parser.error(f"missing {answers}: Glaze v2's saved answers (its run's answers.jsonl)")
     if args.dry_run:
-        print(json.dumps(plan(config, args.output.resolve(), args.code_revision), indent=2))
+        steps = plan(
+            config, args.output.resolve(), args.code_revision, args.controls, not args.skip_pilot
+        )
+        print(json.dumps(steps, indent=2))
         return
     study(args)
 

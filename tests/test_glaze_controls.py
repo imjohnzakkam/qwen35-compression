@@ -211,21 +211,32 @@ def test_controls_suite_matches_the_instruct_protocol() -> None:
         assert getattr(controls, field) == getattr(full, field)
 
 
-def test_a_failed_control_skips_only_its_own_steps(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _driver_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail: str | None, **options):
     import argparse
 
     import qwen35_compression.drift as drift
     import qwen35_compression.models as models
 
     driver = _load("run_glaze_controls")
+    raw = yaml.safe_load(Path("configs/feature1.yaml").read_text())
+    raw["variants_path"] = str(Path("configs/variants/feature1.yaml").resolve())
+    raw["paths"]["outputs"] = str(tmp_path / "outputs")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(raw))
+    outputs = tmp_path / "outputs"
+    for name in driver.PUBLISHED:
+        (outputs / name).mkdir(parents=True)
+        (outputs / name / "config.json").write_text("{}")
     ran: list[list[str]] = []
 
     def run_logged(command: list[str], log: Path, root: Path) -> float:
         ran.append(command)
-        if "autoround_autoscheme_pilot_w4a16" in command and "scripts/quantize.py" in command:
+        if fail is not None and fail in command and "scripts/quantize.py" in command:
             raise subprocess.CalledProcessError(1, command)
+        if "scripts/quantize.py" in command:
+            export = outputs / command[command.index("--variant") + 1]
+            export.mkdir(parents=True)
+            (export / "config.json").write_text("{}")
         return 0.0
 
     monkeypatch.setattr(driver, "run_logged", run_logged)
@@ -233,12 +244,21 @@ def test_a_failed_control_skips_only_its_own_steps(
     monkeypatch.setattr(models, "download_model", lambda config: (tmp_path, "rev"))
     monkeypatch.setattr(drift, "copy_published", lambda repo, target: "published")
     args = argparse.Namespace(
-        config=Path("configs/feature1.yaml"),
+        config=config_path,
         output=tmp_path / "results",
         skip_bootstrap=True,
         code_revision="abc",
+        controls=tuple(driver.CONTROLS),
+        skip_pilot=False,
     )
-    manifest = driver.study(args)
+    vars(args).update(options)
+    return driver.study(args), ran
+
+
+def test_a_failed_control_skips_only_its_own_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, ran = _driver_run(tmp_path, monkeypatch, "autoround_autoscheme_pilot_w4a16")
     assert manifest["status"] == "failed"
     assert manifest["steps"]["pilot:allocation:quantize"]["status"] == "failed"
     assert manifest["skipped"] == [
@@ -252,5 +272,32 @@ def test_a_failed_control_skips_only_its_own_steps(
     assert evaluate[evaluate.index("--variants") + 1].split(",") == [
         "autoround_w4a16_g128",
         "autoround_glaze2_data_w4a16_g128",
+        "glaze2_w4a16_g128",
+    ]
+
+
+def test_one_control_reruns_alone_without_its_pilot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The data control's export is already there, from the first run on this machine.
+    data = tmp_path / "outputs" / "autoround_glaze2_data_w4a16_g128"
+    data.mkdir(parents=True)
+    (data / "config.json").write_text("{}")
+    manifest, ran = _driver_run(
+        tmp_path, monkeypatch, None, controls=("allocation",), skip_pilot=True
+    )
+    assert manifest["status"] == "passed"
+    assert [name for name in manifest["steps"] if ":" in name and "fetch" not in name] == [
+        "blocks:full",
+        "blocks:pilot",
+        "full:allocation:allocate",
+        "full:allocation:quantize",
+        "full:allocation:suite",
+    ]
+    evaluate = ran[-1]
+    assert evaluate[evaluate.index("--variants") + 1].split(",") == [
+        "autoround_w4a16_g128",
+        "autoround_glaze2_data_w4a16_g128",
+        "autoround_autoscheme_w4a16",
         "glaze2_w4a16_g128",
     ]

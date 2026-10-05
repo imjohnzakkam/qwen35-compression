@@ -40,7 +40,9 @@ def main() -> None:
     )
     answers = [r.outputs[0].text for r in results]
     record = {"model": args.model, "answers": dict(zip(PROMPTS, answers, strict=True))}
-    Path(args.output).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print("vllm_check=" + json.dumps(answers))
 
 
