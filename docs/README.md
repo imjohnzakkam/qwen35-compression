@@ -13,6 +13,7 @@ each record.
 | [4. AutoRound](experiments/04-autoround.md) | AutoRound W4A16 g128: the strongest 4-bit baseline on the drift measure, its full suite, and its memory needs |
 | [5. Glaze v1](experiments/05-glaze-v1.md) | Tuning AutoRound's scales and norms end to end: why it did not beat AutoRound, and what that showed |
 | [6. Glaze v2](experiments/06-glaze-v2.md) | Quantizing from BF16 with in-domain data, Fisher-weighted rounding and byte-neutral mixed precision: MATH-500 within 0.2 points of BF16 at AutoRound's size |
+| [7. Glaze v2 controls](experiments/07-glaze-controls.md) | AutoRound on Glaze v2's calibration data: the data alone gives 7.0 of Glaze v2's 10.0-point MATH-500 gain |
 | [Engineering notes](engineering-notes.md) | Pitfalls when evaluating and quantizing Qwen3.5 with vLLM, lm-eval, VLMEvalKit and llm-compressor |
 
 ## Summary
@@ -33,6 +34,9 @@ and up to 8,192 generated tokens.
 - **Glaze v2 closes most of the 4-bit gap at the same size** (3.80 GB): MATH-500 83.2 against BF16's
   83.4 and AutoRound's 73.2 (+10.0 points over AutoRound, paired interval +6.6 to +14.0), and two
   thirds less excess loss than AutoRound on the drift measure, near INT8 W8A8's.
+- **Most of that MATH-500 gain is Glaze v2's calibration data:** AutoRound tuned on the same
+  in-domain blocks reaches 80.2 (+7.0, paired interval +2.8 to +11.0). Glaze v2's own stages add
+  about 3 more points there, and 3.5 on IFEval, where the data alone does not help.
 
 ## Released artifacts
 

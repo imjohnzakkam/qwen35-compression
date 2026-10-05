@@ -207,7 +207,9 @@ Answers that reach the 8,192-token limit:
   AutoRound's in-domain validation KL on the proxy and 60% on the 4B. Which part matters most needs
   controls this study did not run: the same data at equal volume, Fisher weighting switched off
   under a fixed allocation, other allocation policies at the same byte budget, and AutoRound's own
-  mixed-precision mode as a baseline.
+  mixed-precision mode as a baseline. [Record 7](07-glaze-controls.md) runs the first at
+  AutoRound's volume (128 blocks, all a 40 GB GPU holds): AutoRound on Glaze v2's data reaches 80.2
+  on MATH-500.
 
 ## Caveats
 
