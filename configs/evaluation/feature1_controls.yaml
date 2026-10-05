@@ -1,0 +1,21 @@
+# MATH-500 and IFEval alone, with the instruct track's settings: the Glaze v2 controls
+# (scripts/run_glaze_controls.py). MATH-500 is where Glaze v2 and AutoRound differ; IFEval checks
+# that in-domain calibration does not cost instruction following. Every setting matches
+# configs/evaluation/feature1.yaml, so these scores equal the same tasks from a full run.
+text_tasks:
+  - minerva_math500
+  - ifeval
+
+vision_tasks: []
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+max_model_len: 12288
+gpu_memory_utilization: 0.85
+limit: null
+seed: 42
+enable_thinking: false
+generation:
+  do_sample: false
+  max_gen_toks: 8192

@@ -87,6 +87,54 @@ variants:
       min_iters: 5
       eval_every: 5
 
+  # Controls for Glaze v2 (scripts/run_glaze_controls.py). Both tune with AutoRound on Glaze v2's
+  # calibration blocks; AutoRound's GPU cache holds 128 of them on a 40 GB card (285 ran out of
+  # memory), so they use the first 128 of the 512, which keep the 40/40/20 domain mix.
+  # Data: one 4-bit g128 scheme for every Linear, as AutoRound's own export.
+  - name: autoround_glaze2_data_w4a16_g128
+    method: autoround
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    calibration_blocks: outputs/feature1/glaze2/data/calibration.jsonl
+    calibration_samples: 128
+
+  # Allocation: AutoRound's own mixed precision (AutoScheme) at Glaze v2's language-model budget,
+  # from Glaze's menu, written by scripts/autoscheme_allocate.py. The vision tower stays BF16
+  # (text tasks never run it), so the export is larger than Glaze's by the tower's 8-bit saving.
+  - name: autoround_autoscheme_w4a16
+    method: autoround
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    calibration_blocks: outputs/feature1/glaze2/data/calibration.jsonl
+    calibration_samples: 128
+    allocation: outputs/feature1/autoscheme/allocation.json
+
+  # Their pilots: 16 pilot blocks, 10 steps per block.
+  - name: autoround_glaze2_data_pilot_w4a16_g128
+    method: autoround
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    calibration_blocks: outputs/feature1/glaze2_pilot/data/calibration.jsonl
+    calibration_samples: 16
+    autoround_iters: 10
+
+  - name: autoround_autoscheme_pilot_w4a16
+    method: autoround
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore: *text_calibration_ignore
+    calibration_blocks: outputs/feature1/glaze2_pilot/data/calibration.jsonl
+    calibration_samples: 16
+    autoround_iters: 10
+    allocation: outputs/feature1/autoscheme_pilot/allocation.json
+
   # Glaze v1: AutoRound's export with its group scales and norm weights retrained end to end
   # against BF16 (KL on next-token distributions), one BF16 grid step at a time. Trained on the
   # same 128 packed calibration blocks AutoRound used, so only the objective differs; the next

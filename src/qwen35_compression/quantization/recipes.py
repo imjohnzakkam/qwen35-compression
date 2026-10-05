@@ -16,6 +16,27 @@ def _scheme(name: str, targets: tuple[str, ...], group_size: int | None = None) 
     return scheme
 
 
+def allocation_groups(variant: VariantConfig) -> dict[str, Any]:
+    """Config groups for a per-Linear allocation: one symmetric int group scheme per option,
+    targeting its exact module names (the same layout as Glaze v2's export)."""
+    import json
+
+    from qwen35_compression.glaze2.quant import OPTIONS
+
+    assert variant.allocation is not None
+    allocation = json.loads(variant.allocation.read_text(encoding="utf-8"))
+    options = {option.name: option for option in OPTIONS}
+    groups = {}
+    for name, modules in sorted(allocation["options"].items()):
+        if not modules:
+            continue
+        option = options[name]
+        scheme = _scheme("W4A16", tuple(modules), option.group)
+        scheme.weights.num_bits = option.bits
+        groups[f"group_{name}"] = scheme
+    return groups
+
+
 def build_recipe(variant: VariantConfig) -> list[Any]:
     if variant.method == "bf16":
         return []
@@ -65,12 +86,17 @@ def build_recipe(variant: VariantConfig) -> list[Any]:
             # linear-attention layers. It caches every packed calibration sample's block inputs
             # and BF16 outputs on the GPU, which needs more than a 24 GB card with this model
             # (DeltaNet runs in transformers' PyTorch fallback): run it on a 40 GB GPU.
+            # With an allocation, each Linear is tuned at its own precision.
             AutoRoundModifier(
-                config_groups={
-                    "group_0": _scheme(
-                        variant.scheme or "W4A16", variant.targets, variant.group_size
-                    )
-                },
+                config_groups=(
+                    allocation_groups(variant)
+                    if variant.allocation is not None
+                    else {
+                        "group_0": _scheme(
+                            variant.scheme or "W4A16", variant.targets, variant.group_size
+                        )
+                    }
+                ),
                 ignore=list(variant.ignore),
                 iters=variant.autoround_iters,
                 enable_torch_compile=False,
