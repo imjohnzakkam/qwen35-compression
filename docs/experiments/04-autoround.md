@@ -4,9 +4,8 @@
 and clipping by signed gradient descent against the BF16 block's outputs. It is a strong
 post-training baseline for 4-bit weights.
 
-**Status:** quantized and scored with the token-level measure of the
-[drift study](03-drift-study.md), and on MATH-500 (74.6%, scored alongside
-[Glaze v1](05-glaze-v1.md)). Not yet run on the rest of the benchmark suite.
+**Status:** quantized, scored with the token-level measure of the [drift study](03-drift-study.md),
+and run on the full benchmark suite. [Glaze v2](06-glaze-v2.md) compares against it.
 
 ## Configuration
 
@@ -52,6 +51,35 @@ negative log-likelihood above BF16's own.
 - **4-bit headroom remains.** AutoRound's excess loss is still about 4 times INT8's, and its flip
   rate is flat along the answer, like the other methods' (5.7% in the first 256 tokens, 5.2% beyond
   4,096).
+
+### Benchmarks
+
+The full suite with the [instruct-track protocol](../evaluation.md#instruct-track), on one A30
+(code `96438ec`; DocVQA completed separately with `configs/evaluation/feature1_docvqa.yaml`, code
+`9f50193`, after the first run reached its time limit during that task). Change from BF16
+in parentheses.
+
+| Task | BF16 | GPTQ | AWQ | AutoRound |
+| --- | ---: | ---: | ---: | ---: |
+| MMLU-Pro | 74.6 | 71.4 | 71.9 | 72.8 (−1.8) |
+| GSM8K | 83.2 | 81.9 | 82.6 | 82.3 (−0.9) |
+| MATH-500 | 83.4 | 75.8 | 73.4 | 73.2 (−10.2) |
+| IFEval | 82.3 | 80.8 | 79.3 | 80.6 (−1.7) |
+| HellaSwag | 65.4 | 64.3 | 64.8 | 64.8 (−0.6) |
+| ARC-Challenge | 51.1 | 50.8 | 50.0 | 50.0 (−1.1) |
+| WikiText-2 (lower is better) | 10.95 | 11.43 | 11.55 | 11.45 |
+| MMBench (dev, EN v1.1) | 85.4 | 84.1 | 82.9 | 84.7 (−0.7) |
+| MMMU (val) | 69.6 | 64.9 | 65.7 | 66.9 (−2.7) |
+| MathVista (mini) | 81.0 | 78.0 | 78.0 | 80.3 (−0.7) |
+| OCRBench | 86.3 | 86.0 | 87.1 | 87.2 (+0.9) |
+| DocVQA (val) | 95.3 | 94.8 | 95.1 | 95.3 (0.0) |
+| TextVQA (val) | 82.8 | 81.7 | 81.8 | 82.5 (−0.3) |
+
+- **Lowest drift is not the best MATH-500.** AutoRound has the least excess loss of the three 4-bit
+  baselines, yet scores 73.2 on MATH-500 (−10.2, paired interval −14.0 to −6.6), level with AWQ.
+  7.0% of its MATH-500 answers reach the 8,192-token limit (BF16 3.6%).
+- **It is the strongest 4-bit baseline on vision reasoning** (MMMU, MathVista, MMBench).
+- **Run-to-run spread:** an earlier MATH-500 run of the same export on an A100 scored 74.6.
 
 ## Memory
 

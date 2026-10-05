@@ -47,7 +47,8 @@ SOURCES = {
     "sciq": "allenai/sciq",
     "chat": "HuggingFaceH4/ultrachat_200k",
 }
-# The other methods calibrate on the first 512 ultrachat conversations; start well past them.
+# Well past the start of the split. The other methods' 512 conversations are a random sample of
+# all of it, so a few may recur (2 of the 600 chat prompts did).
 CHAT_SKIP = 20_000
 
 

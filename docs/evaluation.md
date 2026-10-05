@@ -63,7 +63,7 @@ model and is never the model under evaluation.
 multiple-choice option, VLMEvalKit substitutes a random option. Before that happens, the answer is
 taken from the model's last explicit `Final Answer: X` statement, if `X` is a valid option.
 Answers that reach the token limit without stating any option still receive a random option. That
-affects 4–7 of 900 MMMU validation answers per model, worth at most 0.8 points. Each scoring
+affects 4–8 of 900 MMMU validation answers per model, worth at most 0.9 points. Each scoring
 manifest counts both cases.
 
 ## Reasoning panel

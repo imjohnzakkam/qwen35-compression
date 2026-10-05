@@ -6,30 +6,36 @@ under one fixed evaluation protocol.
 ## Results
 
 `Qwen/Qwen3.5-4B`, instruct mode (`enable_thinking=False`), greedy decoding, up to 8,192 generated
-tokens. The vision encoder, embeddings and `lm_head` stay in BF16 in every variant.
+tokens. The embeddings and `lm_head` stay in BF16 in every variant, and the vision encoder in every
+variant but Glaze v2, which stores it at 8 bits.
 
-| Task | BF16 | INT8 W8A8 | GPTQ W4A16 g128 | AWQ W4A16 g128 |
-| --- | ---: | ---: | ---: | ---: |
-| MMLU-Pro | 74.6 | 74.3 | 71.4 | 71.9 |
-| GSM8K | 83.2 | 83.5 | 81.9 | 82.6 |
-| MATH-500 | 83.4 | 82.6 | 75.8 | 73.4 |
-| IFEval | 82.3 | 82.1 | 80.8 | 79.3 |
-| HellaSwag | 65.4 | 65.2 | 64.3 | 64.8 |
-| ARC-Challenge | 51.1 | 49.7 | 50.8 | 50.0 |
-| WikiText-2 perplexity (lower is better) | 10.95 | 11.09 | 11.43 | 11.55 |
-| MMBench (dev, EN v1.1) | 85.4 | 83.7 | 84.1 | 82.9 |
-| MMMU (val) | 69.6 | 67.7 | 64.9 | 65.7 |
-| MathVista (mini) | 81.0 | 81.8 | 78.0 | 78.0 |
-| OCRBench | 86.3 | 87.5 | 86.0 | 87.1 |
-| DocVQA (val) | 95.3 | 95.3 | 94.8 | 95.1 |
-| TextVQA (val) | 82.8 | 82.2 | 81.7 | 81.8 |
-| Checkpoint size | 9.32 GB | 5.51 GB | 3.78 GB | 3.79 GB |
+| Task | BF16 | INT8 W8A8 | GPTQ W4A16 g128 | AWQ W4A16 g128 | AutoRound W4A16 g128 | Glaze v2 W4A16 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MMLU-Pro | 74.6 | 74.3 | 71.4 | 71.9 | 72.8 | 73.7 |
+| GSM8K | 83.2 | 83.5 | 81.9 | 82.6 | 82.3 | 82.8 |
+| MATH-500 | 83.4 | 82.6 | 75.8 | 73.4 | 73.2 | **83.2** |
+| IFEval | 82.3 | 82.1 | 80.8 | 79.3 | 80.6 | 82.8 |
+| HellaSwag | 65.4 | 65.2 | 64.3 | 64.8 | 64.8 | 64.8 |
+| ARC-Challenge | 51.1 | 49.7 | 50.8 | 50.0 | 50.0 | 49.6 |
+| WikiText-2 perplexity (lower is better) | 10.95 | 11.09 | 11.43 | 11.55 | 11.45 | 11.30 |
+| MMBench (dev, EN v1.1) | 85.4 | 83.7 | 84.1 | 82.9 | 84.7 | 85.7 |
+| MMMU (val) | 69.6 | 67.7 | 64.9 | 65.7 | 66.9 | 66.7 |
+| MathVista (mini) | 81.0 | 81.8 | 78.0 | 78.0 | 80.3 | 80.6 |
+| OCRBench | 86.3 | 87.5 | 86.0 | 87.1 | 87.2 | 86.3 |
+| DocVQA (val) | 95.3 | 95.3 | 94.8 | 95.1 | 95.3 | 95.4 |
+| TextVQA (val) | 82.8 | 82.2 | 81.7 | 81.8 | 82.5 | 82.2 |
+| Checkpoint size | 9.32 GB | 5.51 GB | 3.78 GB | 3.79 GB | 3.80 GB | 3.80 GB |
 
 - **INT8 W8A8 is effectively lossless.**
-- **4-bit weights hold short answers but lose long reasoning** (MATH-500 −7.6 to −10, MMMU −4 to
-  −5), much of it answers that loop until the token limit.
+- **Uniform 4-bit weights hold short answers but lose long reasoning** (GPTQ, AWQ, AutoRound:
+  MATH-500 −7.6 to −10.2, MMMU −2.7 to −4.7), much of it answers that loop until the token limit.
 - **The 4-bit error is local and spread across the network.** It does not compound along an answer,
   and no single component dominates.
+- **Glaze v2 keeps long reasoning at 4 bits.** At AutoRound's size it scores 83.2 on MATH-500 (BF16
+  83.4, AutoRound 73.2) and stays within 1 point of BF16 on every task but ARC-Challenge and MMMU. It
+  quantizes from BF16 on BF16's own answers to in-domain prompts, learns its rounding against a
+  Fisher-weighted objective, and spends the bytes an 8-bit vision tower frees on the most
+  sensitive layers ([record](docs/experiments/06-glaze-v2.md)).
 
 Details are in [`docs/`](docs/README.md): the evaluation protocol, one record per experiment, and
 engineering notes.
@@ -67,6 +73,10 @@ uv run python scripts/score_vision.py --run-dir results/feature1/gptq_w4a16_g128
 # Reasoning-panel scores and paired intervals against BF16
 uv run python scripts/panel_scores.py --run bf16=results/feature1/bf16 \
   --run gptq=results/feature1/gptq_w4a16_g128 --vs bf16 --loops
+
+# Glaze v2 on the 4B: BF16 answers, a pilot, quantization, a held-out gate against AutoRound's
+# published export, drift scores and the full suite (one 40 GB GPU)
+uv run python scripts/run_glaze2_4b.py
 
 # Drift study: token-level divergence from BF16, by position and by component
 uv run python scripts/run_drift_study.py --pilot-limit 20
