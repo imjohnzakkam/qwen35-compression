@@ -684,3 +684,64 @@ def test_calibration_samples_must_be_positive(tmp_path: Path) -> None:
     config.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="calibration_samples must be positive"):
         load_config(config)
+
+
+def test_variant_runner_scores_a_published_export_without_quantizing() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_feature1_variant.py",
+            "--variant",
+            "autoround_w4a16_g128",
+            "--from-hub",
+            "lazybrick/Qwen3.5-4B-Kiln-AutoRound-W4A16-g128",
+            "--code-revision",
+            "abc123",
+            "--dry-run",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan = json.loads(result.stdout)
+    assert plan["from_hub"] == "lazybrick/Qwen3.5-4B-Kiln-AutoRound-W4A16-g128"
+    assert plan["quantize"] is None and plan["flash_linear_attention"] is None
+
+
+def test_published_export_is_copied_as_files_and_verifies(tmp_path, monkeypatch) -> None:
+    import importlib.util
+
+    import qwen35_compression.drift as drift
+    from qwen35_compression.export import MANIFEST_NAME, inventory, verify_export
+
+    # A Hub snapshot: files are links into a blob store.
+    blobs, snapshot = tmp_path / "blobs", tmp_path / "snapshot"
+    blobs.mkdir()
+    snapshot.mkdir()
+    contents = {"config.json": '{"quantization_config": {}}', "model.safetensors": "weights"}
+    for name, text in contents.items():
+        (blobs / name).write_text(text, encoding="utf-8")
+        (snapshot / name).symlink_to(blobs / name)
+    manifest = {
+        "variant": "autoround_w4a16_g128",
+        "method": "autoround",
+        "code_revision": "c3a16a0",
+        "files": inventory(blobs, excluded_names=(MANIFEST_NAME,)),
+    }
+    (blobs / MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
+    (snapshot / MANIFEST_NAME).symlink_to(blobs / MANIFEST_NAME)
+    monkeypatch.setattr(drift, "fetch_published", lambda repo: (snapshot, "rev"))
+
+    spec = importlib.util.spec_from_file_location(
+        "run_feature1_variant", "scripts/run_feature1_variant.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.syspath_prepend("scripts")
+    spec.loader.exec_module(module)
+    export_dir = tmp_path / "outputs" / "autoround_w4a16_g128"
+    module.fetch_export("lazybrick/x", export_dir)
+
+    assert not any(path.is_symlink() for path in export_dir.iterdir())
+    assert not export_dir.with_name(export_dir.name + ".partial").exists()
+    config = load_config("configs/feature1.yaml")
+    assert verify_export(export_dir, config.variant("autoround_w4a16_g128"))["code_revision"]
