@@ -215,7 +215,7 @@ Answers that reach the 8,192-token limit:
 - **Different GPUs.** Glaze v2's suite ran on an A100; BF16 and the other variants on A30s (both
   GA100). Repeated runs of one model differ by about 1–2 points: AutoRound scored 74.6 on MATH-500
   in an earlier A100 run and 73.2 here.
-- **MMMU answer extraction** failed on 6 of 900 validation answers (BF16 4, GPTQ 7), as
+- **MMMU answer extraction** failed on 6 of 900 validation answers (BF16 4, GPTQ 7, AutoRound 8), as
   [described](../evaluation.md) for every model.
 
 ## Artifacts
