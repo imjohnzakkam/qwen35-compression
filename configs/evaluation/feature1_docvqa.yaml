@@ -1,0 +1,21 @@
+# DocVQA alone, with every setting of configs/evaluation/feature1.yaml: completes a full-suite run
+# that stopped before its last vision task (AutoRound's, 2026-10-05) without rerunning the rest.
+text_tasks: []
+
+vision_tasks:
+  - DocVQA_VAL
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+max_model_len: 12288
+vision_max_model_len: 32768
+vision_answer_extractor: gpt-4o-mini
+vision_extracted_tasks: []
+gpu_memory_utilization: 0.85
+limit: null
+seed: 42
+enable_thinking: false
+generation:
+  do_sample: false
+  max_gen_toks: 8192
