@@ -16,6 +16,8 @@ TEXT_PREFIX = "model.language_model."
 # A decoder layer's Linear weight in a Qwen3.5 checkpoint (2-D; norms, conv1d, A_log are not).
 BODY_WEIGHT = re.compile(r"^model\.language_model\.layers\.\d+\.[\w.]+\.weight$")
 FFN_LINEAR = re.compile(r"^layers\.(\d+)\.mlp\.\w+$")
+# A decoder layer's token mixer (DeltaNet or attention) or its FFN, as one unit.
+PART_LINEAR = re.compile(r"^layers\.(\d+)\.(linear_attn|self_attn|mlp)\.\w+$")
 
 
 def is_body_linear(name: str, shape: Sequence[int]) -> bool:
@@ -31,6 +33,24 @@ def ffn_layer_units(model: nn.Module) -> dict[str, list[str]]:
         if match and isinstance(module, nn.Linear):
             units.setdefault(f"layers.{match.group(1)}.mlp", []).append(name)
     return dict(sorted(units.items(), key=lambda item: int(item[0].split(".")[1])))
+
+
+def layer_part_units(model: nn.Module) -> dict[str, list[str]]:
+    """Each decoder layer's token-mixer Linears as `layers.N.mixer` and its FFN Linears as
+    `layers.N.mlp`, in layer order. Units never split a projection vLLM fuses (qkv, in_proj_qkvz,
+    in_proj_ba, gate_up), so each can take one precision in a real export."""
+    units: dict[str, list[str]] = {}
+    for name, module in model.named_modules():
+        match = PART_LINEAR.match(name)
+        if match and isinstance(module, nn.Linear):
+            part = "mlp" if match.group(2) == "mlp" else "mixer"
+            units.setdefault(f"layers.{match.group(1)}.{part}", []).append(name)
+
+    def key(item: tuple[str, list[str]]) -> tuple[int, int]:
+        _, index, part = item[0].split(".")
+        return int(index), part == "mlp"
+
+    return dict(sorted(units.items(), key=key))
 
 
 def unit_size(model: nn.Module, names: Sequence[str]) -> int:

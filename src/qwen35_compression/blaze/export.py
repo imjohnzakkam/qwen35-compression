@@ -50,12 +50,14 @@ def write_fake_export(
     device: str = "cpu",
     log: Callable[[str], None] = print,
     replaced: Mapping[str, torch.Tensor] | None = None,
+    options: Mapping[str, Option] | None = None,
 ) -> dict[str, Any]:
     """Copy `source` into `output` with the vocabulary laddered and/or every body Linear
     stored at `body`, and return the export's record.
 
     Body Linears are rounded to nearest, unless `replaced` (checkpoint key -> stored BF16 weight,
     e.g. from GPTQ at `body`) gives their values; every replaced key must be a body Linear.
+    `options` (checkpoint key -> option) overrides `body` per Linear, for rounding and bytes.
 
     Tied tables (0.8B to 4B) are laddered once. Untied models ladder the LM head and keep the
     input table at the ladder's lower rung, as Blaze stores them.
@@ -92,17 +94,18 @@ def write_fake_export(
                 elif ladder is not None and not tied and key == TIED_TABLE:
                     tensor = fake_quantize(tensor.to(device), REST_OPTION).cpu()
                 elif body is not None and is_body_linear(key, tensor.shape):
-                    if tensor.shape[1] % body.group:
-                        raise ValueError(f"{key}: {tensor.shape[1]} inputs, group {body.group}")
+                    option = (options or {}).get(key, body)
+                    if tensor.shape[1] % option.group:
+                        raise ValueError(f"{key}: {tensor.shape[1]} inputs, group {option.group}")
                     if key in replaced:
                         stored = replaced.pop(key)
                         if stored.shape != tensor.shape:
                             raise ValueError(f"{key}: replaced shape {tuple(stored.shape)}")
                         tensor = stored.to(tensor.dtype).cpu()
                     else:
-                        tensor = fake_quantize(tensor.to(device), body).cpu()
+                        tensor = fake_quantize(tensor.to(device), option).cpu()
                     body_linears += 1
-                    body_bytes += body.tensor_bytes(tensor.shape[0], tensor.shape[1])
+                    body_bytes += option.tensor_bytes(tensor.shape[0], tensor.shape[1])
                 tensors[key] = tensor.contiguous()
         save_file(tensors, str(output / path.name), metadata=metadata)
     if replaced:
@@ -142,12 +145,18 @@ def write_fake_export(
     return record
 
 
-def size_plan(source: Path, body: Option, ladder: LadderPlan | None = None) -> dict[str, Any]:
+def size_plan(
+    source: Path,
+    body: Option,
+    ladder: LadderPlan | None = None,
+    options: Mapping[str, Option] | None = None,
+) -> dict[str, Any]:
     """Bytes of an export of `source` as the real format stores it, by part: the vocabulary
     table(s) laddered (or BF16 without a ladder), body Linears at `body`, everything else BF16.
 
     The MTP head (`mtp.*`) is left out: vLLM does not load it unless asked, and quantized
-    exports drop it, so both sides of a size comparison count the same tensors.
+    exports drop it, so both sides of a size comparison count the same tensors. `options`
+    (checkpoint key -> option) overrides `body` per Linear.
     """
     from safetensors import safe_open
 
@@ -176,7 +185,8 @@ def size_plan(source: Path, body: Option, ladder: LadderPlan | None = None) -> d
                     else:
                         parts["table"] += REST_OPTION.tensor_bytes(shape[0], shape[1])
                 elif is_body_linear(key, shape):
-                    parts["body"] += body.tensor_bytes(shape[0], shape[1])
+                    option = (options or {}).get(key, body)
+                    parts["body"] += option.tensor_bytes(shape[0], shape[1])
                 elif "visual" in key:
                     parts["vision"] += bf16
                 else:

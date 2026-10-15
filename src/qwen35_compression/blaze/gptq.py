@@ -12,7 +12,7 @@ The calibration text is generic (WikiText-2's training split), not the model's o
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import torch
 from torch import nn
@@ -97,7 +97,7 @@ def _layer_output(layer: nn.Module, hidden: torch.Tensor, kwargs: dict) -> torch
 def gptq_body(
     text_model: nn.Module,
     blocks: Sequence[Sequence[int]],
-    option: Option,
+    option: Option | Mapping[str, Option],
     batch: int = 8,
     layers: Sequence[int] | None = None,
     damp: float = DAMP,
@@ -106,6 +106,7 @@ def gptq_body(
     """GPTQ every Linear of the decoder layers in order, in place; return module path (relative
     to `text_model`, e.g. `layers.3.mlp.up_proj`) -> stored BF16 weight on the CPU.
 
+    `option` is one option for every Linear, or module path -> option.
     `layers` limits the work to those layer indices (a pilot); every later layer still runs, on
     the quantized chain, only when it is quantized itself.
     """
@@ -139,7 +140,8 @@ def gptq_body(
             for name, module in linears.items():
                 h = collectors[name].remove()
                 original = module.weight.detach().float()
-                stored, _, _ = gptq_weight(original, h, option, damp)
+                chosen = option if isinstance(option, Option) else option[name]
+                stored, _, _ = gptq_weight(original, h, chosen, damp)
                 # Output error on the calibration inputs, relative to the weight's own output.
                 delta = stored.float() - original
                 ratio = float(((delta @ h) * delta).sum() / ((original @ h) * original).sum())
@@ -148,7 +150,7 @@ def gptq_body(
                 results[name] = stored.cpu()
                 del h
             log(
-                f"blaze gptq layer {index}: {len(linears)} linears at {option.name}, "
+                f"blaze gptq layer {index}: {len(linears)} linears, "
                 f"worst relative output error {worst:.2e}"
             )
         hidden = [_layer_output(layer, x.to(device), kwargs).cpu() for x in hidden]

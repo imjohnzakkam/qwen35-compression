@@ -42,6 +42,16 @@ from qwen35_compression.config import load_config  # noqa: E402
 from qwen35_compression.glaze2.quant import Option  # noqa: E402
 
 
+def _linear_names(text_model) -> list[str]:
+    from torch import nn
+
+    return [
+        name
+        for name, module in text_model.named_modules()
+        if isinstance(module, nn.Linear) and name.startswith("layers.")
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", type=Path, default=Path("configs/feature1.yaml"))
@@ -55,6 +65,7 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--damp", type=float, default=DAMP)
     parser.add_argument("--layers", default="", help="Comma-separated layer indices (a pilot)")
+    parser.add_argument("--plan", type=Path, help="Per-Linear options from scripts/blaze_market.py")
     args = parser.parse_args()
 
     import torch
@@ -68,8 +79,26 @@ def main() -> None:
     rows = tokenizer(documents, add_special_tokens=False)["input_ids"]
     blocks = pack_text(rows, args.length, args.blocks)
     option = Option(args.bits, args.group)
+    # Checkpoint key -> option; GPTQ takes module paths relative to the text model.
+    options: dict[str, Option] = {}
+    if args.plan:
+        plan = json.loads(args.plan.read_text(encoding="utf-8"))
+        named = {o.name: o for o in (Option(b, args.group) for b in (2, 3, 4, 5, 6, 8))}
+        options = {key: named[name] for key, name in plan["linear_options"].items()}
+    by_module = {
+        key.removeprefix(TEXT_PREFIX).removesuffix(".weight"): value
+        for key, value in options.items()
+    }
     layers = [int(index) for index in args.layers.split(",")] if args.layers else None
-    stored = gptq_body(teacher, blocks, option, args.batch, layers, args.damp)
+    chosen = (lambda name: by_module.get(name, option)) if by_module else None
+    stored = gptq_body(
+        teacher,
+        blocks,
+        {name: chosen(name) for name in _linear_names(teacher)} if chosen else option,
+        args.batch,
+        layers,
+        args.damp,
+    )
     replaced = {f"{TEXT_PREFIX}{name}.weight": weight for name, weight in stored.items()}
     peak = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else None
     gptq_seconds = round(time.perf_counter() - started)
@@ -83,7 +112,9 @@ def main() -> None:
         else None
     )
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    record = write_fake_export(snapshot, args.output, ladder, option, device, replaced=replaced)
+    record = write_fake_export(
+        snapshot, args.output, ladder, option, device, replaced=replaced, options=options or None
+    )
     record["gptq"] = {
         "model_revision": revision,
         "replay": {"repo": REPLAY_REPO, "revision": REPLAY_REVISION, "file": REPLAY_FILE},
@@ -91,6 +122,7 @@ def main() -> None:
         "length": args.length,
         "damp": args.damp,
         "layers": layers,
+        "plan": str(args.plan) if args.plan else None,
         "linears": len(stored),
         "seconds": gptq_seconds,
         "peak_memory_bytes": peak,

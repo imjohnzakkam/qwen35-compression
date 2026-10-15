@@ -1,6 +1,8 @@
 """Blaze's gates. G1: is the ladder free, does a 6-bit body pay, and is a 4/8-bit menu enough on
 the 4B. G1b: does a GPTQ-rounded 6-bit body reach the target G1's round-to-nearest one missed.
-G5: does the 2B, at a standard W4A16 export's size, agree.
+G5: does the 2B, at a standard W4A16 export's size, agree. G2: does the 4B's equal-size byte
+market beat Glaze v2 by the plan's margin; G3: does its panel stay within a point of BF16. Real:
+does vLLM serve a real export exactly as its fake-quantized twin, and how fast.
 
 Drift results are drift_scores.py's (BF16's 1,501 replayed MATH-500 and MMLU-Pro answers).
 Excess loss is a model's mean NLL of BF16's tokens minus BF16's own on the same tokens.
@@ -23,6 +25,13 @@ GPTQ_SIX_BIT_MAX_EXCESS = 0.003
 # more than a point below BF16.
 G5_MAX_EXCESS_SHARE = 1 / 3
 G5_MAX_PANEL_DROP = 1.0
+# G2: Blaze-Q on the 4B at standard W4A16's size, 2.4x below Glaze v2's measured excess loss.
+GLAZE_V2_EXCESS = 0.0143
+G2_FACTOR = 2.4
+# G3: no panel task more than a point below BF16.
+G3_MAX_PANEL_DROP = 1.0
+# Real exports: the real format's excess loss within this of its fake-quantized twin's.
+REAL_MAX_EXCESS_GAP = 0.0005
 # (c) Share of the FFN's summed price held by its most expensive half of weights (concentration).
 MENU_MIN_CONCENTRATION = 0.75
 # The error model: excess loss falls about 4x per added bit (records 3, 4 and 6).
@@ -168,6 +177,62 @@ def g5_report(
         },
         "checks": checks,
         "decision": decision,
+    }
+
+
+def g2_report(
+    bf16: dict[str, Any], blaze_q: dict[str, Any], plan_bytes: int, target_bytes: int
+) -> dict[str, Any]:
+    excess = excess_loss(blaze_q, bf16)
+    mark = GLAZE_V2_EXCESS / G2_FACTOR
+    checks = {"beats_glaze_v2": excess <= mark, "no_larger": plan_bytes <= target_bytes}
+    passed = all(checks.values())
+    return {
+        "bf16": drift_point(bf16),
+        "blaze_q": {**drift_point(blaze_q), "excess_loss": excess},
+        "glaze_v2_excess": GLAZE_V2_EXCESS,
+        "factor_below_glaze_v2": GLAZE_V2_EXCESS / excess if excess > 0 else None,
+        "sizes": {"blaze_q": plan_bytes, "w4a16": target_bytes},
+        "thresholds": {"max_excess": mark},
+        "checks": checks,
+        "decision": "go: G3, the panel" if passed else "stop: Blaze-Q does not clear G2 on the 4B",
+    }
+
+
+def g3_report(panel: dict[str, Any]) -> dict[str, Any]:
+    """`panel`: per task, scores and Blaze-Q's paired change from BF16 (`blaze_q_vs_bf16`)."""
+    drops = {task: -entry["blaze_q_vs_bf16"]["delta"] for task, entry in panel.items()}
+    passed = all(drop <= G3_MAX_PANEL_DROP for drop in drops.values())
+    return {
+        "panel": panel,
+        "drops": drops,
+        "thresholds": {"max_panel_drop": G3_MAX_PANEL_DROP},
+        "checks": {"panel": passed},
+        "decision": "go: G4, the full suite" if passed else "stop: check drift by domain first",
+    }
+
+
+def real_report(
+    bf16: dict[str, Any],
+    fake: dict[str, Any],
+    real: dict[str, Any],
+    check: dict[str, Any],
+    speeds: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    fake_excess, real_excess = excess_loss(fake, bf16), excess_loss(real, bf16)
+    checks = {
+        "serves_like_fake": bool(check.get("passed")),
+        "same_drift": abs(real_excess - fake_excess) <= REAL_MAX_EXCESS_GAP,
+    }
+    return {
+        "bf16": drift_point(bf16),
+        "fake": {**drift_point(fake), "excess_loss": fake_excess},
+        "real": {**drift_point(real), "excess_loss": real_excess},
+        "check": check,
+        "speed": speeds,
+        "thresholds": {"max_excess_gap": REAL_MAX_EXCESS_GAP},
+        "checks": checks,
+        "decision": "go: the real format holds" if all(checks.values()) else "stop: fix the format",
     }
 
 
