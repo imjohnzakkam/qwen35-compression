@@ -13,8 +13,15 @@ from glaze_tiny import WIDE, random_blocks, tiny_teacher
 
 from qwen35_compression.blaze.body import ffn_layer_units, is_body_linear, swapped
 from qwen35_compression.blaze.census import Census, coverage, load_census, save_census
-from qwen35_compression.blaze.export import HEAD, MANIFEST, TIED_TABLE, write_fake_export
-from qwen35_compression.blaze.gates import cost, excess_loss, g1_report
+from qwen35_compression.blaze.export import (
+    HEAD,
+    MANIFEST,
+    TIED_TABLE,
+    size_plan,
+    write_fake_export,
+)
+from qwen35_compression.blaze.gates import cost, excess_loss, g1_report, g1b_report, g5_report
+from qwen35_compression.blaze.gptq import gptq_body, gptq_weight
 from qwen35_compression.blaze.ladder import (
     LadderPlan,
     ladder_table,
@@ -23,7 +30,7 @@ from qwen35_compression.blaze.ladder import (
     restore,
 )
 from qwen35_compression.blaze.sensitivity import concentration, measure_units, pack_text
-from qwen35_compression.glaze2.quant import Option, fake_quantize
+from qwen35_compression.glaze2.quant import Option, code_range, dequantize, fake_quantize
 
 QUIET = {"log": lambda _: None}
 
@@ -219,7 +226,12 @@ def test_fake_export_ladders_a_tied_table_and_the_body(tmp_path: Path) -> None:
     assert all(torch.equal(out[key], tensors[key]) for key in UNTOUCHED)
     assert (tmp_path / "out" / "tokenizer.json").exists()
     assert record["tied_table"] and record["input_table"] is None
-    assert record["body"] == {"option": "w6g128", "linears": 1, "stored_bytes": 25_088}
+    assert record["body"] == {
+        "option": "w6g128",
+        "linears": 1,
+        "replaced_linears": 0,
+        "stored_bytes": 25_088,
+    }
     assert record["ladder"]["table_bytes"] == plan.table_bytes(128)
     assert json.loads((tmp_path / "out" / MANIFEST).read_text())["fake_quantized"]
     with pytest.raises(FileExistsError):
@@ -294,3 +306,160 @@ def test_g1_plan_builds_three_exports_four_scores_and_prices(tmp_path: Path) -> 
     assert pilot["score:blaze_ladder"][-2:] == ["--limit", "10"]
     assert pilot["prices"][-2:] == ["--layers", "0,1"]
     assert pilot["export:blaze_ladder"] == full["export:blaze_ladder"]
+
+
+def _correlated_inputs(columns: int, tokens: int = 512) -> torch.Tensor:
+    generator = torch.Generator().manual_seed(1)
+    mix = torch.randn(columns, columns, generator=generator) / columns**0.5
+    scale = torch.linspace(0.2, 3.0, columns)
+    return (torch.randn(tokens, columns, generator=generator) @ mix) * scale
+
+
+def test_gptq_stores_codes_on_the_grid_and_beats_rounding_to_nearest() -> None:
+    torch.manual_seed(0)
+    weight = torch.randn(64, 256)
+    x = _correlated_inputs(256)
+    hessian = x.T @ x / x.shape[0]
+    option = Option(4, 128)
+    stored, codes, scales = gptq_weight(weight, hessian, option)
+    low, high = code_range(option.bits)
+    assert stored.dtype == torch.bfloat16 and stored.shape == weight.shape
+    assert int(codes.min()) >= low and int(codes.max()) <= high
+    assert torch.equal(stored, dequantize(codes.float(), scales.float(), option))
+
+    def output_error(quantized: torch.Tensor) -> float:
+        return float(((x @ (quantized.float() - weight).T) ** 2).mean())
+
+    assert output_error(stored) < 0.8 * output_error(fake_quantize(weight, option))
+
+
+def test_gptq_body_quantizes_every_layer_on_the_quantized_chain() -> None:
+    teacher = tiny_teacher(**WIDE)
+    before = {
+        name: module.weight.clone()
+        for name, module in teacher.named_modules()
+        if isinstance(module, torch.nn.Linear)
+    }
+    stored = gptq_body(teacher, random_blocks(4), Option(6, 128), batch=2, log=lambda _: None)
+    assert set(stored) == set(before)
+    for name, weight in stored.items():
+        assert torch.equal(teacher.get_submodule(name).weight, weight)
+        assert not torch.equal(weight, before[name])
+    pilot = tiny_teacher(**WIDE)
+    some = gptq_body(pilot, random_blocks(2), Option(6, 128), 2, layers=[0], log=lambda _: None)
+    assert {name.split(".")[1] for name in some} == {"0"}
+
+
+def test_fake_export_takes_replaced_body_weights(tmp_path: Path) -> None:
+    from safetensors.torch import load_file
+
+    tensors = _checkpoint(tmp_path / "bf16")
+    given = torch.full_like(tensors[BODY], 0.5)
+    record = write_fake_export(
+        tmp_path / "bf16", tmp_path / "out", None, Option(6, 128), replaced={BODY: given}, **QUIET
+    )
+    out = load_file(str(tmp_path / "out" / "model.safetensors"))
+    assert torch.equal(out[BODY], given)
+    assert record["body"]["replaced_linears"] == 1
+    with pytest.raises(ValueError, match="not body Linears"):
+        write_fake_export(
+            tmp_path / "bf16",
+            tmp_path / "again",
+            None,
+            Option(6, 128),
+            replaced={"mtp.fc.weight": tensors["mtp.fc.weight"]},
+            **QUIET,
+        )
+    with pytest.raises(KeyError):
+        write_fake_export(
+            tmp_path / "bf16", tmp_path / "x", None, Option(6, 128), replaced={"nope": given}
+        )
+
+
+def test_size_plan_counts_each_part_and_leaves_out_mtp(tmp_path: Path) -> None:
+    _checkpoint(tmp_path / "bf16")
+    plan = LadderPlan(tuple(range(16)), 4)
+    standard = size_plan(tmp_path / "bf16", Option(4, 128))
+    laddered = size_plan(tmp_path / "bf16", Option(8, 128), plan)
+    assert standard["parts"] == {
+        "table": 16 * 128 * 2,
+        "body": Option(4, 128).tensor_bytes(128, 256),
+        "vision": 256 * 128 * 2,
+        "other": 128 * 2,
+    }
+    assert standard["mtp_bytes_excluded"] == 128 * 256 * 2
+    assert laddered["parts"]["table"] == plan.table_bytes(128)
+    assert laddered["parts"]["body"] == Option(8, 128).tensor_bytes(128, 256)
+    assert laddered["total_bytes"] == sum(laddered["parts"].values())
+
+
+def test_g1b_report_marks_and_decisions() -> None:
+    bf16 = _drift(0.128, 0.0035)
+    passed = g1b_report(bf16, _drift(0.1305, 0.01), 0.00483)
+    assert passed["checks"] == {"six_bit_gptq_pays": True}
+    assert passed["gptq_gain"] == pytest.approx(0.00483 / 0.0025)
+    assert passed["decision"].startswith("go:")
+    assert g1b_report(bf16, _drift(0.1315, 0.01))["decision"].startswith("borderline")
+    assert g1b_report(bf16, _drift(0.1325, 0.01))["decision"].startswith("stop")
+
+
+def test_g5_report_needs_drift_size_and_panel() -> None:
+    bf16, w4, q = _drift(0.20, 0.004), _drift(0.26, 0.06), _drift(0.21, 0.01)
+    sizes = {"w4a16": 100, "blaze_q": 99}
+    report = g5_report(bf16, w4, q, sizes, {"MATH-500": 0.4, "IFEval": -0.2})
+    assert report["checks"] == {"excess_share": True, "no_larger": True, "panel": True}
+    assert report["excess_share"] == pytest.approx(1 / 6)
+    assert report["decision"].startswith("go:")
+    assert g5_report(bf16, w4, q, sizes, None)["decision"].startswith("go:")
+    assert g5_report(bf16, w4, q, {"w4a16": 100, "blaze_q": 101}, None)["decision"].startswith(
+        "stop"
+    )
+    assert g5_report(bf16, w4, q, sizes, {"MATH-500": 1.6})["decision"].startswith("stop")
+    assert g5_report(bf16, w4, _drift(0.23, 0.02), sizes, None)["decision"].startswith("stop")
+
+
+def _load_script(name: str):
+    sys.path.insert(0, "scripts")
+    spec = importlib.util.spec_from_file_location(name, f"scripts/{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_g1b_plan_keeps_the_pilot_export_apart(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_g1b")
+    full = driver.plan(tmp_path / "g1b", tmp_path / "exports", "SNAPSHOT", None)
+    assert list(full) == ["export", "score:bf16", "score:blaze_ladder_gptq6"]
+    assert full["export"][full["export"].index("--bits") + 1] == "6"
+    assert "--layers" not in full["export"]
+    pilot = driver.plan(tmp_path / "g1b-pilot", tmp_path / "exports", "SNAPSHOT", 10)
+    assert pilot["export"][-2:] == ["--layers", "0,1"]
+    out = pilot["export"][pilot["export"].index("--output") + 1]
+    assert out.endswith("blaze_ladder_gptq6-pilot")
+    assert pilot["score:blaze_ladder_gptq6"][-2:] == ["--limit", "10"]
+
+
+def test_g5_plan_scores_three_models_on_bf16s_answers(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_g5")
+    exports = driver.exports_of(tmp_path / "outputs")
+    config = Path("configs/blaze_2b.yaml")
+    full = driver.plan(config, tmp_path / "g5", exports, "SNAPSHOT", None)
+    assert list(full) == [
+        "panel:bf16",
+        "export:gptq_w4a16_g128",
+        "export:blaze_q_w8",
+        "score:bf16",
+        "score:gptq_w4a16_g128",
+        "score:blaze_q_w8",
+        "panel:gptq_w4a16_g128",
+        "panel:blaze_q_w8",
+    ]
+    traces = full["score:blaze_q_w8"][full["score:blaze_q_w8"].index("--traces") + 1]
+    assert traces == str(tmp_path / "g5" / "panel" / "bf16")
+    assert "--samples" in full["panel:bf16"] and "--limit" not in full["panel:bf16"]
+    assert full["export:blaze_q_w8"][-5:-2] == ["--ladder", "--body-bits", "8"]
+    pilot = driver.plan(config, tmp_path / "g5-pilot", exports, "SNAPSHOT", 10)
+    assert pilot["panel:bf16"][-2:] == ["--limit", "10"]
+    assert pilot["export:gptq_w4a16_g128"] == full["export:gptq_w4a16_g128"]

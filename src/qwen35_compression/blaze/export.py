@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -49,9 +49,13 @@ def write_fake_export(
     body: Option | None = None,
     device: str = "cpu",
     log: Callable[[str], None] = print,
+    replaced: Mapping[str, torch.Tensor] | None = None,
 ) -> dict[str, Any]:
     """Copy `source` into `output` with the vocabulary laddered and/or every body Linear
-    round-to-nearest at `body`, and return the export's record.
+    stored at `body`, and return the export's record.
+
+    Body Linears are rounded to nearest, unless `replaced` (checkpoint key -> stored BF16 weight,
+    e.g. from GPTQ at `body`) gives their values; every replaced key must be a body Linear.
 
     Tied tables (0.8B to 4B) are laddered once. Untied models ladder the LM head and keep the
     input table at the ladder's lower rung, as Blaze stores them.
@@ -62,7 +66,15 @@ def write_fake_export(
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"refusing to overwrite non-empty export: {output}")
     output.mkdir(parents=True, exist_ok=True)
-    tied = HEAD not in _tensor_names(source)
+    names = _tensor_names(source)
+    tied = HEAD not in names
+    replaced = dict(replaced or {})
+    given = len(replaced)
+    if replaced and body is None:
+        raise ValueError("replaced weights need the body option they were stored at")
+    missing = sorted(key for key in replaced if key not in names)
+    if missing:
+        raise KeyError(f"replaced weights not in {source}: {missing[:3]}")
     hidden = 0
     body_linears = 0
     body_bytes = 0
@@ -82,11 +94,19 @@ def write_fake_export(
                 elif body is not None and is_body_linear(key, tensor.shape):
                     if tensor.shape[1] % body.group:
                         raise ValueError(f"{key}: {tensor.shape[1]} inputs, group {body.group}")
-                    tensor = fake_quantize(tensor.to(device), body).cpu()
+                    if key in replaced:
+                        stored = replaced.pop(key)
+                        if stored.shape != tensor.shape:
+                            raise ValueError(f"{key}: replaced shape {tuple(stored.shape)}")
+                        tensor = stored.to(tensor.dtype).cpu()
+                    else:
+                        tensor = fake_quantize(tensor.to(device), body).cpu()
                     body_linears += 1
                     body_bytes += body.tensor_bytes(tensor.shape[0], tensor.shape[1])
                 tensors[key] = tensor.contiguous()
         save_file(tensors, str(output / path.name), metadata=metadata)
+    if replaced:
+        raise ValueError(f"replaced weights that are not body Linears: {sorted(replaced)[:3]}")
     if ladder is not None and not hidden:
         raise ValueError(f"no vocabulary table ({TIED_TABLE if tied else HEAD}) in {source}")
     for path in source.iterdir():
@@ -107,7 +127,12 @@ def write_fake_export(
             else None
         ),
         "body": (
-            {"option": body.name, "linears": body_linears, "stored_bytes": body_bytes}
+            {
+                "option": body.name,
+                "linears": body_linears,
+                "replaced_linears": given,
+                "stored_bytes": body_bytes,
+            }
             if body is not None
             else None
         ),
@@ -115,3 +140,53 @@ def write_fake_export(
     (output / MANIFEST).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     log(f"blaze export: {output.name} ladder={ladder is not None} body={body and body.name}")
     return record
+
+
+def size_plan(source: Path, body: Option, ladder: LadderPlan | None = None) -> dict[str, Any]:
+    """Bytes of an export of `source` as the real format stores it, by part: the vocabulary
+    table(s) laddered (or BF16 without a ladder), body Linears at `body`, everything else BF16.
+
+    The MTP head (`mtp.*`) is left out: vLLM does not load it unless asked, and quantized
+    exports drop it, so both sides of a size comparison count the same tensors.
+    """
+    from safetensors import safe_open
+
+    parts = {"table": 0, "body": 0, "vision": 0, "other": 0}
+    skipped = 0
+    hidden = 0
+    names = _tensor_names(source)
+    tied = HEAD not in names
+    for path in _shards(source):
+        with safe_open(str(path), framework="pt") as handle:
+            for key in handle.keys():
+                tensor = handle.get_slice(key)
+                shape = tensor.get_shape()
+                count = 1
+                for size in shape:
+                    count *= size
+                bf16 = count * 2
+                if key.startswith("mtp."):
+                    skipped += bf16
+                elif key in (TIED_TABLE, HEAD):
+                    hidden = shape[1]
+                    if ladder is None:
+                        parts["table"] += bf16
+                    elif key == (TIED_TABLE if tied else HEAD):
+                        parts["table"] += ladder.table_bytes(hidden)
+                    else:
+                        parts["table"] += REST_OPTION.tensor_bytes(shape[0], shape[1])
+                elif is_body_linear(key, shape):
+                    parts["body"] += body.tensor_bytes(shape[0], shape[1])
+                elif "visual" in key:
+                    parts["vision"] += bf16
+                else:
+                    parts["other"] += bf16
+    if not hidden:
+        raise ValueError(f"no vocabulary table in {source}")
+    return {
+        "body_option": body.name,
+        "ladder": ladder is not None,
+        "parts": parts,
+        "total_bytes": sum(parts.values()),
+        "mtp_bytes_excluded": skipped,
+    }
