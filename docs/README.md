@@ -14,13 +14,13 @@ each record.
 | [5. Glaze v1](experiments/05-glaze-v1.md) | Tuning AutoRound's scales and norms end to end: why it did not beat AutoRound, and what that showed |
 | [6. Glaze v2](experiments/06-glaze-v2.md) | Quantizing from BF16 with in-domain data, Fisher-weighted rounding and byte-neutral mixed precision: MATH-500 within 0.2 points of BF16 at AutoRound's size |
 | [7. Glaze v2 controls](experiments/07-glaze-controls.md) | AutoRound on Glaze v2's calibration data: the data alone gives 7.0 of Glaze v2's 10.0-point MATH-500 gain |
-| [8. Blaze](experiments/08-blaze.md) | Moving the vocabulary table's bytes into the body: design, the usage census, and gate G1's code (not yet run) |
+| [8. Blaze](experiments/08-blaze.md) | Moving the vocabulary table's bytes into the body: the usage census, gates G1 and G1b on the 4B, and G5 on the 2B, where it matches BF16 at W4A16's size |
 | [Engineering notes](engineering-notes.md) | Pitfalls when evaluating and quantizing Qwen3.5 with vLLM, lm-eval, VLMEvalKit and llm-compressor |
 
 ## Summary
 
-All results are for `Qwen/Qwen3.5-4B` (revision `851bf6e`) in instruct mode with greedy decoding
-and up to 8,192 generated tokens.
+All results are for `Qwen/Qwen3.5-4B` (revision `851bf6e`), except Blaze's 2B check, in instruct
+mode with greedy decoding and up to 8,192 generated tokens.
 
 - **INT8 W8A8 is effectively lossless** (5.51 GB, 1.69× smaller): no task changes by more than
   2 points, and none of the panel changes is statistically distinguishable from zero.
@@ -38,6 +38,12 @@ and up to 8,192 generated tokens.
 - **Most of that MATH-500 gain is Glaze v2's calibration data:** AutoRound tuned on the same
   in-domain blocks reaches 80.2 (+7.0, paired interval +2.8 to +11.0). Glaze v2's own stages add
   about 3 more points there, and 3.5 on IFEval, where the data alone does not help.
+- **Blaze moves the vocabulary table's bytes into the body, with no in-domain data:** storing the
+  busiest 65,536 vocabulary rows at 8 bits and the rest at 4 costs almost nothing (excess loss
+  0.0002). On the 4B, a GPTQ-rounded 6-bit body with that table reaches 0.0027, a fifth of Glaze
+  v2's. On Qwen3.5-2B at a standard GPTQ W4A16 export's size (2.39 GB), it buys an all-8-bit body:
+  MATH-500 67.8 and MMLU-Pro 56.7 against BF16's 64.6 and 56.4 and W4A16's 52.4 and 45.9. These
+  are fake-quantized exports; the tiered vocabulary module for vLLM is not built yet.
 
 ## Released artifacts
 

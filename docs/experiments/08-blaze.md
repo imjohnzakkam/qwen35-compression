@@ -6,8 +6,11 @@ the 4B's tied embedding and LM head is 1.27 GB of its 3.78 GB. Blaze stores the 
 choosing each unit's precision by measured KL. Nothing is trained or Fisher-weighted, and no
 in-domain answers are needed.
 
-**Status:** design and gate G1's code. The usage census (G0) has run on a CPU; nothing has run on
-a GPU yet.
+**Status:** gates G0, G1, G1b and G5 have run. The ladder is free; a GPTQ-rounded 6-bit body
+meets its mark on the 4B; and on the 2B, Blaze-Q at a standard W4A16 export's size scores like
+BF16 where W4A16 loses 10-12 points on MATH-500 and MMLU-Pro. Every export so far is
+fake-quantized (the stored values, written back in BF16): the tiered vocabulary module for vLLM,
+and with it speed and memory, is not built yet.
 
 ## Why bytes rather than rounding
 
@@ -93,13 +96,96 @@ replays, because 32 separate vLLM loads would take hours.
 | Hardware | One NVIDIA A30 (24 GB); three BF16-size exports need about 28 GB of disk |
 | Estimate | About 1.75 hours with the pilot: ₹68 (about $0.71) at ₹38.88 per hour and ₹96.3 per dollar |
 
+## G1 results
+
+Run `r_d95d713c` on one A30, code `a16401f`, 16 October 2026: about 52 minutes with the pilot,
+₹33.48 (about $0.35). Drift on BF16's 1,501 answers (2,304,479 tokens); BF16 flips 0.35% of its
+own tokens on replay.
+
+| Variant or measure | Flip rate | Excess loss | Mark | Result |
+| --- | ---: | ---: | --- | --- |
+| `blaze_ladder` | 0.40% | 0.00022 | ≤ 0.6% and ≤ 0.001 | Passes: the ladder is free |
+| `blaze_ladder_w6` (round-to-nearest) | 1.79% | 0.00483 | ≤ 0.004 | Misses narrowly |
+| `blaze_ladder_w4` (round-to-nearest) | 7.54% | 0.0943 | reference | 19.5× the 6-bit excess; the rule predicts 16× |
+| FFN prices | | | concentration ≥ 0.75 | 0.648: misses |
+
+The FFN layers price alike (KL 0.0017-0.0027 each at 4 bits), except layer 31 at 0.0062, so moving
+a few layers to 8 bits buys little: the 4B's body needs a 6-bit option. The decision rule read
+"stop on the 4B; check the 2B before more", and both checks below were run.
+
+## G1b: a GPTQ-rounded 6-bit body
+
+`blaze_ladder_gptq6` is G1's 6-bit variant with the body rounded by GPTQ instead of to nearest:
+the same symmetric g128 grid (`blaze/gptq.py`; BF16 scales, codes times scale in BF16), columns
+rounded left to right with their error spread through the inverse Hessian's Cholesky factor,
+layers in order on the quantized chain. Calibration is 128 blocks of 2,048 tokens of WikiText-2's
+training split, the prices' pinned file: generic text, not the model's own answers. It is held to
+the first draft's GPTQ mark, 0.003.
+
+Run `r_34e094ca` on one A30, code `672e9ca`: about 38 minutes with the pilot (GPTQ 10 minutes,
+peak 11.4 GB), about ₹25 (about $0.26).
+
+| Variant | Flip rate | Excess loss | Mark | Result |
+| --- | ---: | ---: | --- | --- |
+| `blaze_ladder_w6`, round-to-nearest (G1) | 1.79% | 0.00483 | | |
+| `blaze_ladder_gptq6` | 1.76% | **0.00269** | ≤ 0.003 | Passes |
+
+GPTQ lowers the excess loss 1.8× at the same bits, and to 19% of Glaze v2's 0.0143, with no
+in-domain data. The 6-bit option pays, so G2 needs a 6-bit kernel. A fully 6-bit body is a
+little over the 4B's equal-size budget (the laddered table frees enough for about 6.0 bits per
+body weight with scales), so an equal-size Blaze-Q on the 4B is mostly 6-bit with some units at 4.
+
+## G5: Qwen3.5-2B at W4A16's size
+
+On the 2B the ladder frees as many bytes as an all-8-bit body costs, so Blaze-Q is the ladder
+plus every body Linear at 8-bit g128, rounded to nearest with no calibration data. The baseline
+is Feature 1's GPTQ W4A16 g128 recipe unchanged (512 UltraChat samples of 2,048 tokens). Both are
+scored against BF16 (revision `15852e8`): drift on BF16's own MATH-500 and MMLU-Pro answers, and
+the reasoning panel's text tasks with the instruct track's settings (MMMU, the panel's vision
+task, was not run). Sizes are counted as the real formats store them, the MTP head excluded on
+both sides.
+
+Run `r_bf0526dd` on one A30, code `672e9ca`: about 100 minutes with the pilot (GPTQ 12 minutes;
+each panel 14-20 minutes), about ₹67 (about $0.70).
+
+| | BF16 | GPTQ W4A16 g128 | Blaze-Q |
+| --- | ---: | ---: | ---: |
+| Vocabulary table | 1.017 GB | 1.017 GB | 0.330 GB |
+| Body Linears | 2.745 GB | 0.708 GB | 1.394 GB |
+| Total (with the BF16 vision tower and norms) | 4.43 GB | 2.3889 GB | 2.3884 GB |
+| Flip rate (BF16's 1,501 answers, 3,149,312 tokens) | 0.38% | 6.78% | 0.71% |
+| Excess loss | | 0.0730 | **0.00046** |
+| MATH-500 | 64.6 | 52.4 | 67.8 |
+| MMLU-Pro (1001-question subset) | 56.4 | 45.9 | 56.7 |
+| IFEval (prompt, strict) | 65.3 | 64.5 | 65.8 |
+
+Paired changes from BF16, with bootstrap 95% intervals:
+
+| Task | GPTQ W4A16 | Blaze-Q |
+| --- | --- | --- |
+| MATH-500 | -12.2 (-16.8 to -7.6) | +3.2 (-1.0 to +7.4) |
+| MMLU-Pro | -10.6 (-13.8 to -7.6) | +0.3 (-2.2 to +2.7) |
+| IFEval | -0.7 (-4.4 to +3.0) | +0.6 (-2.4 to +3.7) |
+
+All three checks pass: Blaze-Q's excess loss is 0.6% of W4A16's (the mark was a third), it is
+432 KB smaller, and no panel task is more than a point below BF16 (none of its changes is
+distinguishable from zero). Blaze is not a 4B-only result. The 2B is the easy case: there the
+vocabulary's bytes buy a whole 8-bit body, which is close to lossless, against a 4-bit baseline
+that loses more on a small model than on the 4B.
+
+| | |
+| --- | --- |
+| Code | G1b: `src/qwen35_compression/blaze/gptq.py`, `scripts/blaze_gptq.py`, `scripts/run_blaze_g1b.py`. G5: `configs/blaze_2b.yaml`, `configs/evaluation/blaze_panel_text.yaml`, `scripts/run_blaze_g5.py`; sizes by `blaze.export.size_plan` |
+| Spend | G1, G1b and G5 together ₹125.89 (about $1.31) at ₹38.88 per A30 hour and ₹96.3 per dollar |
+
 ## Reproduce
 
 ```bash
 # G0, on any machine: the census and its lock
 uv run python scripts/blaze_census.py --answers <Glaze v2 run>/answers.jsonl
 
-# G1 on one GPU: a 10-answer pilot of every step, then the full gate
-uv run python scripts/run_blaze_g1.py --pilot-limit 10 --dry-run
+# G1, G1b and G5, each on one GPU: a 10-answer pilot of every step, then the full gate
 uv run python scripts/run_blaze_g1.py --pilot-limit 10
+uv run python scripts/run_blaze_g1b.py --pilot-limit 10
+uv run python scripts/run_blaze_g5.py --pilot-limit 10
 ```
