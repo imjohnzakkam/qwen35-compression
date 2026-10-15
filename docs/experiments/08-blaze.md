@@ -173,6 +173,34 @@ distinguishable from zero). Blaze is not a 4B-only result. The 2B is the easy ca
 vocabulary's bytes buy a whole 8-bit body, which is close to lossless, against a 4-bit baseline
 that loses more on a small model than on the 4B.
 
+## Beside BF16 and the other methods
+
+Each method's scores on the model it was run on. Glaze v2 has benchmark scores on the 4B only and
+Blaze-Q on the 2B only, so each is compared with its own model's BF16 and 4-bit baselines.
+
+| Model | Method | Checkpoint | Flip rate | Excess loss | MMLU-Pro | MATH-500 | IFEval |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4B | BF16 | 9.32 GB | 0.35% | — | 74.6 | 83.4 | 82.3 |
+| 4B | GPTQ W4A16 g128 | 3.78 GB | 5.70% | 0.054 | 71.4 | 75.8 | 80.8 |
+| 4B | AWQ W4A16 g128 | 3.79 GB | 5.42% | 0.050 | 71.9 | 73.4 | 79.3 |
+| 4B | AutoRound W4A16 g128 | 3.80 GB | 4.96% | 0.042 | 72.8 | 73.2 | 80.6 |
+| 4B | Glaze v2 | 3.80 GB | 3.29% | 0.014 | 73.7 | 83.2 | 82.8 |
+| 4B | Blaze: ladder + 6-bit GPTQ body (G1b) | 3.81 GB | 1.76% | **0.0027** | not run | not run | not run |
+| 2B | BF16 | 4.55 GB | 0.38% | — | 56.4 | 64.6 | 65.3 |
+| 2B | GPTQ W4A16 g128 | 2.39 GB | 6.78% | 0.073 | 45.9 | 52.4 | 64.5 |
+| 2B | Blaze-Q: ladder + 8-bit body (G5) | 2.39 GB | 0.71% | **0.0005** | 56.7 | 67.8 | 65.8 |
+
+- Flip rate and excess loss are on BF16's own 1,501 MATH-500 and MMLU-Pro answers for each model.
+- MMLU-Pro is the full set on the 4B and the 1001-question subset on the 2B.
+- Checkpoint sizes are file sizes, except the two Blaze rows, which are counted as the real format
+  would store them (both exports are fake-quantized). The 4B's 6-bit body is 0.4% over AutoRound's
+  size; an equal-size Blaze-Q on the 4B would put a few units at 4 bits.
+
+![BF16, the 4-bit baselines, Glaze v2 and Blaze-Q, each against its own BF16](../figures/blaze-radar.png)
+
+Drawn by `scripts/plot_blaze_radar.py`. The two drift axes are token agreement (100 minus the flip
+rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
+
 | | |
 | --- | --- |
 | Code | G1b: `src/qwen35_compression/blaze/gptq.py`, `scripts/blaze_gptq.py`, `scripts/run_blaze_g1b.py`. G5: `configs/blaze_2b.yaml`, `configs/evaluation/blaze_panel_text.yaml`, `scripts/run_blaze_g5.py`; sizes by `blaze.export.size_plan` |
