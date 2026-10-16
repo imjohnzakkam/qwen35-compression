@@ -19,6 +19,91 @@
  ],
  "cards": [
   {
+   "id": "ADD",
+   "column": "running",
+   "model": "4B",
+   "title": "Ladder add-on and Blaze-Q 4/8",
+   "summary": "Only the vocabulary table laddered on the published GPTQ, AutoRound and Glaze v2 exports; and a Blaze-Q on today's 4/8-bit kernels.",
+   "cost": "≈₹0 so far · cap ₹110",
+   "details": [
+    [
+     "Question 1",
+     "Does the ladder shrink any 4-bit export by about 0.86 GB without changing its drift?"
+    ],
+    [
+     "Question 2",
+     "At W4A16's size, how close does a Blaze-Q that runs on today's kernels (GPTQ body, market-chosen units at 8 bits) get to G2b's 0.0017?"
+    ],
+    [
+     "Reused",
+     "G2's prices and BF16 drift score, the sources' recorded drift, and the published panel answers."
+    ],
+    [
+     "Run",
+     "r_e5d73d36 on one A30, started 16 Oct 17:39 UTC"
+    ]
+   ],
+   "steps": [
+    {
+     "label": "Pilot: GPTQ add-on, 10 answers",
+     "status": "pending"
+    },
+    {
+     "label": "Ladder GPTQ W4A16",
+     "status": "pending"
+    },
+    {
+     "label": "Ladder AutoRound",
+     "status": "pending"
+    },
+    {
+     "label": "Ladder Glaze v2",
+     "status": "pending"
+    },
+    {
+     "label": "Build Blaze-Q 4/8",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: GPTQ + ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: AutoRound + ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Glaze v2 + ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-Q 4/8",
+     "status": "pending"
+    },
+    {
+     "label": "Panel: Blaze-Q 4/8",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: GPTQ W4A16",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: GPTQ + ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: Blaze-Q 4/8",
+     "status": "pending"
+    }
+   ],
+   "progress": {
+    "pct": null,
+    "label": "Setting up the GPU"
+   },
+   "elapsed": "0h 00m on the GPU"
+  },
+  {
    "id": "G4",
    "column": "missed",
    "model": "4B",
@@ -403,20 +488,6 @@
    ]
   },
   {
-   "id": "S2",
-   "column": "next",
-   "model": "4B",
-   "title": "Blaze-S on GPTQ's body",
-   "summary": "The published GPTQ W4A16 body with the ladder and an 8-bit vision tower: GPTQ's accuracy at 2.6 GB.",
-   "cost": "≈₹35",
-   "details": [
-    [
-     "Why",
-     "Blaze-S's accuracy gap came from its own GPTQ, not from the ladder; reusing the published body isolates the byte saving."
-    ]
-   ]
-  },
-  {
    "id": "K6b",
    "column": "next",
    "model": "kernel",
@@ -432,9 +503,9 @@
   }
  ],
  "spend": {
-  "rupees": 520.33,
-  "dollars": 5.4,
-  "label": "₹520.33 (about $5.40) across all GPU runs"
+  "rupees": 520.72,
+  "dollars": 5.41,
+  "label": "₹520.72 (about $5.41) across all GPU runs"
  },
- "updated": "2026-10-16T17:14:45Z"
+ "updated": "2026-10-16T17:39:57Z"
 }
