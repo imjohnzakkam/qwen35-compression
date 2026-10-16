@@ -6,12 +6,12 @@ the 4B's tied embedding and LM head is 1.27 GB of its 3.78 GB. Blaze stores the 
 choosing each unit's precision by measured KL. Nothing is trained or Fisher-weighted, and no
 in-domain answers are needed.
 
-**Status:** gates G0-G3 and G5 have run, and the 2B's real format has been served by vLLM.
-On the 4B at a standard W4A16 export's size, with the vision tower at 8 bits as Glaze v2 stores
-it, Blaze-Q's excess loss is 0.0017, 8.5x below Glaze v2's, and its panel matches BF16: MMLU-Pro
-73.6 (BF16 73.6), MATH-500 83.0 (83.4), IFEval 82.4 (82.3), MMMU 68.7 (69.6). On the 2B it matches
-BF16 where W4A16 loses 10-12 points, and its real format reproduces the fake-quantized scores
-exactly. The 4B's numbers are fake-quantized: its 6-bit body needs a kernel vLLM does not have.
+**Status:** every gate has run (G0-G5). On the 4B at a standard W4A16 export's size, with the
+vision tower at 8 bits as Glaze v2 stores it, Blaze-Q's excess loss is 0.0017, 8.5x below Glaze
+v2's, and on the full suite it is within a point of BF16 on 12 of 13 tasks; MathVista is 1.1
+below (paired interval −2.6 to +0.5). On the 2B it matches BF16 where W4A16 loses 10-12 points,
+and its real format reproduces the fake-quantized scores exactly. The 4B's numbers are
+fake-quantized: its 6-bit body needs a kernel vLLM does not have.
 
 ## Why bytes rather than rounding
 
@@ -244,6 +244,45 @@ gpt-4o-mini extractor (`score_vision.py`); one of its 900 validation answers cou
 extracted and was filled at random by VLMEvalKit (BF16's run had 4, Glaze v2's 6). Its paired
 interval is not computed.
 
+## G4: the 4B's full suite
+
+G4 scored the suite's remaining tasks on G2b's export, rebuilt on the GPU from G2b's saved plan;
+its drift matched G2b's to the last digit (excess loss 0.0016895), so G3's MATH-500, IFEval and
+MMMU complete the suite. MMBench and MathVista were scored after download by the fixed
+gpt-4o-mini extractor, with no extraction failures. BF16's, AutoRound's and Glaze v2's columns are
+their recorded full-suite results (records 4 and 6).
+
+Run `r_f7c16f6c` on one A30, code `a76a268`: 4 hours 53 minutes (text 3.0 h, vision 1.2 h),
+₹196.87 (about $2.04).
+
+| Task | BF16 | AutoRound | Glaze v2 | Blaze-Q | Blaze-Q − BF16 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MMLU-Pro | 74.6 | 72.8 | 73.7 | **75.2** | +0.6 |
+| GSM8K | 83.2 | 82.3 | 82.8 | **83.3** | +0.1 |
+| MATH-500 | 83.4 | 73.2 | 83.2 | 83.0 | −0.4 |
+| IFEval | 82.3 | 80.6 | 82.8 | 82.4 | +0.1 |
+| HellaSwag | 65.4 | 64.8 | 64.8 | **65.3** | −0.1 |
+| ARC-Challenge | 51.1 | 50.0 | 49.6 | **51.0** | −0.1 |
+| WikiText-2 (perplexity, lower is better) | 10.95 | 11.45 | 11.30 | **10.96** | +0.01 |
+| MMBench (dev, EN v1.1) | 85.4 | 84.7 | 85.7 | 84.9 | −0.5 |
+| MMMU (val) | 69.6 | 66.9 | 66.7 | **68.7** | −0.9 |
+| MathVista (mini) | 81.0 | 80.3 | 80.6 | 79.9 | −1.1 |
+| OCRBench | 86.3 | 87.2 | 86.3 | 86.5 | +0.2 |
+| DocVQA (val) | 95.3 | 95.3 | 95.4 | **95.5** | +0.2 |
+| TextVQA (val) | 82.8 | 82.5 | 82.2 | **82.9** | +0.1 |
+| Checkpoint | 9.32 GB | 3.80 GB | 3.80 GB | 3.78 GB | |
+
+- **Twelve of thirteen tasks are within a point of BF16**, and Blaze-Q is level with or ahead of
+  Glaze v2 on ten. It recovers what Glaze v2 lost on ARC-Challenge (−1.5) and MMMU (−2.9), and
+  WikiText-2's perplexity is BF16's to two decimals.
+- **MathVista misses the mark by 0.1 point.** On its 1,000 questions, paired against BF16's own
+  answers, the change is −1.1 (−2.6 to +0.5); Glaze v2's is −0.4 (−2.2 to +1.5) and Blaze-Q's
+  against Glaze v2 is −0.7 (−2.7 to +1.1). The drop cannot be told apart from zero, but by the
+  gate's rule G4 does not pass, and the drop is reported as measured.
+- **Equal size, not equal bits.** Every 4-bit column spends a third of its file on a BF16
+  vocabulary table; Blaze-Q spends those bytes on a 6/8-bit body. Averaged over every weight, all
+  four quantized checkpoints sit near 6.7 bits.
+
 ## The real format, on the 2B
 
 The real export (`blaze/real.py`) stores the body as compressed-tensors groups, as any W8A16
@@ -320,7 +359,8 @@ rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
 | Code | G1b: `src/qwen35_compression/blaze/gptq.py`, `scripts/blaze_gptq.py`, `scripts/run_blaze_g1b.py`. G5: `configs/blaze_2b.yaml`, `configs/evaluation/blaze_panel_text.yaml`, `scripts/run_blaze_g5.py`; sizes by `blaze.export.size_plan` |
 | Code (G2, real format) | `src/qwen35_compression/blaze/market.py`, `blaze/real.py`, `plugins/blaze_vllm/`, `scripts/blaze_prices.py`, `blaze_market.py`, `blaze_real_export.py`, `blaze_real_check.py`, `blaze_speed.py`, `run_blaze_g2.py`, `run_blaze_real2b.py` |
 | Code (G2b) | `scripts/run_blaze_g2b.py`, `blaze_market.py --mode fill`, `plugins/blaze_vllm/blaze_vllm/head.py` |
-| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; ₹267.84 in all (about $2.78) at ₹38.88 per A30 hour and ₹96.3 per dollar |
+| Code (G4) | `scripts/run_blaze_g4.py`, `scripts/blaze_g4_report.py`, `configs/evaluation/blaze_g4_text.yaml`, `blaze_g4_vision.yaml` |
+| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; ₹464.71 in all (about $4.83) at ₹38.88 per A30 hour and ₹96.3 per dollar |
 
 ## Reproduce
 
@@ -338,4 +378,9 @@ uv run python scripts/run_blaze_g2b.py --prices <G2 run>/prices.json --bf16 <G2 
     --g5-answers <G5 run>/panel/bf16 --pilot-limit 10
 # MMMU, after download, with the OpenAI key on the local machine
 uv run python scripts/score_vision.py --run-dir <G2b run>/mmmu
+uv run python scripts/run_blaze_g4.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
+    --pilot-limit 10
+uv run python scripts/score_vision.py --run-dir <G4 run>/vision
+uv run python scripts/blaze_g4_report.py --g4 <G4 run> --g4-scored <G4 run>/vision-scored \
+    --g2b <G2b run> --output g4_report.json
 ```
