@@ -24,7 +24,7 @@
    "model": "4B",
    "title": "Ladder add-on and Blaze-Q 4/8",
    "summary": "Only the vocabulary table laddered on the published GPTQ, AutoRound and Glaze v2 exports; and a Blaze-Q on today's 4/8-bit kernels.",
-   "cost": "≈₹33 so far · cap ₹110",
+   "cost": "≈₹40 so far · cap ₹110",
    "details": [
     [
      "Question 1",
@@ -98,10 +98,10 @@
     }
    ],
    "progress": {
-    "pct": 0,
-    "label": "Panel: Blaze-Q 4/8 · 0 of 2,042 answers"
+    "pct": 26,
+    "label": "Panel: Blaze-Q 4/8 · 522 of 2,042 answers"
    },
-   "elapsed": "0h 50m on the GPU"
+   "elapsed": "1h 01m on the GPU"
   },
   {
    "id": "G4",
@@ -503,9 +503,9 @@
   }
  ],
  "spend": {
-  "rupees": 553.38,
-  "dollars": 5.75,
-  "label": "₹553.38 (about $5.75) across all GPU runs"
+  "rupees": 560.03,
+  "dollars": 5.82,
+  "label": "₹560.03 (about $5.82) across all GPU runs"
  },
- "updated": "2026-10-16T18:30:20Z"
+ "updated": "2026-10-16T18:40:37Z"
 }
