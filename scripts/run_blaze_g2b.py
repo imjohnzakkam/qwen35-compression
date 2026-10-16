@@ -41,7 +41,11 @@ import _bootstrap  # noqa: E402, F401
 
 from qwen35_compression.blaze.export import MANIFEST  # noqa: E402
 from qwen35_compression.blaze.gates import cost, g2_report, g3_report  # noqa: E402
-from qwen35_compression.blaze.runs import GateRun, bootstrap_text  # noqa: E402
+from qwen35_compression.blaze.runs import (  # noqa: E402
+    GateRun,
+    bootstrap_text,
+    vision_run_manifest,
+)
 from qwen35_compression.config import load_config  # noqa: E402
 from qwen35_compression.drift import TEXT_PYTHON, score_command  # noqa: E402
 from qwen35_compression.feature1 import (  # noqa: E402
@@ -51,7 +55,6 @@ from qwen35_compression.feature1 import (  # noqa: E402
     fla_install_command,
     load_benchmark_suite,
     run_logged,
-    suite_record,
 )
 from qwen35_compression.io import write_json  # noqa: E402
 from qwen35_compression.provenance import git_revision  # noqa: E402
@@ -269,24 +272,16 @@ def run_gate(args: argparse.Namespace, output: Path, limit: int | None) -> dict[
         # The record scripts/score_vision.py reads to score MMMU after download.
         write_json(
             output / "mmmu" / "run_manifest.json",
-            {
-                "schema_version": 1,
-                "feature": "feature1",
-                "variant": EXPORT,
-                "method": "blaze",
-                "model_id": config.model.id,
-                "model_revision": revision,
-                "code_revision": args.code_revision,
-                "config_digest": config.digest,
-                "benchmark_suite": suite_record(load_benchmark_suite(PANEL)),
-                "export_dir": str(export),
-                "scope": "vision_only",
-                "limit": None,
-                "vision_limit": None,
-                "enable_thinking": False,
-                "research_result": True,
-                "status": "passed",
-            },
+            vision_run_manifest(
+                EXPORT,
+                config.model.id,
+                revision,
+                args.code_revision,
+                config.digest,
+                PANEL,
+                export,
+                None,
+            ),
         )
 
     if not args.skip_single_copy:

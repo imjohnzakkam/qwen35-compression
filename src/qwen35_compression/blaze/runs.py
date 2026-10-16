@@ -72,3 +72,36 @@ def bootstrap_text(root: Path) -> None:
     subprocess.run(
         [str(TEXT_PYTHON), "scripts/preflight.py", "--profile", "gpu-text"], cwd=root, check=True
     )
+
+
+def vision_run_manifest(
+    variant: str,
+    model_id: str,
+    model_revision: str,
+    code_revision: str,
+    config_digest: str,
+    suite_path: Path,
+    export: Path,
+    limit: int | None,
+) -> dict[str, Any]:
+    """The record scripts/score_vision.py reads to score a run's vision answers after download."""
+    from qwen35_compression.feature1 import load_benchmark_suite, suite_record
+
+    return {
+        "schema_version": 1,
+        "feature": "feature1",
+        "variant": variant,
+        "method": "blaze",
+        "model_id": model_id,
+        "model_revision": model_revision,
+        "code_revision": code_revision,
+        "config_digest": config_digest,
+        "benchmark_suite": suite_record(load_benchmark_suite(suite_path)),
+        "export_dir": str(export),
+        "scope": "vision_only",
+        "limit": limit,
+        "vision_limit": limit,
+        "enable_thinking": False,
+        "research_result": limit is None,
+        "status": "passed",
+    }

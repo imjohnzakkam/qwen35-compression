@@ -341,3 +341,38 @@ def test_g2b_plan_fills_from_reused_prices(tmp_path: Path) -> None:
     assert (
         "--single-copy" in single["check2b:single"] and "--single-copy" in single["speed2b:single"]
     )
+
+
+def test_g4_plan_rebuilds_checks_then_pilots(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_g4")
+    steps_ = driver.plan(tmp_path / "g4", tmp_path / "export", "S", tmp_path / "plan.json", 10)
+    assert list(steps_) == [
+        "export",
+        "score:rebuild",
+        "pilot:text",
+        "pilot:vision",
+        "text",
+        "vision",
+    ]
+    assert steps_["export"][steps_["export"].index("--plan") + 1] == str(tmp_path / "plan.json")
+    assert steps_["pilot:text"][-2:] == ["--limit", "10"]
+    assert steps_["pilot:vision"][-2:] == ["--limit", "10"]
+    text = " ".join(steps_["text"])
+    assert "--limit" not in text and "mmlu_pro,gsm8k,hellaswag,arc_challenge,wikitext" in text
+    assert "minerva_math500" not in text and "MMMU_DEV_VAL" not in steps_["vision"]
+    assert steps_["vision"][0].endswith(".venv-gpu-vision/bin/python")
+
+
+def test_g4_report_needs_every_task_near_bf16() -> None:
+    report = _load_script("blaze_g4_report")
+    scores = {task: bf16 for task, (bf16, _) in report.RECORDED.items()}
+    assert report.g4_report(scores)["checks"] == {"suite": True}
+    scores["MMMU"] -= 1.9
+    assert report.g4_report(scores)["checks"] == {"suite": True}
+    scores["ARC-Challenge"] -= 1.2
+    result = report.g4_report(scores)
+    assert result["checks"] == {"suite": False}
+    assert result["tasks"]["ARC-Challenge"]["within"] is False
+    scores = {task: bf16 for task, (bf16, _) in report.RECORDED.items()}
+    scores["WikiText-2"] += 5  # perplexity is reported, not gated
+    assert report.g4_report(scores)["checks"] == {"suite": True}
