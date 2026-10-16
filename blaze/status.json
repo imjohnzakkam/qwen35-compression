@@ -24,7 +24,7 @@
    "model": "4B",
    "title": "Full suite on the 4B",
    "summary": "Text done, every task at BF16's level: MMLU-Pro 75.2 (BF16 74.6). Vision suite running.",
-   "cost": "≈₹160 so far · cap ₹340",
+   "cost": "≈₹166 so far · cap ₹340",
    "details": [
     [
      "Question",
@@ -74,10 +74,10 @@
     }
    ],
    "progress": {
-    "pct": 20,
-    "label": "Vision suite · 1 of 5 tasks answered"
+    "pct": 40,
+    "label": "Vision suite · 2 of 5 tasks answered"
    },
-   "elapsed": "4h 06m on the GPU"
+   "elapsed": "4h 16m on the GPU"
   },
   {
    "id": "G0",
@@ -329,9 +329,9 @@
   }
  ],
  "spend": {
-  "rupees": 427.63,
-  "dollars": 4.44,
-  "label": "₹427.63 (about $4.44) across all GPU runs"
+  "rupees": 434.16,
+  "dollars": 4.51,
+  "label": "₹434.16 (about $4.51) across all GPU runs"
  },
- "updated": "2026-10-16T12:35:11Z"
+ "updated": "2026-10-16T12:45:15Z"
 }
