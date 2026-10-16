@@ -23,8 +23,8 @@
    "column": "running",
    "model": "4B",
    "title": "Full suite on the 4B",
-   "summary": "Text done, every task at BF16's level: MMLU-Pro 75.2 (BF16 74.6). Vision suite running.",
-   "cost": "≈₹186 so far · cap ₹340",
+   "summary": "Finished on the GPU; MMBench and MathVista are being scored, then the full table.",
+   "cost": "≈₹192 so far · cap ₹340",
    "details": [
     [
      "Question",
@@ -50,34 +50,30 @@
    "steps": [
     {
      "label": "Rebuild G2b's export",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Check it is G2b's model",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Pilot, text",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Pilot, vision",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Text suite",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Vision suite",
-     "status": "running"
+     "status": "pending"
     }
    ],
-   "progress": {
-    "pct": 80,
-    "label": "Vision suite · 4 of 5 tasks answered"
-   },
-   "elapsed": "4h 46m on the GPU"
+   "elapsed": "4h 56m on the GPU"
   },
   {
    "id": "G0",
@@ -329,9 +325,9 @@
   }
  ],
  "spend": {
-  "rupees": 453.73,
-  "dollars": 4.71,
-  "label": "₹453.73 (about $4.71) across all GPU runs"
+  "rupees": 460.26,
+  "dollars": 4.78,
+  "label": "₹460.26 (about $4.78) across all GPU runs"
  },
- "updated": "2026-10-16T13:15:28Z"
+ "updated": "2026-10-16T13:25:32Z"
 }
