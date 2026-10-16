@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blaze Research Draft</title>
+<meta name="description" content="Blaze moves the bytes a 4-bit Qwen3.5 checkpoint spends on its idle vocabulary into the transformer body.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one 704px reading column between hairline rails, figures in dark panels, a sticky contents rail on wide screens.
+   Single dark theme on purpose, to match the reference explainer the page is modeled on. */
+:root {
+  --bg: #0a0a0a;
+  --panel: #111111;
+  --line: #222222;
+  --heading: #fafafa;
+  --text: #a1a1a1;
+  --faint: #7a7a7a;
+  --ink: #e8e6df;
+  --accent: #e8593d;
+  --accent-soft: #1d1512;
+  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --col: 704px;
+  color-scheme: dark;
+}
+html { background: var(--bg); }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 28px;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--heading); text-decoration: underline; text-decoration-color: #4a4a4a; text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+strong { color: #e4e4e4; font-weight: 600; }
+.shell { max-width: 1160px; margin-inline: auto; padding-inline: 16px; position: relative; }
+.rails { position: relative; }
+@media (min-width: 900px) {
+  .rails::before, .rails::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+  .rails::before { left: 0; }
+  .rails::after { right: 0; }
+}
+.topbar {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px;
+  padding-block: 18px; border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+}
+.topbar b { color: var(--ink); font-weight: 500; }
+.layout { display: grid; grid-template-columns: minmax(0, var(--col)); justify-content: center; gap: 56px; padding-block: 56px 96px; }
+@media (min-width: 1120px) {
+  .layout { grid-template-columns: minmax(0, var(--col)) 200px; }
+}
+.toc { display: none; }
+@media (min-width: 1120px) {
+  .toc { display: block; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 32px); align-self: start; }
+}
+.toc p { margin: 0 0 12px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.toc a { color: var(--text); text-decoration: none; font-size: 13px; line-height: 20px; }
+.toc a:hover { color: var(--heading); }
+article { min-width: 0; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+.pill { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; line-height: 17px; }
+h1 { margin: 0; color: var(--heading); font-weight: 500; font-size: clamp(34px, 6vw, 52px); line-height: 1.06; letter-spacing: -0.03em; text-wrap: balance; }
+.dek { margin: 24px 0 0; font-size: 19px; line-height: 31px; color: #c9c9c9; text-wrap: pretty; }
+.meta { margin-top: 20px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--faint); line-height: 20px; }
+h2 { color: var(--heading); font-size: 24px; line-height: 32px; font-weight: 600; margin: 80px 0 16px; text-wrap: balance; scroll-margin-top: 24px; }
+h3 { color: var(--heading); font-size: 18px; line-height: 28px; font-weight: 600; margin: 48px 0 8px; text-wrap: balance; }
+.eyebrow { display: block; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; font-weight: 400; }
+p { margin: 16px 0 0; text-wrap: pretty; }
+ul, ol.list { margin: 16px 0 0; padding-left: 22px; }
+li { margin-top: 8px; }
+li::marker { color: #555; }
+.tldr { margin: 40px 0 0; border-top: 1px solid var(--line); }
+.tldr div { display: grid; grid-template-columns: 1fr; gap: 4px; padding-block: 18px; border-bottom: 1px solid var(--line); }
+@media (min-width: 640px) { .tldr div { grid-template-columns: 180px minmax(0, 1fr); gap: 24px; } }
+.tldr dt { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); line-height: 28px; }
+.tldr dd { margin: 0; color: #cfcfcf; }
+.tldr dd b { color: var(--accent); font-weight: 600; }
+figure { margin: 40px 0; }
+.fig-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.fig-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fig-svg { display: block; width: 100%; min-width: 560px; height: auto; }
+figcaption { max-width: 672px; margin: 16px auto 0; padding-inline: 4px; font-size: 14px; line-height: 24px; color: var(--text); }
+figcaption b { color: #dedede; font-weight: 600; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 20px 0; }
+.seg button {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--text);
+  background: transparent; border: 1px solid #2a2a2a; border-radius: 999px; padding: 5px 12px; cursor: pointer; line-height: 16px;
+}
+.seg button:hover { color: var(--heading); border-color: #3a3a3a; }
+.seg button[aria-pressed="true"] { color: var(--heading); border-color: var(--accent); background: var(--accent-soft); }
+.cell { transition: fill 420ms ease, stroke 420ms ease; }
+.flow { stroke-dasharray: 6 12; animation: flow 1.6s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -36; } }
+@media (prefers-reduced-motion: reduce) {
+  .cell { transition: none !important; }
+  .flow { animation: none; }
+}
+.mathblock { margin: 24px 0 8px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); text-align: center; overflow-x: auto; }
+math { color: var(--heading); font-size: 1.25em; font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math; }
+pre {
+  margin: 24px 0 0; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 22px; color: #d6d4cd;
+}
+pre .c { color: #6f6c66; }
+pre .k { color: var(--accent); }
+code { font-family: var(--mono); font-size: 0.88em; color: #d6d4cd; }
+.table-wrap { margin: 24px 0 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 22px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); padding: 12px 14px; border-bottom: 1px solid var(--line); background: #0e0e0e; white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid #1a1a1a; vertical-align: top; color: var(--text); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: #dcdcdc; white-space: nowrap; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.risk { list-style: none; padding: 0; margin: 24px 0 0; border-top: 1px solid var(--line); }
+.risk li { margin: 0; padding-block: 16px; border-bottom: 1px solid var(--line); }
+.risk li b { display: block; color: var(--heading); font-weight: 600; margin-bottom: 2px; }
+.risk li span.kill { display: block; margin-top: 6px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.02em; color: var(--accent); line-height: 20px; }
+.refs { margin: 16px 0 0; padding-left: 26px; font-size: 14px; line-height: 24px; }
+.refs li { margin-top: 10px; }
+.note { margin-top: 24px; font-family: var(--mono); font-size: 12px; line-height: 20px; color: var(--faint); }
+footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; color: var(--faint); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; text-transform: uppercase; }
+</style>
+<style>body { margin: 0; }</style>
+</head>
+<body>
+<div class="shell rails">
+  <header class="topbar">
+    <span><b>Kiln</b> · Qwen3.5 compression</span>
+    <span>Results · gates G0–G3, G5 run · G4 running</span>
+  </header>
+
+  <div class="layout">
+    <article>
+      <div class="pills"><span class="pill">Results in</span><span class="pill">Research draft</span><span class="pill">Quantization</span><span class="pill">Qwen3.5</span></div>
+      <h1>Blaze: put the bits where the model burns them</h1>
+      <p class="dek">A 4-bit Qwen3.5 checkpoint spends 27–53% of its bytes on a BF16 vocabulary table that mostly sits idle. Blaze moves those bytes into the transformer body, with no Fisher weighting, no training and no in-domain calibration answers. Measured on the 4B at a standard 4-bit export's size, it now drifts 8.5× less than Glaze v2 and matches BF16 on the benchmark panel.</p>
+      <div class="meta">Draft October 15, 2026 · results updated October 16, 2026 · Qwen3.5-4B and 2B, instruct mode, greedy decoding · measured numbers come from this repo; predictions are labeled</div>
+
+      <figure>
+        <div class="fig-box">
+          <div class="seg" role="group" aria-label="Choose how the checkpoint's bytes are spent">
+            <button type="button" id="hero-std" data-k="std" aria-pressed="true">Standard 4-bit</button>
+            <button type="button" id="hero-glaze" data-k="glaze" aria-pressed="false">Glaze v2</button>
+            <button type="button" id="hero-q" data-k="q" aria-pressed="false">Blaze-Q · same size</button>
+            <button type="button" id="hero-s" data-k="s" aria-pressed="false">Blaze-S · same quality</button>
+          </div>
+          <div class="fig-scroll" id="fig-hero"></div>
+        </div>
+        <figcaption><b>The vocabulary is the largest thing in a 4-bit checkpoint.</b> In the standard export it takes 127 of 378 cells, as many as all 32 FFNs. Glaze v2 moved 32 cells from the vision tower into the body. Blaze-Q moves 118, and Blaze-S keeps the smaller file instead.</figcaption>
+      </figure>
+
+      <h2 id="tldr">TL;DR</h2>
+      <p>Blaze stops tuning 4-bit rounding and moves bytes instead.</p>
+      <dl class="tldr">
+        <div><dt>Why not better rounding</dt><dd>WaterSIC proves per-layer quantization can get within 0.25 bit of its limit, and rotated GPTQ lands within 0.1 bit of WaterSIC. Glaze v2's drift gain is about what its extra 0.7 bit per weight predicts.</dd></div>
+        <div><dt>Where the bytes are</dt><dd>The vocabulary table is 34% of Glaze v2's 3.77 GB. 68% of its 248,320 rows never appeared in 57M tokens of English text and model output.</dd></div>
+        <div><dt>The method</dt><dd>A usage ladder (busy rows 8-bit, the rest 4-bit), a byte market that prices every body unit by measured KL, and stock Marlin kernels.</dd></div>
+        <div><dt>What was predicted</dt><dd>On the 4B at a 4-bit export's size: excess loss of 0.0011–0.002 with a 6-bit option, 7–13× below Glaze v2's 0.014, or about 1.1–1.4% flips against 3.29%.</dd></div>
+        <div><dt>What was measured</dt><dd>On the 4B at W4A16's size: excess loss <b>0.0017</b> and <b>1.39%</b> flips, inside the prediction, and every panel task within a point of BF16. On the 2B: <b>0.0005</b> against standard W4A16's 0.073, served for real by vLLM at W4A16's size.</dd></div>
+        <div><dt>Cost so far</dt><dd>₹267.84 (about $2.78) for seven A30 runs. G4, the 4B's full suite, is running, capped at ₹340.</dd></div>
+      </dl>
+
+
+      <h2 id="results">Results</h2>
+      <p>Seven GPU runs on one A30 each, between October 15 and 16. Every 4B number below comes from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The 2B also ran in its real format.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Gate</th><th>Question</th><th>Measured</th><th>Verdict</th><th class="num">Cost</th></tr></thead>
+          <tbody>
+            <tr><td>G0</td><td>How idle is the vocabulary?</td><td>80,010 of 248,320 rows ever used; the busiest 65,536 hold 99.97% of answer tokens</td><td>Ran on CPU</td><td class="num">₹0</td></tr>
+            <tr><td>G1</td><td>Is the ladder free?</td><td>Excess loss 0.0002, flips 0.40% (BF16 0.35%)</td><td>Pass</td><td class="num">₹33.48</td></tr>
+            <tr><td>G1</td><td>Does a plain 6-bit body pay?</td><td>0.0048 against a 0.004 mark; FFN prices flat (0.65 against 0.75)</td><td>Narrow miss</td><td class="num">in G1</td></tr>
+            <tr><td>G1b</td><td>Does GPTQ at 6 bits pay?</td><td>0.0027 against a 0.003 mark, but 0.4% over W4A16's size</td><td>Pass</td><td class="num">≈₹25</td></tr>
+            <tr><td>G5</td><td>Does the 2B agree?</td><td>0.0005 against W4A16's 0.073 at the same size; panel at BF16's level</td><td>Pass</td><td class="num">≈₹67</td></tr>
+            <tr><td>G2</td><td>4B at exactly W4A16's size, vision in BF16</td><td>0.0071, 2.0× below Glaze v2, short of the 2.4× mark</td><td>Miss</td><td class="num">≈₹32</td></tr>
+            <tr><td>G2b</td><td>Same, vision tower at 8 bits as in Glaze v2</td><td>0.0017, 8.5× below Glaze v2, 1.39% flips</td><td>Pass</td><td class="num">₹72.98</td></tr>
+            <tr><td>G3</td><td>Is the panel within a point of BF16?</td><td>MMLU-Pro 0.0, MATH-500 −0.4, IFEval +0.2, MMMU −0.9</td><td>Pass</td><td class="num">in G2b</td></tr>
+            <tr><td>Real</td><td>Does vLLM serve the real 2B format?</td><td>Same drift as the fake export; W4A16's size on disk</td><td>Pass</td><td class="num">≈₹35</td></tr>
+            <tr><td>G4</td><td>Is the full suite within a point?</td><td>Running</td><td>Pending</td><td class="num">cap ₹340</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="eyebrow">Drift</span>The 4B lands inside the prediction</h3>
+      <p>On BF16's 1,501 replayed MATH-500 and MMLU-Pro answers, the equal-size Blaze-Q drifts less than every 4-bit method and than INT8 W8A8. The draft predicted 0.0011–0.002 for a 6-bit body; G2b measured 0.0017.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-measured"></div></div>
+        <figcaption><b>Measured, on a log scale.</b> Grey bars are this repo's baselines. Orange bars are Blaze variants; the two marked "over" store more bytes than a standard 4-bit export, G2b does not. The shaded band is the draft's prediction for a 6-bit option.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Benchmarks</span>BF16's level on both sizes</h3>
+      <p>Each task is scored on the same questions as BF16 and the baseline, and compared question by question. On the 4B, Blaze-Q's MMLU-Pro is 2.5 points above Glaze v2's, with a paired interval of +0.3 to +4.7; on the 2B, standard W4A16 loses 10 to 12 points where Blaze-Q loses none.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-panel"></div></div>
+        <figcaption><b>Change from BF16, in points.</b> Rings are the baseline at the same size (Glaze v2 on the 4B, GPTQ W4A16 on the 2B), dots are Blaze-Q. MMLU-Pro is the 1,001-question subset on both. MMMU on the 4B is the validation split, scored by the fixed gpt-4o-mini extractor.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Qwen3.5-4B</th><th class="num">BF16</th><th class="num">Glaze v2</th><th class="num">Blaze-Q</th><th class="num">Blaze-Q − BF16</th></tr></thead>
+          <tbody>
+            <tr><td>MMLU-Pro (1,001)</td><td class="num">73.6</td><td class="num">71.1</td><td class="num">73.6</td><td class="num">0.0 (−1.9 to +1.9)</td></tr>
+            <tr><td>MATH-500</td><td class="num">83.4</td><td class="num">83.2</td><td class="num">83.0</td><td class="num">−0.4 (−3.2 to +2.4)</td></tr>
+            <tr><td>IFEval</td><td class="num">82.3</td><td class="num">82.8</td><td class="num">82.4</td><td class="num">+0.2 (−2.4 to +2.6)</td></tr>
+            <tr><td>MMMU (val)</td><td class="num">69.6</td><td class="num">66.7</td><td class="num">68.7</td><td class="num">−0.9</td></tr>
+            <tr><td>Excess loss</td><td class="num">—</td><td class="num">0.0143</td><td class="num">0.0017</td><td class="num"></td></tr>
+            <tr><td>Size</td><td class="num">9.32 GB</td><td class="num">3.80 GB</td><td class="num">3.78 GB</td><td class="num"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="eyebrow">Serving</span>The real format, on the 2B</h3>
+      <p>The 2B's real export stores the body as standard 8-bit groups and the vocabulary as two quantized blocks with an index map. A small vLLM plugin serves them with vLLM's own kernels. Its drift matches the fake export's to four decimals, and it fits in W4A16's bytes on disk.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Qwen3.5-2B · one A30</th><th class="num">On disk</th><th class="num">GPU weights</th><th class="num">One stream</th><th class="num">Batched</th><th class="num">Excess loss</th></tr></thead>
+          <tbody>
+            <tr><td>BF16</td><td class="num">4.55 GB</td><td class="num">4.56 GB</td><td class="num">164 tok/s</td><td class="num">9,431 tok/s</td><td class="num">—</td></tr>
+            <tr><td>GPTQ W4A16</td><td class="num">2.389 GB</td><td class="num">2.52 GB</td><td class="num">240 tok/s</td><td class="num">9,107 tok/s</td><td class="num">0.073</td></tr>
+            <tr><td>Blaze-Q, real</td><td class="num">2.389 GB</td><td class="num">2.86 GB</td><td class="num">229 tok/s</td><td class="num">7,890 tok/s</td><td class="num">0.0005</td></tr>
+            <tr><td>Blaze-Q, table held once</td><td class="num">2.389 GB</td><td class="num">2.53 GB</td><td class="num">57 tok/s</td><td class="num">5,474 tok/s</td><td class="num">0.0005</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">The default layout keeps each vocabulary block twice on the GPU, once per kernel, which costs 0.33 GB. Holding it once reaches W4A16's memory, but the first kernel for it is four times slower; it stays opt-in until it is tuned.</p>
+
+      <h3><span class="eyebrow">Against the draft</span>What held and what changed</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Draft said</th><th>Measured</th><th>Held?</th></tr></thead>
+          <tbody>
+            <tr><td>6-bit body: excess 0.0011–0.002</td><td>0.0017 (G2b)</td><td>Yes</td></tr>
+            <tr><td>Flips about 1.1–1.4%</td><td>1.39%</td><td>Yes</td></tr>
+            <tr><td>Ladder costs about 0.0001</td><td>0.0002</td><td>Yes</td></tr>
+            <tr><td>Error falls about 16× per two bits</td><td>19.5×</td><td>Yes</td></tr>
+            <tr><td>2B near-lossless with an 8-bit body</td><td>0.0005, panel at BF16</td><td>Yes</td></tr>
+            <tr><td>Sensitivity steep, so 4/8 bits may suffice</td><td>Flat FFN prices (0.65)</td><td>No: needs 6 bits</td></tr>
+            <tr><td>Unit prices measured at every option</td><td>6-bit prices sat in noise</td><td>No: 4-bit prices, scaled</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><strong>The vision tower.</strong> At exactly a standard export's size, the whole 6-bit body did not fit with the vision tower in BF16. Storing it at 8 bits, as Glaze v2 already does, freed 324 MB; MMMU moved from Glaze v2's −2.9 to −0.9.</li>
+        <li><strong>The market.</strong> Prices measured directly at 6 bits were indistinguishable from noise, so the market that worked (G2b) ranks units by their 4-bit prices and scales them by the measured bits rule. It raised 23 of 64 units to 8 bits: layers 0–6 and layer 31's FFN, which G1 had flagged.</li>
+        <li><strong>Still to do.</strong> G4 (the full suite) is running. A real 4B export needs a 6-bit kernel, which vLLM does not have. The single-copy vocabulary head needs a faster kernel. The 9B, with an untied table, is untested.</li>
+      </ul>
+
+      <h2 id="where">Where we started</h2>
+      <p>Glaze v2 has closed most of the benchmark gap, so what is left is token-level drift. All numbers are this repo's Qwen3.5-4B records: instruct mode, greedy decoding, 8,192-token cap.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-bench"></div></div>
+        <figcaption><b>Glaze v2 is within 1 point of BF16 on 10 of these 12 tasks.</b> MATH-500 went from −10.2 under AutoRound to −0.2. ARC-Challenge (−1.5) and MMMU (−2.9) are the open gaps, and on the 1,001-question MMLU-Pro panel the paired interval is −4.7 to −0.4.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>Drift.</strong> On BF16's 1,501 replayed answers (2.3M tokens), Glaze v2 picks a different top token 3.29% of the time; the noise floor is 0.35%. Its excess loss is 0.014 nats per token, against INT8 W8A8's 0.011 and AutoRound's 0.042.</li>
+        <li><strong>Drift by domain.</strong> Glaze v2 flips 2.1% of tokens on MATH-500 answers and 3.8% on MMLU-Pro answers. The in-domain calibration shows.</li>
+        <li><strong>Where the gain came from.</strong> The data control credits 7.0 of Glaze v2's 10.0 MATH-500 points over AutoRound to its in-domain calibration data. Its own stages add about 3.</li>
+      </ul>
+      <p>The target is drift, not benchmarks: excess loss from 0.014 toward 0, without in-domain data. A method that needs Glaze v2's calibration set to get there has only redone Glaze.</p>
+
+      <h2 id="observations">Observations</h2>
+      <p>Six facts, four of them measured on this repo's checkpoints, point the same way: the next large gain is in the byte budget, not in the rounding.</p>
+
+      <h3><span class="eyebrow">Observation 1</span>Inside a layer, 4-bit quantization is already near its limit</h3>
+      <p>WaterSIC is a per-layer quantizer proven to sit within 0.25 bit per weight of the information-theoretic limit [1]. On Llama-3-8B, plain GPTQ with a random rotation lands within 0.1 bit of WaterSIC [2]. Glaze's Fisher-weighted rounding competes for that last tenth of a bit; vector codes such as QTIP [3] compete for the 0.25.</p>
+
+      <h3><span class="eyebrow">Observation 2</span>In this repo, extra bits explain Glaze v2's drift gain</h3>
+      <p>Quantization noise power falls about 4× per added bit. From AutoRound's 0.042 excess loss at 4.12 bits per body weight, that rule predicts 0.016 at Glaze v2's 4.83 bits; Glaze v2 measured 0.014. Two points are not a law, but they say the bytes Glaze v2 took from the vision tower did most of the work.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-bits"></div></div>
+        <figcaption><b>One rule fits the drift data.</b> Excess loss falls about 4× per added bit, and Glaze v2 sits 9% under the line through AutoRound. INT8 W8A8 sits far above the line because its activations are quantized too. At Blaze-Q's budget of 6.8 bits, the line reads about 0.001.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Observation 3</span>The vocabulary is the largest byte pool in small Qwen3.5 exports</h3>
+      <p>Every Qwen3.5 size shares one 248,320-token vocabulary. In a standard W4A16 export (4-bit body, BF16 vocabulary and vision tower), its tables are 27–53% of the file. The 0.8B, 2B and 4B tie the table to the LM head, so all of it is read for every generated token.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-share"></div></div>
+        <figcaption><b>A quarter to a half of the file, and up to two-thirds of every decode step.</b> The 4B is measured on this repo's AutoRound export; the other sizes are derived from their configs, which reproduce the 4B to within 0.01 GB. The 9B and 27B carry two tables because their head is untied.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Observation 4</span>Most of the vocabulary sits idle</h3>
+      <p>In 57M tokens (ten cached English datasets plus 22M tokens the BF16 4B generated itself), only 80,300 of 248,320 rows ever appear. The other 68% never do, and frequencies follow Zipf's law with a slope of −1.10. The 96,677 rows added since Qwen3's vocabulary carry 0.2–0.3% of tokens.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-vocab"></div></div>
+        <figcaption><b>Two-thirds of the vocabulary never appeared.</b> Sorted by use, the busiest 65,536 rows hold 99.99% of the model's own output tokens, and 168,020 rows never showed up at all.</figcaption>
+      </figure>
+      <p>Idle depends on the domain, though. A ranking built only from chat and Wikipedia text leaves 7.8% of the model's own math and multiple-choice output tokens outside its top 32,768 rows, and 1.6% outside 65,536. Tiers need broad data and a precision floor, not a hard cut.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-coverage"></div></div>
+        <figcaption><b>Which data ranks the rows matters.</b> The full census is ranked on the same tokens it is scored on, so it is an upper bound. Token ID order needs no data and does no better than chat text.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Observation 5</span>Idle rows are cheap to store, but must still be stored well</h3>
+      <p>Row norms are flat across usage (median 0.63 for the busiest 32k rows, 0.65 for never-seen rows), so a badly stored rare row can still win the argmax. Entries are near-Gaussian (kurtosis 3.0–3.4) and 256 directions hold only 30–36% of the energy, so per-row scalar grids fit and low-rank tricks do not.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-noise"></div></div>
+        <figcaption><b>Precision sets each row's logit noise.</b> At 8 bits a row adds 0.014 nats, which costs at most 0.0001 nats of KL per token. At 4 bits it adds 0.26: harmless for tokens far below the top choice, dangerous for busy ones. Derived from the row statistics, not from a model run.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Observation 6</span>Structure cannot be bolted on after training</h3>
+      <p>The Hadamard MLP trains Kronecker-structured channel mixers from scratch and still gives up about 18% in loss [12]. Post hoc it is hopeless. Blaze uses Hadamard transforms only as exact rotations, never as replacements.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-kron"></div></div>
+        <figcaption><b>A trained FFN matrix looks random to a Kronecker product.</b> The best sum of k Kronecker products captures almost the same energy from Qwen3.5-4B's layer-10 gate projection as from a Gaussian matrix of the same shape.</figcaption>
+      </figure>
+
+      <h2 id="method">The Blaze method</h2>
+      <p>Blaze treats the whole checkpoint as one byte budget and puts the bits where the model burns them. It takes bytes from idle vocabulary rows, prices every body unit by measuring what an extra bit buys, and buys bits until the budget is spent.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-pipeline"></div></div>
+        <figcaption><b>Five stages, no gradients.</b> The census and ladder are computed once per tokenizer and reused by every Qwen3.5 size. The byte market runs once per model.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Stage 1</span>Usage census, on CPU, once per tokenizer</h3>
+      <p>Count how often each of the 248,320 rows appears as an input in a broad corpus (web, code, math, chat, several languages), and how often the model emits it in its own generations. Every Qwen3.5 size shares the tokenizer, so one census serves the family.</p>
+
+      <h3><span class="eyebrow">Stage 2</span>Vocabulary ladder</h3>
+      <p>Renumber the rows by use. The busiest rows, enough to cover 99.9% of census tokens and never fewer than 65,536, are stored at 8 bits with group 128; every other row at 4 bits.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-ladder"></div></div>
+        <figcaption><b>The ladder in bytes.</b> Busy rows keep 8 bits, every other row drops to 4, and 860 MB of the 4B's table becomes body precision.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>Tied models (0.8B to 4B):</strong> one laddered table serves both the input lookup and the LM head.</li>
+        <li><strong>Untied models (9B and up):</strong> the head gets the ladder. The input table, read one row per token, goes to 4 bits throughout.</li>
+        <li><strong>Why these rungs:</strong> an 8-bit row adds about 0.014 nats of logit noise and a 4-bit row about 0.26 (observation 5).</li>
+      </ul>
+
+      <h3><span class="eyebrow">Stage 3</span>Body menu</h3>
+      <p>Each unit that vLLM runs as one kernel (q/k/v, gate/up, DeltaNet's input projections, and the rest) takes one option: 4 bits with group 128, 64 or 32, or 8 bits with group 128. All of them run on stock Marlin kernels. GPTQ quantizes the 4-bit units and round-to-nearest the 8-bit ones.</p>
+
+      <h3><span class="eyebrow">Stage 4</span>Measured byte market</h3>
+      <p>For each unit and option, quantize that unit alone in an otherwise BF16 model and measure how much KL to BF16 it removes, on generic replay text. The drift study found that per-component excess losses add up (to 101% of the whole), so these prices can be summed. An exact multiple-choice knapsack, solved over 64 KiB bins with Glaze v2's solver, buys the options with the most KL removed per byte.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-knapsack"></div></div>
+        <figcaption><b>What a byte market's output looks like.</b> Here it is Glaze v2's Fisher-priced version, with 316 MB to spend; its 8-bit picks cluster in the first quarter of the network. Blaze makes the same kind of choice with measured prices and about 1.2 GB to spend.</figcaption>
+      </figure>
+
+      <h3><span class="eyebrow">Stage 5</span>Export and serving</h3>
+      <p>The body ships as compressed-tensors config groups, as Glaze v2 does. The vocabulary ships as a tiered module: rows stored by rung in renumbered order, plus a 248,320-entry index map. The LM head runs one Marlin GEMM per rung into a single logits buffer, and token IDs map back before detokenizing.</p>
+
+      <h3><span class="eyebrow">Stage 6 · stretch</span>A 6-bit kernel</h3>
+      <p>A 4/8-bit menu is blunt: 8 bits is more than most units need, and the 4-bit remainder keeps most of the error. A W6A16 kernel, either an INT6 variant of Marlin or FP6 through FP6-LLM's tensor-core kernels [11], would let the body sit near-uniformly at 6–7 bits.</p>
+
+<pre><span class="c"># Blaze for one checkpoint at byte budget B</span>
+<span class="c"># 1-2: census once per tokenizer, then the ladder</span>
+census = count_inputs(broad_corpus) + count_outputs(model_generations)
+hot    = busiest_rows(census, cover=<span class="k">0.999</span>, at_least=<span class="k">65_536</span>)
+vocab  = ladder(renumber(census), hot=int8_g128, rest=int4_g128)
+
+<span class="c"># 3-4: price every option by measured KL, then buy</span>
+<span class="k">for</span> unit <span class="k">in</span> fusion_units(model):        <span class="c"># q/k/v, gate/up, ...</span>
+    <span class="k">for</span> opt <span class="k">in</span> [int4_g64, int4_g32, int8_g128]:
+        base = kl(bf16, swap(unit, int4_g128))
+        gain[unit, opt] = base - kl(bf16, swap(unit, opt))
+left   = B - bytes(vocab) - bytes(vision_int8) - bytes(norms)
+choice = knapsack(gain, bytes_of, budget=left)
+
+<span class="c"># 5: GPTQ for 4-bit units, round-to-nearest for 8-bit</span>
+export(quantize(model, choice), vocab)</pre>
+
+      <p><strong>Two operating points.</strong> Blaze-Q spends the freed bytes on quality at Glaze v2's 3.77 GB, which leaves about 6.8 bits per body weight. Blaze-S keeps Glaze v2's 4.83 bits per body weight and banks the bytes: about 2.91 GB, 23% smaller.</p>
+      <p><strong>Left out on purpose:</strong> Fisher or Hessian weighting in the objective, learned rounding, training toward the teacher, and in-domain calibration answers. The teacher only prices options, on generic text. Blaze's one second-order step is GPTQ's own per-layer solve, which WaterSIC shows is near-optimal.</p>
+
+      <h2 id="why">Why it should close the gap</h2>
+      <p>On the 4B, Blaze-Q should cut Glaze v2's excess loss 7–13× once a 6-bit option exists, and 1.2–3.6× on today's 4/8-bit kernels. Every input below is measured in this repo or derived from the weights; the outputs are predictions, not results.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-levers"></div></div>
+        <figcaption><b>Rounding and vector codes compete for fractions of a bit; the vocabulary holds almost two.</b> Body precision goes from 4.12 bits per weight (AutoRound) to 4.83 (Glaze v2) to about 6.8 (Blaze-Q).</figcaption>
+      </figure>
+
+      <h3>Error model</h3>
+      <p>Excess loss adds across units (the drift study's 101%), and each unit's share falls 4× per added bit:</p>
+      <div class="mathblock" role="math" aria-label="L is approximately the sum over units u of s sub u times 2 to the power minus 2 b sub u">
+        <math display="block"><mi>L</mi><mo>≈</mo><munder><mo>∑</mo><mi>u</mi></munder><msub><mi>s</mi><mi>u</mi></msub><mspace width="0.2em"></mspace><msup><mn>2</mn><mrow><mo>−</mo><mn>2</mn><msub><mi>b</mi><mi>u</mi></msub></mrow></msup></math>
+      </div>
+      <p>At a uniform 4.12 bits this is AutoRound's 0.042. At a uniform 6.8 bits it is 0.042 × 2<sup>−5.3</sup> ≈ 0.0011, and any allocation smarter than uniform only lowers it. That is the 6-bit case, and it holds whatever the sensitivity profile.</p>
+      <p><strong>The menu caveat.</strong> With only 4- and 8-bit kernels, Blaze-Q can put about 64% of body weights at 8 bits; the 4-bit rest keeps its full error. If all FFN layers were equally sensitive, that rest would hold about 30% of the sensitivity and L ≈ 0.012, barely under Glaze v2. If sensitivity is steep, L falls toward 0.004. Glaze v2's knapsack put 27 of its 40 8-bit picks in layers 0–7, which hints at steep, but that was a Fisher prediction; gate G1 measures it.</p>
+      <p><strong>From loss to flips.</strong> Across this repo's five weight-only points (BF16, Glaze v2, AutoRound, AWQ, GPTQ), the flip rate fits within 0.2 points of</p>
+      <div class="mathblock" role="math" aria-label="flip rate is approximately 0.35 percent plus 23 times the square root of L">
+        <math display="block"><mtext>flips</mtext><mo>≈</mo><mn>0.35</mn><mo>%</mo><mo>+</mo><mn>23</mn><mo>×</mo><msqrt><mi>L</mi></msqrt></math>
+      </div>
+      <p>So L of 0.0011–0.002 means about 1.1–1.4% flips, and 0.004–0.012 means 1.8–2.9%. Glaze v2 sits at 3.29%, INT8 W8A8 at 2.42%. <strong>Measured:</strong> G2b reached L = 0.0017 with 1.39% flips; the formula gives 1.30%.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-predict"></div></div>
+        <figcaption><b>Predicted, not measured.</b> Bars are this repo's drift replays (records 3, 4 and 6). The whiskers are Blaze-Q's ranges from the error model above, on today's kernels and with a 6-bit option.</figcaption>
+      </figure>
+      <p><strong>The ladder's own cost.</strong> Gaussian noise of σ nats on competing logits adds at most σ²/2 of KL. At 8 bits (σ ≈ 0.014) the busy rows cost about 0.0001 per token. Idle rows at 4 bits (σ ≈ 0.26) only matter when they come within about a nat of the top choice, which the census says is rare; gate G1 checks it.</p>
+      <p><strong>Benchmarks.</strong> At L ≤ 0.002, every text task should sit within run-to-run noise of BF16 (1–2 points). MMMU is the open case: its −2.9 is shared by every 4-bit method and may come from image-token activations that text replay never prices.</p>
+      <p><strong>Blaze-S</strong> keeps Glaze v2's 4.83 bits per body weight with generic data, so the same model predicts L ≈ 0.016, Glaze v2's level, at 23% fewer bytes.</p>
+
+      <h2 id="generality">Generality</h2>
+      <p>The lever grows as models shrink and vocabularies grow, and every Qwen3.5 size can reuse one ladder because they share a tokenizer. At the size of a standard W4A16 export, Blaze can give the 0.8B and 2B an all-8-bit body and the 9B 8.0 bits per weight, which should make all three near-lossless on stock kernels.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-family"></div></div>
+        <figcaption><b>Same bytes, different split.</b> Each pair of bars is one checkpoint size, drawn to its own width. The orange is vocabulary and vision bytes that Blaze-Q spends on the body. The 2B keeps its vision tower in BF16 and still fits an all-8-bit body.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Model</th><th class="num">W4A16 export</th><th class="num">4-bit body, ladder, 8-bit vision</th><th class="num">Weight bytes per token</th></tr></thead>
+          <tbody>
+            <tr><td>Qwen3.5-0.8B</td><td class="num">0.97 GB</td><td class="num">0.52 GB (−46%)</td><td class="num">1.8× fewer</td></tr>
+            <tr><td>Qwen3.5-2B</td><td class="num">2.39 GB</td><td class="num">1.38 GB (−42%)</td><td class="num">1.7× fewer</td></tr>
+            <tr><td>Qwen3.5-4B</td><td class="num">3.78 GB</td><td class="num">2.60 GB (−31%)</td><td class="num">1.4× fewer</td></tr>
+            <tr><td>Qwen3.5-9B</td><td class="num">8.55 GB</td><td class="num">5.21 GB (−39%)</td><td class="num">1.3× fewer</td></tr>
+            <tr><td>Qwen3.5-27B</td><td class="num">18.56 GB</td><td class="num">14.50 GB (−22%)</td><td class="num">1.1× fewer</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">The middle column keeps a standard export's quality at fewer bytes. Per-token bytes count the body and LM head, the weights a text decode step reads; they are upper bounds on decode speedup.</p>
+      <ul>
+        <li><strong>Mixture of experts.</strong> In Qwen3.5-35B-A3B at batch 1, the BF16 head is 45% of the weight bytes read per token (1.02 GB against 1.25 GB of active 4-bit experts and mixers). There the ladder is mainly a speed lever.</li>
+        <li><strong>Beyond Qwen.</strong> The same arithmetic on other small tied models gives vocabulary shares of 46% for Qwen3-1.7B, 51% for Llama-3.2-1B and 63% for Gemma-3-1B in a 4-bit export.</li>
+        <li><strong>What transfers.</strong> The census and the ladder transfer to any model with the same tokenizer. The byte market is re-measured per model: about an hour of A30 time on the 4B, growing with size.</li>
+        <li><strong>Architecture.</strong> Nothing in Blaze depends on DeltaNet. Units are whatever the serving engine fuses, so dense, hybrid and MoE layouts all fit.</li>
+      </ul>
+
+      <h2 id="kernels">Kernels and deployment</h2>
+      <p>Blaze's quality claims need no new kernels. A fake-quantized export (the stored values, dequantized into BF16 tensors) produces the same outputs, so gates G1 to G3 run on stock vLLM; real kernels matter only for the size and speed claims.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-reads"></div></div>
+        <figcaption><b>What one generated token has to read.</b> The vision tower is not read when decoding text. Blaze-Q reads as much as Glaze v2 but spends it on the body. Blaze-S reads 25% less, so it can be up to 1.34× faster where decode is bandwidth-bound, such as batch 1 on an A30 or L4. Prefill is compute-bound and should not change.</figcaption>
+      </figure>
+      <p><strong>Decode path with a laddered vocabulary:</strong></p>
+      <ol class="list">
+        <li>Input token IDs pass through a 248,320-entry index map (1 MB) into renumbered order.</li>
+        <li>The embedding lookup reads one row from its rung and dequantizes it (8-bit or 4-bit, group 128).</li>
+        <li>The body runs on stock Marlin kernels, as Glaze v2 does.</li>
+        <li>The LM head runs one Marlin GEMM per rung, writing into adjacent slices of one logits buffer, with no gather or copy.</li>
+        <li>Argmax or sampling runs in renumbered space, and the chosen ID maps back before detokenizing.</li>
+      </ol>
+      <p><strong>Inside vLLM.</strong> vLLM 0.29 gives Qwen3.5's embedding no quantization config, so the vocabulary needs a model patch. An out-of-tree model class registered with vLLM's model registry can swap in a tiered embedding and head and leave everything else stock. Renumbering is exact, so a unit test can demand bit-identical logits against the dequantized reference.</p>
+      <p><strong>The 6-bit option.</strong> Two routes, both off the critical path until G1 shows they pay: FP6 (e3m2) through FP6-LLM's TC-FPx kernels, or an INT6 variant of Marlin's dequantize-in-registers design that keeps Blaze's integer grids. Either is a custom vLLM op. If neither lands, Blaze-Q on the 4B rests on the 4/8-bit menu, and the 0.8B, 2B and 9B results are unaffected.</p>
+      <p><strong>Rotations.</strong> An exact residual-stream Hadamard rotation [4] would put GPTQ's 4-bit units within reach of WaterSIC's bound. Tied tables complicate it: folding the final norm into a rotated head unties it from the input table, which costs a second laddered table (about 0.41 GB on the 4B). Blaze therefore rotates only untied models by default.</p>
+
+      <h2 id="evaluation">Evaluation plan</h2>
+      <p>This was the plan; the <a href="#results">results</a> are above. Five GPU gates, cheapest first: about ₹525 (about $5.45) to a full 4B suite, and ₹719 (about $7.47) with the 2B family check. Each gate is its own go-ahead, with a budget cap and a teardown watcher. G0, the byte and usage census on this page, ran on a Mac's CPU and cost nothing.</p>
+      <figure>
+        <div class="fig-box"><div class="fig-scroll" id="fig-gates"></div></div>
+        <figcaption><b>Five gates, cheapest first.</b> Each answers one question before money goes to the next. G1 is the next step and decides whether the 4B needs a 6-bit kernel.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Gate</th><th>What runs</th><th>Pass if</th><th>If it fails</th></tr></thead>
+          <tbody>
+            <tr><td>G1</td><td>Fake-quant drift replays: (a) BF16 body with the ladder; (b) uniform 6-bit GPTQ body with the ladder; (c) each of the 32 FFN units alone at 4 bits</td><td>(a) flips ≤ 0.6% and excess ≤ 0.001; (b) excess ≤ 0.003</td><td>(a): hot rung to 131,072 rows, one retest, then drop the ladder. (b): no 6-bit kernel</td></tr>
+            <tr><td>G2</td><td>Byte market (about 450 unit-option prices), knapsack at 3.77 GB, export, drift replay</td><td>Excess ≤ 0.006 and flips ≤ 2.1%, at least 2.4× below Glaze v2</td><td>Continue only on the 6-bit route</td></tr>
+            <tr><td>G3</td><td>Panel: MATH-500, MMLU-Pro (1,001), IFEval, paired against BF16 and Glaze v2</td><td>Each within 1.0 point of BF16, no paired interval wholly below zero</td><td>Check drift by domain before any rerun</td></tr>
+            <tr><td>G4</td><td>Full suite with vision</td><td>Every task within 1.0 point of BF16, MMMU within 2.0</td><td>Report the drop as measured</td></tr>
+            <tr><td>G5</td><td>Qwen3.5-2B: BF16 answers, standard W4A16, Blaze-Q with an all-8-bit body; drift and panel</td><td>Blaze-Q excess at most a third of W4A16's; panel within 1.0 point of BF16</td><td>Blaze stays a 4B-only result</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>How the drop is reported.</strong> Drift as flip rate and excess loss against BF16 on the 1,501 replayed answers, by answer position and by domain, with BF16's 0.35% as the floor. Every task as a change from BF16, with paired 95% intervals on the panel and the share of answers hitting the 8,192-token cap. The artifact as bytes on disk, weight bytes read per token, and measured tokens per second once the kernels exist.</p>
+      <p><strong>Controls,</strong> following the outside methodology review:</p>
+      <ol class="list">
+        <li>The ladder alone (G1a), to price it.</li>
+        <li>The same bytes without the market: the body raised uniformly with the ladder's bytes, to separate bytes from allocation.</li>
+        <li>Measured prices against Glaze v2's Fisher prices, at equal bytes.</li>
+        <li>Generic against in-domain replay text for the market, to test the no-in-domain-data claim.</li>
+        <li>Two GPTQ data orders for the final export.</li>
+      </ol>
+      <p>The market's replay text is generic and disjoint from MATH-500, MMLU-Pro, IFEval and the drift answers. No benchmark output informs any choice.</p>
+
+      <h2 id="risks">Risks and kill criteria</h2>
+      <p>Blaze dies early and cheaply if the ladder is not free (G1a), or if neither the 4/8-bit menu nor a 6-bit option gets the 4B at least 2× below Glaze v2 (G1b with G2). Either outcome is still worth a short write-up: the byte census alone changes how this repo should report "4-bit".</p>
+      <ul class="risk">
+        <li><b>Idle rows matter more than the census says.</b>LaTeX-heavy math or non-English prompts can lean on rows an English census calls idle. Mitigation: a multilingual, code-heavy census, a larger hot rung, and a floor that never goes below 4 bits.<span class="kill">Kill: G1a fails after one retest at 131,072 hot rows</span></li>
+        <li><b>The 4/8-bit menu is too blunt on the 4B.</b>If FFN sensitivity is flat across layers, Blaze-Q lands near Glaze v2. Mitigation: the 6-bit kernel, or 8-bit and 4-bit rungs inside each FFN, sorted by an exact neuron permutation.<span class="kill">Signal: G1c and G2</span></li>
+        <li><b>Prices do not add up at unit granularity.</b>The 101% additivity was measured on three components, not 152 units. Mitigation: re-price once at the chosen solution (about one more GPU-hour) and re-solve.</li>
+        <li><b>MMMU stays near −3.</b>Text replay never prices image-token activations. Mitigation: add image-text replay to the market, or keep the vision tower in BF16 where bytes allow.</li>
+        <li><b>Serving drift.</b>A model patch for the tiered vocabulary can break on vLLM upgrades, and the 6-bit kernel can slip. Quality gates run on fake-quant exports, so this delays only the size and speed claims.</li>
+        <li><b>"It's a budget trick."</b>Reviewers compare at equal bits per Linear layer, where Blaze's body is plain GPTQ by design. Report both protocols, and give the strongest baseline the same ladder in control 2.</li>
+        <li><b>Speed at equal size.</b>On the 9B, an all-8-bit body reads 35% more bytes per token than a W4A16 export. Blaze-Q trades decode speed for quality there; Blaze-S is the speed point.</li>
+        <li><b>Prior art.</b>Lower precision for rarely used vocabulary rows is not new. The novelty claim must rest on equal-size reinvestment, one ladder for a whole family, and tied-table serving.</li>
+      </ul>
+
+      <h2 id="related">Related work and novelty</h2>
+      <p>Each of Blaze's parts has a precedent; the combination, and where it looks for bytes, appears to be new. Searched arXiv and the web on 15 October 2026.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Work</th><th>What it does</th><th>Where Blaze stands</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://icml.cc/virtual/2026/poster/62598">WaterSIC</a> (ICML 2026)</td><td>Per-layer quantizer within 0.25 bit of the information-theoretic limit; rotated GPTQ within 0.1 bit of it</td><td>The reason Blaze leaves per-layer rounding alone</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2406.11235">QTIP</a> (2024)</td><td>Trellis codes that quantize weights in very high dimension</td><td>Worth up to 0.25 bit per weight; complementary, not used</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2404.00456">QuaRot</a> (2024)</td><td>Exact rotations that remove outliers</td><td>Optional, on untied models</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2411.17525">HIGGS</a> (2024)</td><td>Linearity theorem ties layer error to loss; dynamic programming picks bit-widths</td><td>Closest to the byte market, but layers only and model-based prices</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2410.14649">EvoPress</a> (2024)</td><td>Evolutionary search over per-layer compression levels</td><td>Fallback solver if prices stop adding up</td></tr>
+            <tr><td><a href="https://arxiv.org/html/2512.04746v2">SignRoundV2 and AutoScheme</a></td><td>Gradient-guided mixed precision with dynamic programming</td><td>Fisher-family prices; Blaze measures them</td></tr>
+            <tr><td><a href="https://huggingface.co/lazybrick/Qwen3.5-4B-Kiln-Glaze-W4A16">Glaze v2</a> (this repo)</td><td>Fisher knapsack, Fisher-weighted learned rounding, in-domain BF16 answers</td><td>Blaze keeps its knapsack and exporter, and drops the rest</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2009.07453">Chung et al.</a> (2020)</td><td>Per-word bit-widths for translation-model embeddings, set from word statistics</td><td>Ancestor of the ladder: embeddings only, very low bits, no reinvestment</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2607.02893">VBQ</a> (2026)</td><td>Per-group precision learned during training; the LM head ends near 1.1 bits</td><td>Training-time; Blaze is post-training and keeps busy rows at 8 bits</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2508.15229">VocabTailor</a> (2025)</td><td>Offloads embeddings and picks LM-head rows per task</td><td>Drops rows per task; Blaze keeps every row</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2401.14112">FP6-LLM</a> (2024)</td><td>Tensor-core kernels for 6-bit floating-point weights</td><td>One route to Blaze's 6-bit option</td></tr>
+            <tr><td><a href="https://cactuscompute.com/blog/hadamard-mlp">Hadamard MLP</a> (2026)</td><td>Kronecker-structured channel mixer trained from scratch in place of a dense FFN</td><td>Blaze takes the cost argument, not the replacement</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2410.17170">Self-calibration</a> (2025)</td><td>Calibrating on the model's own generations</td><td>Glaze v2's main lever; Blaze does without it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Not new:</strong> per-layer solvers, rotations, measured mixed precision, or giving rarely used vocabulary rows fewer bits.</p>
+      <p><strong>New, as far as this search found:</strong></p>
+      <ol class="list">
+        <li>One byte market at fixed artifact size, in which vocabulary rows, the vision tower and body units are all priced by measured KL.</li>
+        <li>One usage ladder reused across every model that shares a tokenizer.</li>
+        <li>A tied table laddered once and served as both lookup and LM head on stock Marlin kernels.</li>
+        <li>The argument, from WaterSIC and this repo's own drift points, that past about 4 bits the bytes, not the rounding, set the drift.</li>
+      </ol>
+
+      <h2 id="references">References</h2>
+      <ol class="refs">
+        <li>Lifar, Savkin, Ordentlich and Polyanskiy, <a href="https://icml.cc/virtual/2026/poster/62598">WaterSIC: Information-Theoretically (Near) Optimal Linear Layer Quantization</a>, ICML 2026.</li>
+        <li>Ordentlich and Polyanskiy, <a href="https://arxiv.org/abs/2601.17187v1">High-Rate Quantized Matrix Multiplication: Theory and Practice</a>, 2026.</li>
+        <li>Tseng et al., <a href="https://arxiv.org/abs/2406.11235">QTIP: Quantization with Trellises and Incoherence Processing</a>, 2024.</li>
+        <li>Ashkboos et al., <a href="https://arxiv.org/abs/2404.00456">QuaRot: Outlier-Free 4-Bit Inference in Rotated LLMs</a>, 2024.</li>
+        <li>Malinovskii et al., <a href="https://arxiv.org/abs/2411.17525">Pushing the Limits of Large Language Model Quantization via the Linearity Theorem</a>, 2024.</li>
+        <li>Sieberling et al., <a href="https://arxiv.org/abs/2410.14649">EvoPress: Accurate Dynamic Model Compression via Evolutionary Search</a>, 2024.</li>
+        <li>Chung et al., <a href="https://arxiv.org/abs/2009.07453">Extremely Low Bit Transformer Quantization for On-Device Neural Machine Translation</a>, 2020.</li>
+        <li>Ogilvy, <a href="https://arxiv.org/abs/2607.02893">Variable Bit-width Quantization: Learning Per-Group Precision for "Bigger-but-Smaller" Language Models</a>, 2026.</li>
+        <li>Zhang et al., <a href="https://arxiv.org/abs/2508.15229">VocabTailor: Dynamic Vocabulary Selection for Downstream Tasks in Small Language Models</a>, 2025.</li>
+        <li>Williams et al., <a href="https://arxiv.org/abs/2410.17170">Self-calibration for Language Model Quantization and Pruning</a>, 2025.</li>
+        <li>Xia et al., <a href="https://arxiv.org/abs/2401.14112">FP6-LLM: Efficiently Serving Large Language Models Through FP6-Centric Algorithm-System Co-Design</a>, 2024.</li>
+        <li>Ndubuaku, <a href="https://cactuscompute.com/blog/hadamard-mlp">The Hadamard MLP for Channel Mixing for Almost No Parameters</a>, September 2026.</li>
+      </ol>
+    </article>
+
+    <nav class="toc" aria-label="On this page">
+      <p>On this page</p>
+      <ol>
+        <li><a href="#tldr">TL;DR</a></li>
+        <li><a href="#results">Results</a></li>
+        <li><a href="#where">Where we started</a></li>
+        <li><a href="#observations">Observations</a></li>
+        <li><a href="#method">The Blaze method</a></li>
+        <li><a href="#why">Why it should close the gap</a></li>
+        <li><a href="#generality">Generality</a></li>
+        <li><a href="#kernels">Kernels and deployment</a></li>
+        <li><a href="#evaluation">Evaluation plan</a></li>
+        <li><a href="#risks">Risks and kill criteria</a></li>
+        <li><a href="#related">Related work</a></li>
+        <li><a href="#references">References</a></li>
+      </ol>
+    </nav>
+  </div>
+
+  <footer>
+    <span>Blaze · draft 15 Oct · results 16 Oct 2026</span>
+    <span>Seven GPU runs · G4 running · predictions are labeled</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  var SANS = "'Instrument Sans', ui-sans-serif, system-ui, sans-serif";
+  var MONO = "'JetBrains Mono', ui-monospace, Menlo, monospace";
+  var C = {
+    ink: "#e8e6df", muted: "#85827a", dim: "#4a4844", body: "#5a5751", deep: "#34322f",
+    grid: "#1f1f22", rule: "#3a3835", acc: "#e8593d", accSoft: "#1d1512", light: "#a29e95",
+    g32: "#c9c5bb", g64: "#8a867e", g128: "#4a4844", panel: "#111111", empty: "#141416", emptyLine: "#2a2a2e"
+  };
+  var reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  function S(tag, a, p) {
+    var e = document.createElementNS(NS, tag);
+    if (a) { for (var k in a) { if (a[k] !== null && a[k] !== undefined) e.setAttribute(k, a[k]); } }
+    if (p) p.appendChild(e);
+    return e;
+  }
+  function T(p, x, y, s, o) {
+    o = o || {};
+    var e = S("text", {
+      x: x, y: y,
+      "font-family": o.sans ? SANS : MONO,
+      "font-size": o.size || (o.sans ? 12 : 10),
+      "font-weight": o.weight || (o.sans ? 600 : 400),
+      fill: o.fill || C.muted,
+      "text-anchor": o.anchor || "start"
+    }, p);
+    e.textContent = s;
+    return e;
+  }
+  function tip(e, s) { var t = S("title", null, e); t.textContent = s; return e; }
+  function mk(id, h, label) {
+    var host = document.getElementById(id);
+    if (!host) return null;
+    var svg = S("svg", { viewBox: "0 0 640 " + h, role: "img", "aria-label": label, "class": "fig-svg" });
+    host.appendChild(svg);
+    return svg;
+  }
+  function head(svg, title, sub) {
+    T(svg, 40, 34, title, { sans: true, size: 13, fill: C.ink });
+    if (sub) T(svg, 40, 52, sub, { size: 10.5 });
+  }
+  function L(p, x1, y1, x2, y2, stroke, w, dash) {
+    return S("line", { x1: x1, y1: y1, x2: x2, y2: y2, stroke: stroke || C.grid, "stroke-width": w || 1, "stroke-dasharray": dash || null }, p);
+  }
+  function R(p, x, y, w, h, fill, o) {
+    o = o || {};
+    return S("rect", {
+      x: x, y: y, width: Math.max(0, w), height: h, rx: (o.rx !== undefined ? o.rx : 2),
+      fill: fill, stroke: o.stroke || "none", "stroke-width": o.sw || 1, "stroke-dasharray": o.dash || null
+    }, p);
+  }
+  function swatch(p, x, y, fill, label, o) {
+    o = o || {};
+    R(p, x, y - 8, 10, 10, fill, { rx: 1.5, stroke: o.stroke || null, dash: o.dash || null });
+    T(p, x + 16, y + 1, label, { size: 9.5, fill: o.fill || C.muted });
+  }
+  function signed(d) { return (d > 0 ? "+" : d < 0 ? "−" : "") + Math.abs(d).toFixed(1); }
+
+  /* 1. Hero: where the bytes of a 4-bit Qwen3.5-4B checkpoint go */
+  function figHero() {
+    var svg = mk("fig-hero", 318, "Where the bytes of a 4-bit Qwen3.5-4B checkpoint go");
+    if (!svg) return;
+    head(svg, "what a 4-bit Qwen3.5-4B checkpoint stores", "each cell is 10 MB · 378 cells is the 3.78 GB standard export");
+    var name = T(svg, 40, 84, "", { sans: true, size: 12, fill: C.ink });
+    var note = T(svg, 40, 100, "", { size: 10 });
+    var COLS = 54, W = 8.8, GX = 1.6, H = 14, GY = 3, X0 = 40, Y0 = 112, cells = [];
+    for (var i = 0; i < 378; i++) {
+      var c = i % COLS, r = Math.floor(i / COLS);
+      var e = R(svg, X0 + c * (W + GX), Y0 + r * (H + GY), W, H, null, { rx: 1 });
+      e.setAttribute("class", "cell");
+      e.style.fill = C.body;
+      if (!reduce) e.style.transitionDelay = (i * 1.1) + "ms";
+      cells.push(e);
+    }
+    var KIND = {
+      body:   { fill: C.body,  label: "body, 4-bit" },
+      move:   { fill: C.acc,   label: "moved into the body", ink: true },
+      vision: { fill: C.deep,  label: "vision tower" },
+      vocab:  { fill: C.ink,   label: "vocabulary, BF16" },
+      ladder: { fill: C.light, label: "vocabulary ladder" },
+      empty:  { fill: C.empty, stroke: C.emptyLine, label: "not stored" }
+    };
+    var STATES = {
+      std:   { name: "Standard 4-bit export (AutoRound)", note: "3.78 GB · body 4.12 bits/weight · excess loss 0.042, measured", parts: [["body", 184], ["vision", 67], ["vocab", 127]] },
+      glaze: { name: "Glaze v2", note: "3.77 GB · body 4.83 bits/weight · excess loss 0.014, measured", parts: [["body", 184], ["move", 32], ["vision", 34], ["vocab", 127], ["empty", 1]] },
+      q:     { name: "Blaze-Q, same size", note: "3.77 GB · body ~6.8 bits/weight · excess 0.001–0.012, predicted", parts: [["body", 184], ["move", 118], ["vision", 34], ["ladder", 41], ["empty", 1]] },
+      s:     { name: "Blaze-S, same quality", note: "2.91 GB · body 4.83 bits/weight · excess ~0.016, predicted", parts: [["body", 184], ["move", 32], ["vision", 34], ["ladder", 41], ["empty", 87]] }
+    };
+    var leg = S("g", null, svg);
+    T(svg, 40, 306, "the vocabulary table doubles as the LM head, so all of it is read for every generated token", { size: 10 });
+    function show(key) {
+      var st = STATES[key];
+      name.textContent = st.name;
+      note.textContent = st.note;
+      var idx = 0;
+      st.parts.forEach(function (part) {
+        var K = KIND[part[0]];
+        for (var j = 0; j < part[1]; j++, idx++) {
+          cells[idx].style.fill = K.fill;
+          cells[idx].style.stroke = K.stroke || "none";
+        }
+      });
+      while (leg.firstChild) leg.removeChild(leg.firstChild);
+      var shown = st.parts.filter(function (p) { return !(p[0] === "empty" && p[1] < 2); });
+      shown.forEach(function (part, n) {
+        var K = KIND[part[0]], col = n % 3, row = Math.floor(n / 3);
+        swatch(leg, 40 + col * 190, 252 + row * 18, K.fill, K.label + " · " + (part[1] / 100).toFixed(2) + " GB",
+          { stroke: K.stroke, fill: K.ink ? C.ink : C.muted });
+      });
+    }
+    var buttons = Array.prototype.slice.call(document.querySelectorAll(".seg button"));
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        buttons.forEach(function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+        show(b.getAttribute("data-k"));
+      });
+    });
+    show("std");
+  }
+
+  /* 2. Benchmarks: change from BF16 per task */
+  function figBench() {
+    var rows = [["MMLU-Pro", 74.6, 72.8, 73.7], ["GSM8K", 83.2, 82.3, 82.8], ["MATH-500", 83.4, 73.2, 83.2], ["IFEval", 82.3, 80.6, 82.8],
+      ["HellaSwag", 65.4, 64.8, 64.8], ["ARC-Challenge", 51.1, 50.0, 49.6], ["MMBench", 85.4, 84.7, 85.7], ["MMMU", 69.6, 66.9, 66.7],
+      ["MathVista", 81.0, 80.3, 80.6], ["OCRBench", 86.3, 87.2, 86.3], ["DocVQA", 95.3, 95.3, 95.4], ["TextVQA", 82.8, 82.5, 82.2]];
+    var y0 = 96, step = 22, h = y0 + rows.length * step + 44;
+    var svg = mk("fig-bench", h, "Change from BF16 per task for AutoRound and Glaze v2");
+    if (!svg) return;
+    head(svg, "change from BF16, in points, per task", "grey ring: AutoRound W4A16 g128 · orange dot: Glaze v2 · shaded band: within 1 point");
+    var X = function (d) { return 230 + (d + 11) * (360 / 13); };
+    var top = y0 - 14, bot = y0 + (rows.length - 1) * step + 12;
+    R(svg, X(-1), top, X(1) - X(-1), bot - top, "#17171a", { rx: 0 });
+    [-10, -8, -6, -4, -2, 0, 2].forEach(function (t) {
+      L(svg, X(t), top, X(t), bot, t === 0 ? C.rule : C.grid, 1);
+      T(svg, X(t), bot + 16, t === 0 ? "0" : signed(t), { size: 9.5, anchor: "middle", fill: t === 0 ? C.ink : C.muted });
+    });
+    rows.forEach(function (r, i) {
+      var y = y0 + i * step, da = Math.round((r[2] - r[1]) * 10) / 10, dg = Math.round((r[3] - r[1]) * 10) / 10;
+      T(svg, 218, y + 3.5, r[0], { size: 10, anchor: "end", fill: C.ink });
+      L(svg, X(da), y, X(dg), y, C.dim, 1.2);
+      tip(S("circle", { cx: X(da), cy: y, r: 4, fill: C.panel, stroke: C.muted, "stroke-width": 1.3 }, svg), r[0] + ": AutoRound " + signed(da) + " (BF16 " + r[1] + ")");
+      tip(S("circle", { cx: X(dg), cy: y, r: 4.5, fill: C.acc }, svg), r[0] + ": Glaze v2 " + signed(dg) + " (BF16 " + r[1] + ")");
+      T(svg, Math.max(X(da), X(dg)) + 10, y + 3.5, signed(dg), { size: 9.5, fill: C.ink });
+    });
+    T(svg, X(-10.2) + 9, y0 + 2 * step - 7, "AutoRound −10.2", { size: 9 });
+    T(svg, 40, h - 8, "WikiText-2 perplexity, lower is better: BF16 10.95 · AutoRound 11.45 · Glaze v2 11.30", { size: 10 });
+  }
+
+  /* 3. Excess loss against bits per body weight */
+  function figBits() {
+    var svg = mk("fig-bits", 336, "Drift excess loss against bits per body weight, with a rule line that falls 4 times per bit");
+    if (!svg) return;
+    head(svg, "drift excess loss against bits per body weight", "y is log scale · dashed line: AutoRound’s 0.042, divided by 4 for each added bit");
+    var lo = Math.log(0.0005) / Math.LN10, hi = Math.log(0.1) / Math.LN10;
+    var X = function (b) { return 80 + (b - 4) / (8.4 - 4) * 500; };
+    var Y = function (v) { return 290 - (Math.log(v) / Math.LN10 - lo) / (hi - lo) * 210; };
+    [0.001, 0.01, 0.1].forEach(function (v) { L(svg, 80, Y(v), 580, Y(v), C.grid); T(svg, 72, Y(v) + 3, String(v), { size: 9.5, anchor: "end" }); });
+    [4, 5, 6, 7, 8].forEach(function (b) { L(svg, X(b), 80, X(b), 290, C.grid); T(svg, X(b), 306, b + " bits", { size: 9.5, anchor: "middle" }); });
+    var d = "";
+    for (var b = 4; b <= 8.4; b += 0.05) {
+      var v = 0.0417 * Math.pow(4, -(b - 4.124));
+      if (v < 0.0005) break;
+      d += (d ? "L" : "M") + X(b).toFixed(1) + " " + Y(v).toFixed(1);
+    }
+    S("path", { d: d, fill: "none", stroke: C.ink, "stroke-width": 1.2, "stroke-dasharray": "5 4", opacity: 0.75 }, svg);
+    var xb = X(6.79);
+    L(svg, xb, 80, xb, 290, C.acc, 1.2, "3 4");
+    T(svg, xb + 6, 92, "Blaze-Q budget · 6.8 bits", { size: 9.5, fill: C.acc });
+    var vb = 0.0417 * Math.pow(4, -(6.79 - 4.124));
+    tip(S("circle", { cx: xb, cy: Y(vb), r: 4.5, fill: C.panel, stroke: C.acc, "stroke-width": 1.5 }, svg), "The rule at 6.8 bits: about 0.001");
+    T(svg, xb + 9, Y(vb) - 7, "≈ 0.001 if the rule holds", { size: 9.5, fill: C.ink });
+    [["GPTQ", 4.124, 0.054], ["AWQ", 4.13, 0.050], ["AutoRound", 4.124, 0.0417]].forEach(function (p) {
+      tip(S("circle", { cx: X(p[1]), cy: Y(p[2]), r: 3.6, fill: C.muted }, svg), p[0] + ": excess loss " + p[2] + " at 4.12 bits");
+    });
+    T(svg, X(4.124) + 10, Y(0.05) + 3, "GPTQ, AWQ, AutoRound · 4.12 bits", { size: 9.5 });
+    tip(S("circle", { cx: X(4.833), cy: Y(0.0143), r: 4.8, fill: C.acc }, svg), "Glaze v2: excess loss 0.0143 at 4.83 bits");
+    T(svg, X(4.833) - 9, Y(0.0143) + 18, "Glaze v2 · 0.014", { size: 9.5, fill: C.ink, anchor: "end" });
+    tip(S("circle", { cx: X(8.125), cy: Y(0.011), r: 4, fill: C.panel, stroke: C.muted, "stroke-width": 1.3 }, svg), "INT8 W8A8: 0.011; its activations are 8-bit too");
+    T(svg, X(8.125) - 10, Y(0.011) - 14, "INT8 W8A8", { size: 9.5, anchor: "end" });
+    T(svg, X(8.125) - 10, Y(0.011) - 2, "activations too", { size: 9.5, anchor: "end" });
+    L(svg, 80, 290, 580, 290, C.rule);
+    T(svg, 40, 328, "measured: drift replays of BF16’s 1,501 MATH-500 and MMLU-Pro answers, records 3, 4 and 6", { size: 10 });
+  }
+
+  /* 4. Vocabulary share across sizes */
+  function figShare() {
+    var rows = [["Qwen3.5-0.8B · tied", 52.6, "0.51 of 0.97 GB", 66.5], ["Qwen3.5-2B · tied", 42.6, "1.02 of 2.39 GB", 59.0],
+      ["Qwen3.5-4B · tied", 33.6, "1.27 of 3.78 GB", 40.9], ["Qwen3.5-9B · untied", 47.6, "4.07 of 8.55 GB", 36.3], ["Qwen3.5-27B · untied", 27.4, "5.09 of 18.56 GB", 16.8]];
+    var svg = mk("fig-share", 360, "Vocabulary share of a 4-bit export and of the weight bytes read per token, across Qwen3.5 sizes");
+    if (!svg) return;
+    var Wd = function (p) { return p / 80 * 330; };
+    function panel(y, title, sub, pick, label) {
+      T(svg, 40, y, title, { sans: true, size: 12.5, fill: C.ink });
+      T(svg, 600, y, sub, { size: 9.5, anchor: "end" });
+      L(svg, 40, y + 8, 600, y + 8, C.grid);
+      rows.forEach(function (r, i) {
+        var yy = y + 22 + i * 24, v = pick(r), is4 = i === 2;
+        T(svg, 238, yy + 13, r[0], { size: 9.5, anchor: "end", fill: is4 ? C.ink : C.muted });
+        tip(R(svg, 250, yy, Wd(v), 18, C.acc, { rx: 3 }), r[0] + ": " + v + "%");
+        T(svg, 258 + Wd(v), yy + 13, label(r, v), { size: 10, fill: is4 ? C.ink : C.muted, weight: is4 ? 600 : 400 });
+      });
+    }
+    panel(36, "share of the 4-bit checkpoint on disk", "linear", function (r) { return r[1]; }, function (r, v) { return Math.round(v) + "% · " + r[2]; });
+    panel(200, "share of the weight bytes read per generated token", "linear", function (r) { return r[3]; }, function (r, v) { return Math.round(v) + "%"; });
+  }
+
+  /* 5. Vocabulary rows sorted by use */
+  function bracket(p, x1, x2, y, up, label, color, anchorEnd) {
+    var d = up ? -6 : 6;
+    S("path", { d: "M" + x1 + " " + y + "V" + (y + d) + "H" + x2 + "V" + y, fill: "none", stroke: color, "stroke-width": 1 }, p);
+    T(p, anchorEnd ? x2 : x1, up ? y + d - 7 : y + d + 14, label, { size: 9.5, fill: color, anchor: anchorEnd ? "end" : "start" });
+  }
+  function figVocab() {
+    var svg = mk("fig-vocab", 232, "The 248,320 vocabulary rows sorted by use: 65,536 busy rows, 14,764 rarely used, 168,020 never used");
+    if (!svg) return;
+    head(svg, "248,320 vocabulary rows, sorted by how often they were used", "each cell is 1,024 rows · 57M tokens of English text plus the model’s own answers");
+    var N = 243, X0 = 40, step = 560 / N, w = step - 0.55, y = 120, h = 30;
+    for (var i = 0; i < N; i++) {
+      var f = i < 64 ? C.acc : (i < 79 ? C.muted : "#26262a");
+      R(svg, X0 + i * step, y, w, h, f, { rx: 0.6 });
+    }
+    bracket(svg, X0, X0 + 64 * step - 1, y - 8, true, "8-bit rung · busiest 65,536 rows", C.acc, false);
+    bracket(svg, X0 + 64 * step + 1, X0 + N * step, y - 8, true, "4-bit rung · the other 182,784 rows", C.muted, true);
+    bracket(svg, X0, X0 + 79 * step - 1, y + h + 8, false, "used at least once · 80,300 rows", C.ink, false);
+    bracket(svg, X0 + 79 * step + 1, X0 + N * step, y + h + 8, false, "never used · 168,020 rows · 68%", C.ink, true);
+    T(svg, 40, 222, "the 8-bit rung holds 99.99% of the 22M tokens the model generated itself", { size: 10 });
+  }
+
+  /* 6. Coverage curves */
+  function figCoverage() {
+    var svg = mk("fig-coverage", 342, "Share of the model’s own output tokens covered by the busiest rows, by ranking source");
+    if (!svg) return;
+    head(svg, "ranked on chat text alone, 32k rows miss 8% of the model’s own output", "share of 22M tokens the BF16 4B generated that fall in the busiest K rows · x is log scale");
+    var ser = {
+      chat: [60.65, 68.00, 73.09, 80.03, 87.72, 92.20, 98.38],
+      census: [81.18, 86.18, 90.61, 94.48, 97.53, 99.44, 99.99],
+      id: [63.25, 70.14, 76.05, 81.65, 88.94, 93.66, 98.00]
+    };
+    var style = {
+      chat: { c: C.acc, w: 2.2, d: null, n: "chat + Wikipedia ranking" },
+      census: { c: C.ink, w: 1.6, d: null, n: "full census (in-sample)" },
+      id: { c: C.muted, w: 1.6, d: "5 4", n: "token ID order, no data" }
+    };
+    var K = [1, 2, 4, 8, 16, 32, 64];
+    var X = function (i) { return 80 + i * (500 / 6); }, Y = function (v) { return 292 - (v - 50) / 50 * 186; };
+    [60, 70, 80, 90, 100].forEach(function (v) { L(svg, 80, Y(v), 580, Y(v), C.grid); T(svg, 72, Y(v) + 3, v + "%", { size: 9.5, anchor: "end" }); });
+    K.forEach(function (k, i) { T(svg, X(i), 310, k + "k", { size: 9.5, anchor: "middle" }); });
+    T(svg, 330, 328, "busiest rows kept", { size: 9.5, anchor: "middle" });
+    L(svg, X(6), 96, X(6), 292, C.acc, 1, "3 4");
+    T(svg, X(6) - 6, 284, "Blaze’s 8-bit rung · 65,536 rows", { size: 9.5, anchor: "end", fill: C.acc });
+    ["chat", "census", "id"].forEach(function (k, n) {
+      var st = style[k];
+      swatch(svg, 80 + n * 176, 76, st.c, st.n, { fill: k === "chat" ? C.ink : C.muted });
+      S("path", { d: ser[k].map(function (v, i) { return (i ? "L" : "M") + X(i) + " " + Y(v); }).join(""), fill: "none", stroke: st.c, "stroke-width": st.w, "stroke-dasharray": st.d }, svg);
+      ser[k].forEach(function (v, i) { tip(S("circle", { cx: X(i), cy: Y(v), r: 2.8, fill: st.c }, svg), st.n + ", " + K[i] + "k rows: " + v + "%"); });
+    });
+    T(svg, X(5), Y(92.2) + 18, "92.2%", { size: 10, anchor: "middle", fill: C.acc, weight: 600 });
+    T(svg, X(5), Y(99.44) - 9, "99.4%", { size: 10, anchor: "middle", fill: C.ink, weight: 600 });
+  }
+
+  /* 7. Logit noise per bit-width */
+  function figNoise() {
+    var rows = [["8-bit rows · the busy rung", 0.014, "0.014 nats · KL ≤ 0.0001", true], ["6-bit rows", 0.059, "0.059 nats · KL ≤ 0.002", false],
+      ["4-bit rows · the idle rung", 0.262, "0.26 nats · KL ≤ 0.034", true], ["3-bit rows", 0.611, "0.61 nats · KL ≤ 0.19", false]];
+    var svg = mk("fig-noise", 214, "Logit noise a stored vocabulary row adds, by bits per weight");
+    if (!svg) return;
+    head(svg, "noise a stored row adds to its logit", "median over the 4B’s 248,320 rows · log scale · KL cost is at most σ²/2");
+    var Wd = function (v) { return (Math.log(v) / Math.LN10 + 2) / 2 * 240; };
+    rows.forEach(function (r, i) {
+      var y = 76 + i * 28;
+      T(svg, 238, y + 13, r[0], { size: 9.5, anchor: "end", fill: r[3] ? C.ink : C.muted });
+      tip(R(svg, 250, y, Wd(r[1]), 18, r[3] ? C.acc : C.dim, { rx: 3 }), r[0] + ": " + r[2]);
+      T(svg, 258 + Wd(r[1]), y + 13, r[2], { size: 10, fill: r[3] ? C.ink : C.muted, weight: r[3] ? 600 : 400 });
+    });
+    T(svg, 40, 204, "σ = (grid step ÷ √12) × ‖h‖, with ‖h‖ ≈ 162 from the final norm’s gain", { size: 10 });
+  }
+
+  /* 8. Kronecker energy, trained against random */
+  function figKron() {
+    var rows = [["1 Kronecker term", 0.25, 0.08], ["8 terms", 0.89, 0.66], ["64 terms", 5.37, 5.04]];
+    var svg = mk("fig-kron", 236, "Energy captured by Kronecker products from a trained FFN matrix and from a random one");
+    if (!svg) return;
+    head(svg, "a trained FFN matrix looks random to a Kronecker product", "Qwen3.5-4B layer 10 gate_proj, 9,216 × 2,560 · share of energy in the best sum of k terms");
+    var Wd = function (v) { return v / 6 * 300; };
+    rows.forEach(function (r, i) {
+      var y = 76 + i * 46;
+      T(svg, 238, y + 19, r[0], { size: 9.5, anchor: "end", fill: C.ink });
+      tip(R(svg, 250, y, Wd(r[1]), 16, C.ink, { rx: 3 }), r[0] + ", trained: " + r[1] + "%");
+      T(svg, 258 + Wd(r[1]), y + 12, r[1].toFixed(2) + "% trained", { size: 10, fill: C.ink, weight: 600 });
+      tip(R(svg, 250, y + 20, Wd(r[2]), 16, C.dim, { rx: 3 }), r[0] + ", random: " + r[2] + "%");
+      T(svg, 258 + Wd(r[2]), y + 32, r[2].toFixed(2) + "% random", { size: 10 });
+    });
+    T(svg, 40, 226, "Van Loan–Pitsianis rearrangement, 96×64 ⊗ 96×40 factors · down_proj gives the same picture", { size: 10 });
+  }
+
+  /* 9. The pipeline */
+  function figPipeline() {
+    var svg = mk("fig-pipeline", 232, "The five stages of Blaze, left to right");
+    if (!svg) return;
+    head(svg, "Blaze, left to right", "BF16 checkpoint in · one export of a chosen byte size out · nothing is trained");
+    var y = 122;
+    L(svg, 20, y, 620, y, C.dim, 1.2);
+    var flow = L(svg, 20, y, 620, y, C.acc, 2);
+    flow.setAttribute("class", "flow");
+    flow.setAttribute("stroke-linecap", "round");
+    flow.setAttribute("opacity", "0.85");
+    var nodes = [["1 usage census", "token counts, broad text", true], ["2 vocab ladder", "8-bit busy rows, 4-bit rest", false], ["3 body menu", "4-bit g128/64/32 or 8-bit", true],
+      ["4 byte market", "measured KL removed per byte", false], ["5 export, serve", "tiered head, Marlin body", true]];
+    nodes.forEach(function (n, i) {
+      var cx = 80 + i * 120, main = i === 3;
+      R(svg, cx - 52, y - 18, 104, 36, main ? C.accSoft : "#18181b", { rx: 8, stroke: main ? C.acc : "#2a2a2e", sw: main ? 1.3 : 1 });
+      T(svg, cx, y + 4, n[0], { size: 9.5, anchor: "middle", fill: C.ink, weight: main ? 600 : 400 });
+      T(svg, cx, n[2] ? y - 30 : y + 40, n[1], { size: 8.5, anchor: "middle" });
+    });
+    T(svg, 40, 214, "one census per tokenizer family · one market per model · stock Marlin kernels for the body", { size: 10 });
+  }
+
+  /* 10. The ladder in bytes */
+  function figLadder() {
+    var svg = mk("fig-ladder", 252, "The Qwen3.5-4B vocabulary table in BF16 against the Blaze ladder, in megabytes");
+    if (!svg) return;
+    head(svg, "the 4B’s vocabulary table, before and after the ladder", "bars drawn to scale in megabytes");
+    var k = 560 / 1271, x = 40;
+    T(svg, 40, 86, "BF16 table · 248,320 rows × 2,560 × 16 bits", { size: 10, fill: C.ink });
+    T(svg, 600, 86, "1,271 MB", { size: 10, anchor: "end", fill: C.ink });
+    tip(R(svg, x, 94, 560, 22, C.ink, { rx: 3 }), "BF16 vocabulary table: 1,271 MB");
+    T(svg, 40, 148, "Blaze ladder · 412 MB", { size: 10, fill: C.ink });
+    T(svg, 600, 148, "860 MB moved into the body", { size: 10, anchor: "end", fill: C.acc });
+    tip(R(svg, x, 156, 170 * k, 22, C.acc, { rx: 3 }), "8-bit rung: 65,536 rows, 170 MB");
+    tip(R(svg, x + 170 * k + 2, 156, 241 * k - 2, 22, C.light, { rx: 3 }), "4-bit rung: 182,784 rows, 241 MB");
+    R(svg, x + 411 * k + 4, 156, 560 - 411 * k - 4, 22, "none", { rx: 3, stroke: C.acc, dash: "4 3", sw: 1.2 });
+    T(svg, x + 411 * k + (560 - 411 * k) / 2 + 2, 171, "freed: 860 MB", { size: 10, anchor: "middle", fill: C.acc });
+    swatch(svg, 40, 206, C.acc, "8-bit rung · 65,536 rows · 170 MB", { fill: C.ink });
+    swatch(svg, 330, 206, C.light, "4-bit rung · 182,784 rows · 241 MB");
+    T(svg, 40, 240, "plus a 248,320-entry index map (1 MB) that turns token IDs into rung order and back", { size: 10 });
+  }
+
+  /* 11. Glaze v2's knapsack, unit by unit */
+  function figKnapsack() {
+    var data = {
+      mixer_in: ["8","8","8","8","8","8","8","8","4/g32","4/g32","4/g32","4/g32","4/g32","4/g64","4/g32","4/g32","4/g64","4/g64","4/g64","4/g32","4/g128","4/g128","4/g128","4/g64","4/g128","4/g128","4/g128","4/g64","4/g128","4/g128","4/g128","4/g64"],
+      dn_ab: ["8","8","8",null,"8","8","8",null,"8","8","8",null,"8","8","8",null,"8","8","8",null,"8","4/g128","4/g128",null,"4/g128","4/g128","4/g128",null,"4/g128","4/g128","8",null],
+      mixer_out: ["8","8","8","8","8","8","8","8","4/g32","4/g32","4/g32","8","4/g32","4/g32","4/g32","4/g32","4/g32","4/g32","4/g32","8","4/g32","4/g32","4/g64","4/g32","4/g64","4/g128","4/g128","4/g32","4/g64","4/g128","4/g32","4/g32"],
+      ffn_gu: ["4/g32","4/g32","4/g32","4/g32","8","4/g32","4/g32","4/g32","4/g32","4/g32","4/g32","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g128","4/g128","4/g128","4/g128","4/g128","4/g128","4/g128","4/g32"],
+      ffn_down: ["8","8","8","8","4/g32","4/g32","4/g32","4/g32","4/g32","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g64","4/g32","4/g32","4/g64","4/g64","4/g64","4/g64","4/g128","4/g128","4/g64","4/g128","4/g128","4/g128","4/g64","4/g32"]
+    };
+    var rows = [["mixer in-proj", "mixer_in"], ["DeltaNet a, b", "dn_ab"], ["mixer out-proj", "mixer_out"], ["FFN gate, up", "ffn_gu"], ["FFN down", "ffn_down"]];
+    var fill = { "8": C.acc, "4/g32": C.g32, "4/g64": C.g64, "4/g128": C.g128 };
+    var svg = mk("fig-knapsack", 258, "Glaze v2's precision choice for each of its 152 units, by layer");
+    if (!svg) return;
+    head(svg, "a byte market’s output: Glaze v2’s choice for each of 152 units", "Fisher-priced · 316 MB to spend · 27 of its 40 8-bit picks sit in layers 0–7");
+    var X0 = 150, w = 12, gx = 1.6, y0 = 78, h = 16, gy = 4;
+    rows.forEach(function (r, ri) {
+      var y = y0 + ri * (h + gy);
+      T(svg, 140, y + 12, r[0], { size: 9.5, anchor: "end", fill: C.ink });
+      data[r[1]].forEach(function (opt, l) {
+        var x = X0 + l * (w + gx);
+        if (opt === null) { R(svg, x, y, w, h, C.empty, { rx: 1.5, stroke: C.emptyLine }); return; }
+        tip(R(svg, x, y, w, h, fill[opt], { rx: 1.5 }), "layer " + l + ", " + r[0] + ": " + (opt === "8" ? "8-bit g128" : opt.replace("4/", "4-bit ")));
+      });
+    });
+    var yA = y0 + 5 * (h + gy) + 8;
+    for (var l = 0; l < 32; l++) {
+      if (l % 4 === 3) T(svg, X0 + l * (w + gx) + w / 2, yA + 4, "A", { size: 8.5, anchor: "middle", fill: C.muted });
+    }
+    [0, 8, 16, 24, 31].forEach(function (l) { T(svg, X0 + l * (w + gx) + w / 2, yA + 18, String(l), { size: 9, anchor: "middle" }); });
+    T(svg, 140, yA + 4, "attention layer", { size: 8.5, anchor: "end" });
+    T(svg, 140, yA + 18, "layer", { size: 9, anchor: "end" });
+    swatch(svg, 40, 238, C.acc, "8-bit", { fill: C.ink });
+    swatch(svg, 120, 238, C.g32, "4-bit g32");
+    swatch(svg, 220, 238, C.g64, "4-bit g64");
+    swatch(svg, 320, 238, C.g128, "4-bit g128");
+    swatch(svg, 426, 238, C.empty, "no such unit", { stroke: C.emptyLine });
+  }
+
+  /* 12. Bits each lever adds */
+  function figLevers() {
+    var rows = [["smarter rounding (learned, Fisher)", 0.10, "at most 0.10", "cap"], ["vector codes (QTIP, lattices)", 0.25, "at most 0.25", "cap"],
+      ["8-bit vision tower (Glaze v2)", 0.73, "0.73", "bytes"], ["vocabulary ladder (Blaze)", 1.93, "1.93", "blaze"]];
+    var svg = mk("fig-levers", 214, "Bits each lever can add per body weight for Qwen3.5-4B at 3.77 GB");
+    if (!svg) return;
+    head(svg, "bits each lever adds per body weight", "Qwen3.5-4B at 3.77 GB · dashed bars are ceilings, solid bars are bytes moved");
+    var Wd = function (v) { return v / 2.2 * 300; };
+    rows.forEach(function (r, i) {
+      var y = 74 + i * 28, isB = r[3] === "blaze";
+      T(svg, 248, y + 13, r[0], { size: 9.5, anchor: "end", fill: isB ? C.ink : C.muted });
+      if (r[3] === "cap") tip(R(svg, 260, y, Wd(r[1]), 18, "none", { rx: 3, stroke: C.muted, dash: "3 3" }), r[0] + ": " + r[2] + " bit");
+      else tip(R(svg, 260, y, Wd(r[1]), 18, isB ? C.acc : C.dim, { rx: 3 }), r[0] + ": " + r[2] + " bits");
+      T(svg, 268 + Wd(r[1]), y + 13, r[2] + " bits", { size: 10, fill: isB ? C.ink : C.muted, weight: isB ? 600 : 400 });
+    });
+    T(svg, 40, 204, "ceilings: WaterSIC (ICML 2026) · bytes: this repo’s exports, 3.569B body weights", { size: 10 });
+  }
+
+  /* 13. Measured against predicted excess loss */
+  function figPredict() {
+    var rows = [["GPTQ W4A16 g128", 0.054, 0.054, "m", "0.054"], ["AWQ W4A16 g128", 0.050, 0.050, "m", "0.050"], ["AutoRound W4A16 g128", 0.042, 0.042, "m", "0.042"],
+      ["INT8 W8A8 · 8-bit activations too", 0.011, 0.011, "m", "0.011"], ["Glaze v2", 0.0143, 0.0143, "m", "0.014"],
+      ["Blaze-Q on 4/8-bit kernels", 0.004, 0.012, "p", "0.004–0.012, predicted"], ["Blaze-Q with a 6-bit option", 0.0011, 0.002, "p", "0.0011–0.002, predicted"],
+      ["Blaze-Q (G2b), measured", 0.0017, 0.0017, "mb", "0.0017, measured"]];
+    var y0 = 90, step = 32, h = y0 + rows.length * step + 30;
+    var svg = mk("fig-predict", h, "Measured excess loss of each method against Blaze-Q's predicted ranges");
+    if (!svg) return;
+    head(svg, "excess loss over BF16, nats per token", "bars: measured drift replays · dots and whiskers: the draft's Blaze-Q predictions");
+    var X = function (v) { return 290 + v / 0.06 * 300; };
+    var gi = 4, gx = X(0.0143), last = rows.length - 1;
+    L(svg, gx, y0 + gi * step - 12, gx, y0 + last * step + 16, C.muted, 1, "4 4");
+    T(svg, gx + 6, y0 + last * step + 30, "Glaze v2’s level", { size: 9.5 });
+    rows.forEach(function (r, i) {
+      var y = y0 + i * step, p = r[3] === "p";
+      T(svg, 40, y + 4, r[0], { size: 10, fill: C.ink, weight: p ? 600 : 400 });
+      if (!p) {
+        var mb = r[3] === "mb";
+        tip(R(svg, 290, y - 8, X(r[1]) - 290, 16, mb ? C.acc : i === gi ? C.muted : C.dim, { rx: 2 }), r[0] + ": " + r[4] + (mb ? "" : " (measured)"));
+        T(svg, Math.max(X(r[1]), gx) + 10, y + 4, r[4], { size: 10, fill: mb ? C.ink : C.muted, weight: mb ? 600 : 400 });
+      } else {
+        L(svg, X(r[1]), y, X(r[2]), y, C.acc, 2);
+        L(svg, X(r[1]), y - 6, X(r[1]), y + 6, C.acc, 2);
+        L(svg, X(r[2]), y - 6, X(r[2]), y + 6, C.acc, 2);
+        tip(S("circle", { cx: X((r[1] + r[2]) / 2), cy: y, r: 4, fill: C.acc }, svg), r[0] + ": " + r[4]);
+        T(svg, Math.max(X(r[2]), gx) + 10, y + 4, r[4], { size: 10, fill: C.ink, weight: 600 });
+      }
+    });
+    L(svg, 290, y0 - 16, 290, y0 + last * step + 16, C.rule);
+  }
+
+  /* 14. Same bytes, different split, per size */
+  function figFamily() {
+    var fam = [
+      ["Qwen3.5-0.8B", "0.97 GB · tied", 0.966, [["body", 0.257], ["vocab", 0.509], ["vision", 0.201]], [["body", 0.257], ["move", 0.248], ["ladder", 0.165], ["vision", 0.102], ["spare", 0.194]], "4.1 → 8.0 bits"],
+      ["Qwen3.5-2B", "2.39 GB · tied", 2.387, [["body", 0.708], ["vocab", 1.017], ["vision", 0.662]], [["body", 0.708], ["move", 0.686], ["ladder", 0.329], ["vision", 0.662]], "4.1 → 8.0 bits"],
+      ["Qwen3.5-4B", "3.78 GB · tied", 3.778, [["body", 1.840], ["vocab", 1.271], ["vision", 0.667]], [["body", 1.840], ["move", 1.188], ["ladder", 0.412], ["vision", 0.338]], "4.1 → 6.8 bits"],
+      ["Qwen3.5-9B", "8.55 GB · untied", 8.547, [["body", 3.567], ["vocab", 4.068], ["vision", 0.911]], [["body", 3.567], ["move", 3.334], ["ladder", 1.183], ["vision", 0.463]], "4.1 → 8.0 bits"],
+      ["Qwen3.5-27B", "18.56 GB · untied", 18.562, [["body", 12.556], ["vocab", 5.086], ["vision", 0.921]], [["body", 12.556], ["move", 4.060], ["ladder", 1.479], ["vision", 0.468]], "4.1 → 5.5 bits"]
+    ];
+    var col = { body: C.body, move: C.acc, vocab: C.ink, ladder: C.light, vision: C.deep, spare: "none" };
+    var names = { body: "body", move: "moved into the body", vocab: "vocabulary, BF16", ladder: "vocabulary ladder", vision: "vision tower", spare: "unused headroom" };
+    var y0 = 84, block = 56, h = y0 + fam.length * block + 52;
+    var svg = mk("fig-family", h, "For each Qwen3.5 size, the split of a standard 4-bit export against Blaze-Q at the same size");
+    if (!svg) return;
+    head(svg, "same bytes, different split", "top bar: standard W4A16 export · bottom bar: Blaze-Q at the same size");
+    var X0 = 170, W = 330;
+    function bar(y, parts, total, model) {
+      var x = X0;
+      parts.forEach(function (p) {
+        var w = p[1] / total * W;
+        if (p[0] === "spare") tip(R(svg, x + 1, y, w - 1, 12, "none", { rx: 1.5, stroke: C.muted, dash: "3 2" }), model + ": " + names[p[0]] + ", " + p[1].toFixed(2) + " GB");
+        else tip(R(svg, x, y, Math.max(0, w - 1), 12, col[p[0]], { rx: 1.5 }), model + ": " + names[p[0]] + ", " + p[1].toFixed(2) + " GB");
+        x += w;
+      });
+    }
+    fam.forEach(function (m, i) {
+      var y = y0 + i * block;
+      T(svg, 40, y + 10, m[0], { sans: true, size: 12, fill: C.ink });
+      T(svg, 40, y + 26, m[1], { size: 9.5 });
+      bar(y, m[3], m[2], m[0] + " W4A16");
+      bar(y + 17, m[4], m[2], m[0] + " Blaze-Q");
+      T(svg, X0 + W + 8, y + 10, "W4A16 · 4.1 bits", { size: 9.5 });
+      T(svg, X0 + W + 8, y + 27, "Blaze-Q · " + m[5].split(" → ")[1], { size: 9.5, fill: C.ink, weight: 600 });
+    });
+    var ly = y0 + fam.length * block + 12;
+    ["body", "move", "vocab", "ladder", "vision", "spare"].forEach(function (k, n) {
+      swatch(svg, 40 + (n % 3) * 190, ly + Math.floor(n / 3) * 18, k === "spare" ? C.panel : col[k], names[k], { stroke: k === "spare" ? C.muted : null, dash: k === "spare" ? "2 2" : null, fill: k === "move" ? C.ink : C.muted });
+    });
+  }
+
+  /* 15. What one generated token reads */
+  function figReads() {
+    var rows = [["AutoRound W4A16", "3.11 GB per token", 92, 0, 64], ["Glaze v2", "3.43 GB per token", 92, 16, 64],
+      ["Blaze-Q", "3.44 GB · same as Glaze v2", 92, 59, 21], ["Blaze-S", "2.57 GB · 25% less than Glaze v2", 92, 16, 21]];
+    var svg = mk("fig-reads", 322, "Weight bytes each method reads per generated token");
+    if (!svg) return;
+    head(svg, "what one generated token has to read", "each cell is 20 MB · body weights plus the full LM head");
+    var stp = 560 / 172, w = 2.6;
+    rows.forEach(function (r, i) {
+      var y = 86 + i * 52, x = 40, isB = i >= 2;
+      T(svg, 40, y, r[0], { sans: true, size: 12, fill: C.ink });
+      T(svg, 600, y, r[1], { size: 10, anchor: "end", fill: isB ? C.ink : C.muted, weight: isB ? 600 : 400 });
+      var seq = [[C.body, r[2]], [C.acc, r[3]], [C.ink, r[4]]];
+      seq.forEach(function (s) { for (var j = 0; j < s[1]; j++) { R(svg, x, y + 8, w, 22, s[0], { rx: 1 }); x += stp; } });
+      L(svg, 40, y + 30, 600, y + 30, C.grid);
+    });
+    swatch(svg, 40, 296, C.body, "body, original 4-bit bytes");
+    swatch(svg, 230, 296, C.acc, "bytes moved into the body", { fill: C.ink });
+    swatch(svg, 420, 296, C.ink, "LM head, the vocabulary table");
+  }
+
+  /* 16. Gates */
+  function figGates() {
+    var g = [["G1", "is the ladder free?", "A30 · 1.5 h", 58, 0.61], ["G2", "2.4× below Glaze v2?", "A30 · 2 h", 78, 0.81], ["G3", "panel within 1 point?", "A30 · 3 h", 117, 1.21],
+      ["G4", "suite within 1 point?", "A30 · 7 h", 272, 2.83], ["G5", "does the 2B agree?", "A30 · 5 h", 194, 2.02]];
+    var svg = mk("fig-gates", 246, "Five evaluation gates with their questions and costs");
+    if (!svg) return;
+    head(svg, "five gates, cheapest first", "each gate is its own go-ahead, with a budget cap and a teardown watcher");
+    var y = 124, total = 0;
+    L(svg, 30, y, 610, y, C.dim, 1.2);
+    g.forEach(function (n, i) {
+      var cx = 88 + i * 116, first = i === 0;
+      total += n[3];
+      T(svg, cx, y - 30, n[1], { size: 8.5, anchor: "middle", fill: first ? C.ink : C.muted });
+      R(svg, cx - 48, y - 17, 96, 34, first ? C.accSoft : "#18181b", { rx: 8, stroke: first ? C.acc : "#2a2a2e", sw: first ? 1.3 : 1 });
+      T(svg, cx, y - 1, n[0], { size: 10, anchor: "middle", fill: C.ink, weight: 600 });
+      T(svg, cx, y + 11, n[2], { size: 8.5, anchor: "middle" });
+      tip(R(svg, cx - 48, y + 30, n[3] / 272 * 96, 6, first ? C.acc : C.dim, { rx: 2 }), n[0] + ": ₹" + n[3] + " (about $" + n[4].toFixed(2) + ")");
+      T(svg, cx - 48, y + 54, "₹" + n[3] + " · $" + n[4].toFixed(2), { size: 10, fill: C.ink });
+      T(svg, cx - 48, y + 70, "total ₹" + total, { size: 9.5 });
+    });
+    T(svg, 40, 234, "A30 at ₹38.88 per hour · ₹96.3 per dollar, the last rate on record (2 Oct 2026)", { size: 10 });
+  }
+
+
+  /* 17. Measured excess loss on the 4B, log scale */
+  function figMeasured() {
+    var rows = [
+      ["GPTQ W4A16 g128", 0.054, "base", ""], ["AWQ W4A16 g128", 0.050, "base", ""], ["AutoRound W4A16 g128", 0.042, "base", ""],
+      ["Glaze v2", 0.0143, "glaze", ""], ["INT8 W8A8 · 8-bit activations", 0.011, "base", ""],
+      ["Blaze G2 · vision BF16", 0.0071, "blaze", "at size"], ["Blaze 6-bit, plain rounding", 0.0048, "blaze", "over"],
+      ["Blaze 6-bit GPTQ (G1b)", 0.0027, "blaze", "over"], ["Blaze-Q (G2b) · vision 8-bit", 0.0017, "best", "at size"]];
+    var y0 = 92, step = 28, h = y0 + rows.length * step + 40;
+    var svg = mk("fig-measured", h, "Measured excess loss over BF16 on Qwen3.5-4B for baselines and Blaze variants, log scale");
+    if (!svg) return;
+    head(svg, "excess loss over BF16 on the 4B, nats per token", "measured on BF16's 1,501 answers · log scale · “over” stores more than a 4-bit export");
+    var lo = Math.log10(0.001), hi = Math.log10(0.07), x0 = 300, w = 290;
+    var X = function (v) { return x0 + (Math.log10(v) - lo) / (hi - lo) * w; };
+    var top = y0 - 16, bot = y0 + (rows.length - 1) * step + 14;
+    R(svg, X(0.0011), top, X(0.002) - X(0.0011), bot - top, "#2a1610", { rx: 0 });
+    T(svg, X(0.0011) + 3, bot + 30, "draft's 6-bit prediction", { size: 9, fill: C.acc });
+    [0.001, 0.003, 0.01, 0.03].forEach(function (t) {
+      L(svg, X(t), top, X(t), bot, C.grid, 1);
+      T(svg, X(t), bot + 15, String(t), { size: 9.5, anchor: "middle" });
+    });
+    rows.forEach(function (r, i) {
+      var y = y0 + i * step, col = r[2] === "best" ? C.acc : r[2] === "blaze" ? "#8c3a28" : r[2] === "glaze" ? C.muted : C.dim;
+      T(svg, 40, y + 4, r[0], { size: 10, fill: C.ink, weight: r[2] === "best" ? 600 : 400 });
+      tip(R(svg, x0, y - 8, X(r[1]) - x0, 16, col, { rx: 2 }), r[0] + ": " + r[1]);
+      var v = r[1] < 0.01 ? r[1].toFixed(4) : r[1].toFixed(3);
+      T(svg, X(r[1]) + 6, y + 4, v + (r[3] ? " · " + r[3] : ""), { size: 9.5, fill: r[2] === "best" ? C.ink : C.muted, weight: r[2] === "best" ? 600 : 400 });
+    });
+    L(svg, x0, top, x0, bot, C.rule);
+  }
+
+  /* 18. Panel change from BF16, both sizes */
+  function figPanel() {
+    var rows = [
+      ["4B", "MMLU-Pro (1,001)", -2.5, 0.0], ["4B", "MATH-500", -0.2, -0.4], ["4B", "IFEval", 0.5, 0.2], ["4B", "MMMU", -2.9, -0.9],
+      ["2B", "MMLU-Pro (1,001)", -10.6, 0.3], ["2B", "MATH-500", -12.2, 3.2], ["2B", "IFEval", -0.7, 0.6]];
+    var y0 = 100, step = 24, gap = 18, h = y0 + rows.length * step + gap + 44;
+    var svg = mk("fig-panel", h, "Change from BF16 per task for the same-size baseline and Blaze-Q, on the 4B and the 2B");
+    if (!svg) return;
+    head(svg, "change from BF16, in points", "ring: Glaze v2 (4B) or GPTQ W4A16 (2B) · orange dot: Blaze-Q · band: within 1 point");
+    var X = function (d) { return 250 + (d + 13) * (340 / 17); };
+    var yy = function (i) { return y0 + i * step + (i >= 4 ? gap : 0); };
+    var top = y0 - 14, bot = yy(rows.length - 1) + 12;
+    R(svg, X(-1), top, X(1) - X(-1), bot - top, "#17171a", { rx: 0 });
+    [-12, -8, -4, 0, 4].forEach(function (t) {
+      L(svg, X(t), top, X(t), bot, t === 0 ? C.rule : C.grid, 1);
+      T(svg, X(t), bot + 16, t === 0 ? "0" : signed(t), { size: 9.5, anchor: "middle", fill: t === 0 ? C.ink : C.muted });
+    });
+    T(svg, 40, yy(0) - 22, "Qwen3.5-4B · vs Glaze v2", { size: 9.5, fill: C.light });
+    T(svg, 40, yy(4) - 22, "Qwen3.5-2B · vs GPTQ W4A16", { size: 9.5, fill: C.light });
+    rows.forEach(function (r, i) {
+      var y = yy(i);
+      T(svg, 238, y + 3.5, r[1], { size: 10, anchor: "end", fill: C.ink });
+      L(svg, X(r[2]), y, X(r[3]), y, C.dim, 1.2);
+      tip(S("circle", { cx: X(r[2]), cy: y, r: 4, fill: C.panel, stroke: C.muted, "stroke-width": 1.3 }, svg), r[0] + " " + r[1] + ": baseline " + signed(r[2]));
+      tip(S("circle", { cx: X(r[3]), cy: y, r: 4.5, fill: C.acc }, svg), r[0] + " " + r[1] + ": Blaze-Q " + signed(r[3]));
+      T(svg, Math.max(X(r[2]), X(r[3])) + 10, y + 3.5, signed(r[3]), { size: 9.5, fill: C.ink });
+    });
+  }
+
+  [figHero, figBench, figBits, figShare, figVocab, figCoverage, figNoise, figKron, figPipeline, figLadder, figKnapsack,
+    figLevers, figPredict, figFamily, figReads, figGates, figMeasured, figPanel].forEach(function (f) {
+    try { f(); } catch (err) { if (window.console) console.error(err); }
+  });
+})();
+</script>
+</body>
+</html>
