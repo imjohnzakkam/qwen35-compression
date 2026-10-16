@@ -24,7 +24,7 @@
    "model": "4B",
    "title": "Blaze-S: the smaller 4B",
    "summary": "A 4-bit GPTQ body with the ladder and an 8-bit vision tower, built in the real format: about 2.6 GB against W4A16's 3.78.",
-   "cost": "≈₹46 so far · cap ₹75",
+   "cost": "≈₹53 so far · cap ₹75",
    "details": [
     [
      "Question",
@@ -62,22 +62,18 @@
     },
     {
      "label": "Speed: GPTQ W4A16",
-     "status": "running"
+     "status": "passed"
     },
     {
      "label": "Speed: Blaze-S",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "6-bit kernel benchmark",
-     "status": "pending"
+     "status": "passed"
     }
    ],
-   "progress": {
-    "pct": 100,
-    "label": "Speed: GPTQ W4A16 · 2,042 of 2,042 running generate_until requests"
-   },
-   "elapsed": "1h 11m on the GPU"
+   "elapsed": "1h 21m on the GPU"
   },
   {
    "id": "K6",
@@ -397,9 +393,9 @@
   }
  ],
  "spend": {
-  "rupees": 511.21,
-  "dollars": 5.31,
-  "label": "₹511.21 (about $5.31) across all GPU runs"
+  "rupees": 517.74,
+  "dollars": 5.38,
+  "label": "₹517.74 (about $5.38) across all GPU runs"
  },
- "updated": "2026-10-16T17:03:13Z"
+ "updated": "2026-10-16T17:13:18Z"
 }
