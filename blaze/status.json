@@ -19,6 +19,89 @@
  ],
  "cards": [
   {
+   "id": "S",
+   "column": "running",
+   "model": "4B",
+   "title": "Blaze-S: the smaller 4B",
+   "summary": "A 4-bit GPTQ body with the ladder and an 8-bit vision tower, built in the real format: about 2.6 GB against W4A16's 3.78.",
+   "cost": "≈₹1 so far · cap ₹75",
+   "details": [
+    [
+     "Question",
+     "Is Blaze-S smaller than GPTQ W4A16, as accurate, and at least as fast for a single stream?"
+    ],
+    [
+     "Runs",
+     "GPTQ on WikiText-2 (4-bit g128 body), the real export, drift on BF16's 1,501 answers, the text panel against BF16, GPTQ and AutoRound, and speed and memory of BF16, GPTQ W4A16 and Blaze-S."
+    ],
+    [
+     "Run",
+     "r_c92cb877 on one A30, started 16 Oct 15:51 UTC"
+    ]
+   ],
+   "steps": [
+    {
+     "label": "Pilot: two-layer real export, 10 answers",
+     "status": "pending"
+    },
+    {
+     "label": "GPTQ, real format",
+     "status": "pending"
+    },
+    {
+     "label": "Drift on BF16's answers",
+     "status": "pending"
+    },
+    {
+     "label": "Text panel",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: BF16",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: GPTQ W4A16",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: Blaze-S",
+     "status": "pending"
+    },
+    {
+     "label": "6-bit kernel benchmark",
+     "status": "pending"
+    }
+   ],
+   "progress": {
+    "pct": null,
+    "label": "Setting up the GPU"
+   },
+   "elapsed": "0h 01m on the GPU"
+  },
+  {
+   "id": "K6",
+   "column": "running",
+   "model": "kernel",
+   "title": "6-bit kernel",
+   "summary": "A first Triton 6-bit matmul, checked and timed against cuBLAS BF16 and Marlin 4/8-bit at the end of the Blaze-S run.",
+   "cost": "in Blaze-S",
+   "details": [
+    [
+     "Why",
+     "vLLM's Marlin kernels take 4 or 8 bits; the 4B's Blaze-Q body is mostly 6-bit. The same work could speed up the single-copy vocabulary head."
+    ],
+    [
+     "Format",
+     "Codes in two bit planes (4 + 2 bits), one BF16 scale per 128 inputs, split-K for single-token decode."
+    ],
+    [
+     "Shapes",
+     "Qwen3.5-4B's FFN and DeltaNet projections at batch 1 to 256."
+    ]
+   ]
+  },
+  {
    "id": "G4",
    "column": "missed",
    "model": "4B",
@@ -285,20 +368,6 @@
    ]
   },
   {
-   "id": "K6",
-   "column": "next",
-   "model": "4B",
-   "title": "6-bit kernel",
-   "summary": "Needed to serve the 4B's 6/8-bit body as a real checkpoint.",
-   "cost": "engineering",
-   "details": [
-    [
-     "Why",
-     "vLLM's Marlin kernels take 4 or 8 bits. The same kernel work would speed up the single-copy vocabulary head."
-    ]
-   ]
-  },
-  {
    "id": "G9B",
    "column": "next",
    "model": "9B",
@@ -328,9 +397,9 @@
   }
  ],
  "spend": {
-  "rupees": 464.71,
+  "rupees": 465.49,
   "dollars": 4.83,
-  "label": "₹464.71 (about $4.83) across all GPU runs"
+  "label": "₹465.49 (about $4.83) across all GPU runs"
  },
- "updated": "2026-10-16T13:31:15Z"
+ "updated": "2026-10-16T15:52:39Z"
 }
