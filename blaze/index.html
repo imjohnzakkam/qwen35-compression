@@ -21,6 +21,11 @@
   --ink: #e8e6df;
   --accent: #e8593d;
   --accent-soft: #1d1512;
+  --ok: #8fbf7a;
+  --ok-soft: #121a10;
+  --warn: #d9a441;
+  --warn-soft: #1c1709;
+  --card: #141414;
   --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --col: 704px;
@@ -128,6 +133,67 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .refs li { margin-top: 10px; }
 .note { margin-top: 24px; font-family: var(--mono); font-size: 12px; line-height: 20px; color: var(--faint); }
 footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; color: var(--faint); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; text-transform: uppercase; }
+
+[hidden] { display: none !important; }
+/* Tabs: two views of one page, the report and the live experiments board. */
+.tabs { display: flex; gap: 4px; padding-top: 14px; border-bottom: 1px solid var(--line); }
+.tabs button {
+  font: 500 13px/20px var(--sans); color: var(--text); background: transparent; border: 0;
+  border-bottom: 2px solid transparent; padding: 8px 14px 10px; cursor: pointer; display: inline-flex; gap: 8px; align-items: center;
+}
+.tabs button:hover { color: var(--heading); }
+.tabs button[aria-selected="true"] { color: var(--heading); border-bottom-color: var(--accent); }
+.tab-live { font: 500 10px/14px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); border: 1px solid #3a2118; border-radius: 999px; padding: 1px 7px; }
+/* Board: one column per state, stacking on narrow screens. */
+.board-wrap { padding-block: 48px 96px; }
+.board-head { max-width: 760px; }
+.board-head h2 { margin-top: 0; }
+.board-meta { margin-top: 12px; font-family: var(--mono); font-size: 12px; line-height: 20px; color: var(--faint); }
+.board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 32px; align-items: start; }
+@media (min-width: 640px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1040px) { .board { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.col-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.col-head b { font-weight: 500; }
+.col[data-col="running"] .col-head b { color: var(--accent); }
+.col[data-col="done"] .col-head b { color: var(--ok); }
+.col[data-col="missed"] .col-head b { color: var(--warn); }
+.col[data-col="next"] .col-head b { color: var(--ink); }
+.cards { display: grid; gap: 10px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.card[open] { border-color: #333; }
+.card summary { list-style: none; cursor: pointer; padding: 14px 16px; display: grid; gap: 8px; }
+.card summary::-webkit-details-marker { display: none; }
+.card summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
+.card-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font: 600 11px/16px var(--mono); color: var(--heading); background: #1f1f1f; border-radius: 6px; padding: 2px 7px; }
+.model { font: 400 10.5px/16px var(--mono); color: var(--faint); letter-spacing: 0.04em; }
+.state { margin-left: auto; font: 500 10.5px/16px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; border-radius: 999px; padding: 1px 8px; }
+.state.running { color: var(--accent); background: var(--accent-soft); }
+.state.done { color: var(--ok); background: var(--ok-soft); }
+.state.missed { color: var(--warn); background: var(--warn-soft); }
+.state.next { color: var(--text); background: #1a1a1a; }
+.card-title { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; color: var(--heading); }
+.card-sum { margin: 0; font-size: 13.5px; line-height: 21px; color: var(--text); }
+.bar { height: 6px; border-radius: 999px; background: #222; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.bar-label { font: 400 11px/16px var(--mono); color: var(--faint); }
+.card-foot { display: flex; justify-content: space-between; gap: 8px; font: 400 11px/16px var(--mono); color: var(--faint); }
+.card-foot .more::after { content: " ▸"; }
+.card[open] .card-foot .more::after { content: " ▾"; }
+.card-body { padding: 0 16px 16px; border-top: 1px solid var(--line); }
+.card-body dl { margin: 12px 0 0; display: grid; gap: 10px; }
+.card-body dt { font: 400 10.5px/16px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.card-body dd { margin: 2px 0 0; font-size: 13.5px; line-height: 21px; color: #cfcfcf; }
+.steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; line-height: 20px; }
+.steps li { margin: 0; display: flex; gap: 8px; align-items: center; color: var(--text); }
+.steps li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1px solid #444; flex: none; }
+.steps li.passed::before { background: var(--ok); border-color: var(--ok); }
+.steps li.running { color: var(--heading); }
+.steps li.running::before { background: var(--accent); border-color: var(--accent); }
+.steps li.failed::before { background: var(--warn); border-color: var(--warn); }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
 </style>
 <style>body { margin: 0; }</style>
 </head>
@@ -138,7 +204,12 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
     <span>Results · gates G0–G3, G5 run · G4 running</span>
   </header>
 
-  <div class="layout">
+  <div class="tabs" role="tablist" aria-label="Page views">
+    <button type="button" role="tab" id="tab-report" aria-selected="true" aria-controls="panel-report">Report</button>
+    <button type="button" role="tab" id="tab-experiments" aria-selected="false" aria-controls="panel-experiments">Experiments <span class="tab-live">live</span></button>
+  </div>
+
+  <div class="layout" id="panel-report" role="tabpanel" aria-labelledby="tab-report">
     <article>
       <div class="pills"><span class="pill">Results in</span><span class="pill">Research draft</span><span class="pill">Quantization</span><span class="pill">Qwen3.5</span></div>
       <h1>Blaze: put the bits where the model burns them</h1>
@@ -549,6 +620,16 @@ export(quantize(model, choice), vocab)</pre>
       </ol>
     </nav>
   </div>
+
+  <section class="board-wrap" id="panel-experiments" role="tabpanel" aria-labelledby="tab-experiments" hidden>
+    <div class="board-head">
+      <h2>Experiments</h2>
+      <p>Every GPU gate for Blaze, with its status. Open a card for what it tested, what it measured and the run behind it. The running card updates from the GPU every 10 minutes, and this page checks for new data every 2 minutes while it is open.</p>
+      <div class="board-meta" id="board-meta">Loading the latest status…</div>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+  <script type="application/json" id="board-fallback">{"columns": [{"id": "running", "label": "Running"}, {"id": "done", "label": "Passed"}, {"id": "missed", "label": "Missed or partial"}, {"id": "next", "label": "Next"}], "cards": [{"id": "G4", "column": "running", "model": "4B", "title": "Full suite on the 4B", "summary": "The rest of the suite for G2b's Blaze-Q, against BF16 and Glaze v2.", "cost": "≈₹93 so far · cap ₹340", "details": [["Question", "Is every task within 1 point of BF16 (MMMU within 2)?"], ["Runs", "MMLU-Pro (all 12,032), GSM8K, HellaSwag, ARC-Challenge, WikiText-2, MMBench, MathVista, TextVQA, OCRBench, DocVQA. MATH-500, IFEval and MMMU come from G3."], ["Checked first", "The export was rebuilt from G2b's plan; its drift matched G2b's exactly (0.0016895)."], ["Run", "r_f7c16f6c on one A30, started 16 Oct 08:28 UTC"]], "steps": [{"label": "Rebuild G2b's export", "status": "passed"}, {"label": "Check it is G2b's model", "status": "passed"}, {"label": "Pilot, text", "status": "passed"}, {"label": "Pilot, vision", "status": "passed"}, {"label": "Text suite", "status": "running"}, {"label": "Vision suite", "status": "pending"}], "progress": {"pct": 38, "label": "Text suite · 5,043 of 13,351 answers"}, "elapsed": "2h 23m on the GPU"}, {"id": "G0", "column": "done", "model": "all sizes", "title": "Vocabulary census", "summary": "80,010 of 248,320 rows ever used; the busiest 65,536 hold 99.97% of answer tokens.", "cost": "₹0 · CPU", "details": [["Question", "How much of the vocabulary sits idle?"], ["Data", "Training splits only (MATH, GSM8K, ARC, SciQ, HellaSwag, WikiText-2, UltraChat, COCO captions) plus BF16's answers to Glaze v2's training prompts."], ["Ladder", "65,536 rows at 8-bit g128, 182,784 at 4-bit g128. The 4B table goes from 1.271 GB to 0.413 GB."]]}, {"id": "G1", "column": "done", "model": "4B", "title": "Is the ladder free?", "summary": "Excess loss 0.0002 and 0.40% flips, against BF16's 0.35% floor.", "cost": "₹33.48", "details": [["Question", "Does storing idle vocabulary rows at 4 bits cost anything?"], ["Measured", "Ladder alone: 0.0002 excess loss (mark 0.001). 6-bit body, plain rounding: 0.0048 (mark 0.004, a narrow miss). FFN prices flat: 0.65 against a 0.75 mark, so a 4/8-bit menu is not enough."], ["Decision", "The ladder is free; the body needs a 6-bit option."], ["Run", "r_d95d713c, 15 Oct"]]}, {"id": "G1b", "column": "done", "model": "4B", "title": "6-bit body, GPTQ", "summary": "Excess loss 0.0027 against a 0.003 mark; 0.4% over W4A16's size.", "cost": "≈₹25", "details": [["Question", "Does GPTQ rounding make a 6-bit body pay?"], ["Setup", "Same 6-bit g128 grid as G1, GPTQ on WikiText-2 training text, no in-domain data."], ["Measured", "0.0027 excess loss, 1.76% flips: 1.8× better than plain rounding and 5× below Glaze v2."], ["Run", "r_34e094ca, 16 Oct"]]}, {"id": "G5", "column": "done", "model": "2B", "title": "Does the 2B agree?", "summary": "Excess loss 0.0005 against W4A16's 0.073 at the same 2.39 GB; panel at BF16's level.", "cost": "≈₹67", "details": [["Question", "At a standard W4A16 export's size, does Blaze-Q (ladder plus an 8-bit body) beat GPTQ W4A16?"], ["Measured", "MATH-500 67.8 (BF16 64.6, W4A16 52.4); MMLU-Pro 56.7 (56.4, 45.9); IFEval 65.8 (65.3, 64.5). Flips 0.71% against 6.78%."], ["Run", "r_bf0526dd, 16 Oct"]]}, {"id": "G2b", "column": "done", "model": "4B", "title": "4B at W4A16's size", "summary": "Excess loss 0.0017, 8.5× below Glaze v2, with the vision tower at 8 bits.", "cost": "₹72.98", "details": [["Question", "Can Blaze-Q beat Glaze v2 2.4× at exactly a standard 4-bit export's size?"], ["Setup", "Vision tower at 8 bits (as Glaze v2 stores it), body at 6 bits with 23 of 64 units at 8, chosen by measured 4-bit prices."], ["Measured", "0.0017 excess loss, 1.39% flips, 3,780,086,784 bytes against W4A16's 3,780,662,272."], ["Run", "r_512d8da6, 16 Oct"]]}, {"id": "G3", "column": "done", "model": "4B", "title": "Benchmark panel", "summary": "MMLU-Pro 73.6 (BF16 73.6), MATH-500 83.0 (83.4), IFEval 82.4 (82.3), MMMU 68.7 (69.6).", "cost": "in G2b", "details": [["Question", "Is every panel task within 1 point of BF16?"], ["Against Glaze v2", "MMLU-Pro +2.5 (interval +0.3 to +4.7), MATH-500 −0.2, IFEval −0.4, MMMU +2.0."], ["Decision", "Pass; the next gate is G4, the full suite."]]}, {"id": "Real", "column": "done", "model": "2B", "title": "Real format in vLLM", "summary": "The real 2B export serves like the fake one, at W4A16's size: 229 tok/s single-stream.", "cost": "≈₹35", "details": [["Question", "Does vLLM serve the real tiered format as its fake-quantized twin?"], ["Measured", "Drift 0.00047 real against 0.00046 fake. On disk 2.389 GB (W4A16 2.389). GPU weights 2.86 GB (W4A16 2.52). Single stream 229 tok/s (W4A16 240, BF16 164); batched 7,890 (9,107)."], ["Run", "r_a4b06669, 16 Oct"]]}, {"id": "G2", "column": "missed", "model": "4B", "title": "4B at size, vision BF16", "summary": "Excess loss 0.0071, 2.0× below Glaze v2, short of the 2.4× mark.", "cost": "≈₹32", "details": [["Why it missed", "Two FFN layers had to drop to 4 bits to fit, and the 6-bit prices that chose them were mostly noise."], ["Fixed by", "G2b: the vision tower at 8 bits, and prices ranked at 4 bits."], ["Run", "r_1d1c68f2, 16 Oct"]]}, {"id": "Single", "column": "missed", "model": "2B", "title": "Vocabulary held once", "summary": "Correct, and at W4A16's memory, but the kernel is 4× slower single-stream.", "cost": "in G2b", "details": [["Measured", "Same drift (0.00047). GPU weights 2.53 GB (two copies: 2.86). Single stream 57 tok/s against 229; batched 5,474 against 7,890."], ["Next", "Tune the dequantizing kernel; until then two copies stay the default."]]}, {"id": "K6", "column": "next", "model": "4B", "title": "6-bit kernel", "summary": "Needed to serve the 4B's 6/8-bit body as a real checkpoint.", "cost": "engineering", "details": [["Why", "vLLM's Marlin kernels take 4 or 8 bits. The same kernel work would speed up the single-copy vocabulary head."]]}, {"id": "G9B", "column": "next", "model": "9B", "title": "Untied 9B check", "summary": "Tests the method on a model with separate input and output tables.", "cost": "≈₹150+", "details": [["Why", "The 9B's vocabulary is 48% of a W4A16 export; the head is laddered and the input table goes to 4 bits."]]}, {"id": "HF", "column": "next", "model": "2B", "title": "Publish the 2B", "summary": "Blaze-Q 2B as a private Kiln repo with the vLLM plugin.", "cost": "free", "details": [["Why", "It is the one result that is real and deployable today."]]}], "spend": {"rupees": 361.12, "dollars": 3.75, "label": "₹361.12 (about $3.75) across all GPU runs"}, "updated": "2026-10-16T10:52:33Z"}</script>
 
   <footer>
     <span>Blaze · draft 15 Oct · results 16 Oct 2026</span>
@@ -1132,6 +1213,113 @@ export(quantize(model, choice), vocab)</pre>
     figLevers, figPredict, figFamily, figReads, figGates, figMeasured, figPanel].forEach(function (f) {
     try { f(); } catch (err) { if (window.console) console.error(err); }
   });
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var tabs = { report: document.getElementById("tab-report"), experiments: document.getElementById("tab-experiments") };
+  var panels = { report: document.getElementById("panel-report"), experiments: document.getElementById("panel-experiments") };
+  var timer = null;
+  function show(name) {
+    Object.keys(tabs).forEach(function (k) {
+      var on = k === name;
+      tabs[k].setAttribute("aria-selected", on ? "true" : "false");
+      tabs[k].tabIndex = on ? 0 : -1;
+      panels[k].hidden = !on;
+    });
+    if (name === "experiments") { load(); if (!timer) timer = setInterval(load, 120000); }
+    else if (timer) { clearInterval(timer); timer = null; }
+  }
+  tabs.report.addEventListener("click", function () { show("report"); history.replaceState(null, "", location.pathname); });
+  tabs.experiments.addEventListener("click", function () { show("experiments"); history.replaceState(null, "", "#experiments"); });
+  document.querySelector(".tabs").addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    var next = document.activeElement === tabs.report ? "experiments" : "report";
+    show(next); tabs[next].focus();
+  });
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  var STATE = { running: "Running", done: "Passed", missed: "Missed", next: "Planned" };
+  var open = {};
+  function render(data) {
+    var board = document.getElementById("board");
+    board.querySelectorAll("details[open]").forEach(function (d) { open[d.dataset.id] = true; });
+    board.textContent = "";
+    data.columns.forEach(function (col) {
+      var cards = data.cards.filter(function (c) { return c.column === col.id; });
+      var colEl = el("div", "col"); colEl.dataset.col = col.id;
+      var head = el("div", "col-head"); head.appendChild(el("b", "", col.label)); head.appendChild(el("span", "", String(cards.length)));
+      colEl.appendChild(head);
+      var list = el("div", "cards");
+      cards.forEach(function (c) {
+        var d = el("details", "card"); d.dataset.id = c.id; if (open[c.id]) d.open = true;
+        var s = el("summary");
+        var top = el("div", "card-top");
+        top.appendChild(el("span", "chip", c.id));
+        top.appendChild(el("span", "model", c.model));
+        var st = el("span", "state " + col.id);
+        if (col.id === "running" && c.progress) { st.appendChild(el("span", "pulse")); st.appendChild(document.createTextNode(" ")); }
+        st.appendChild(document.createTextNode(STATE[col.id] || col.label));
+        top.appendChild(st);
+        s.appendChild(top);
+        s.appendChild(el("h3", "card-title", c.title));
+        s.appendChild(el("p", "card-sum", c.summary));
+        if (c.progress) {
+          if (c.progress.pct !== null && c.progress.pct !== undefined) {
+            var bar = el("div", "bar"); bar.setAttribute("role", "progressbar");
+            bar.setAttribute("aria-valuenow", c.progress.pct); bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", "100");
+            bar.setAttribute("aria-label", c.progress.label);
+            var fill = el("i"); fill.style.width = c.progress.pct + "%"; bar.appendChild(fill);
+            s.appendChild(bar);
+          }
+          s.appendChild(el("div", "bar-label", (c.progress.pct !== null && c.progress.pct !== undefined ? c.progress.pct + "% · " : "") + c.progress.label));
+        }
+        var foot = el("div", "card-foot");
+        foot.appendChild(el("span", "", c.cost + (c.elapsed ? " · " + c.elapsed : "")));
+        foot.appendChild(el("span", "more", "Details"));
+        s.appendChild(foot);
+        d.appendChild(s);
+        var body = el("div", "card-body");
+        var dl = el("dl");
+        (c.details || []).forEach(function (pair) {
+          var row = el("div"); row.appendChild(el("dt", "", pair[0])); row.appendChild(el("dd", "", pair[1])); dl.appendChild(row);
+        });
+        body.appendChild(dl);
+        if (c.steps) {
+          var ol = el("ul", "steps");
+          c.steps.forEach(function (step) { ol.appendChild(el("li", step.status, step.label + (step.status === "running" ? " (running)" : ""))); });
+          body.appendChild(ol);
+        }
+        d.appendChild(body);
+        list.appendChild(d);
+      });
+      colEl.appendChild(list);
+      board.appendChild(colEl);
+    });
+    var when = data.updated ? new Date(data.updated) : null;
+    var meta = document.getElementById("board-meta");
+    meta.textContent = (when ? "Updated " + when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "") +
+      (data.spend ? " · " + data.spend.label : "");
+  }
+  var fallback = null;
+  try { fallback = JSON.parse(document.getElementById("board-fallback").textContent); } catch (e) {}
+  function load() {
+    var done = false;
+    if (window.fetch) {
+      fetch("status.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (data) { done = true; render(data); })
+        .catch(function () { if (!done && fallback) render(fallback); });
+    } else if (fallback) { render(fallback); }
+  }
+  if (fallback) render(fallback);
+  show(location.hash === "#experiments" ? "experiments" : "report");
 })();
 </script>
 </body>
