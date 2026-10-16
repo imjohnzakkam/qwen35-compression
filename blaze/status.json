@@ -19,85 +19,6 @@
  ],
  "cards": [
   {
-   "id": "S",
-   "column": "running",
-   "model": "4B",
-   "title": "Blaze-S: the smaller 4B",
-   "summary": "A 4-bit GPTQ body with the ladder and an 8-bit vision tower, built in the real format: about 2.6 GB against W4A16's 3.78.",
-   "cost": "≈₹53 so far · cap ₹75",
-   "details": [
-    [
-     "Question",
-     "Is Blaze-S smaller than GPTQ W4A16, as accurate, and at least as fast for a single stream?"
-    ],
-    [
-     "Runs",
-     "GPTQ on WikiText-2 (4-bit g128 body), the real export, drift on BF16's 1,501 answers, the text panel against BF16, GPTQ and AutoRound, and speed and memory of BF16, GPTQ W4A16 and Blaze-S."
-    ],
-    [
-     "Run",
-     "r_c92cb877 on one A30, started 16 Oct 15:51 UTC"
-    ]
-   ],
-   "steps": [
-    {
-     "label": "Pilot: two-layer real export, 10 answers",
-     "status": "passed"
-    },
-    {
-     "label": "GPTQ, real format",
-     "status": "passed"
-    },
-    {
-     "label": "Drift on BF16's answers",
-     "status": "passed"
-    },
-    {
-     "label": "Text panel",
-     "status": "passed"
-    },
-    {
-     "label": "Speed: BF16",
-     "status": "passed"
-    },
-    {
-     "label": "Speed: GPTQ W4A16",
-     "status": "passed"
-    },
-    {
-     "label": "Speed: Blaze-S",
-     "status": "passed"
-    },
-    {
-     "label": "6-bit kernel benchmark",
-     "status": "passed"
-    }
-   ],
-   "elapsed": "1h 21m on the GPU"
-  },
-  {
-   "id": "K6",
-   "column": "running",
-   "model": "kernel",
-   "title": "6-bit kernel",
-   "summary": "A first Triton 6-bit matmul, checked and timed against cuBLAS BF16 and Marlin 4/8-bit at the end of the Blaze-S run.",
-   "cost": "in Blaze-S",
-   "details": [
-    [
-     "Why",
-     "vLLM's Marlin kernels take 4 or 8 bits; the 4B's Blaze-Q body is mostly 6-bit. The same work could speed up the single-copy vocabulary head."
-    ],
-    [
-     "Format",
-     "Codes in two bit planes (4 + 2 bits), one BF16 scale per 128 inputs, split-K for single-token decode."
-    ],
-    [
-     "Shapes",
-     "Qwen3.5-4B's FFN and DeltaNet projections at batch 1 to 256."
-    ]
-   ]
-  },
-  {
    "id": "G4",
    "column": "missed",
    "model": "4B",
@@ -390,12 +311,130 @@
      "It is the one result that is real and deployable today."
     ]
    ]
+  },
+  {
+   "id": "S",
+   "column": "missed",
+   "model": "4B",
+   "title": "Blaze-S: the smaller 4B",
+   "summary": "31% smaller than GPTQ W4A16 (2.60 GB) and 16% faster single-stream, but less accurate: its own 4-bit GPTQ is weaker than the published one.",
+   "cost": "₹55.62",
+   "details": [
+    [
+     "Question",
+     "Is Blaze-S smaller than GPTQ W4A16, as accurate, and at least as fast for a single stream?"
+    ],
+    [
+     "Size and speed",
+     "2.60 GB on disk against 3.78 (−31%). One stream 174 tok/s against GPTQ's 151 and BF16's 80; batched 2,901 against 3,128 (−7%). GPU weights 3.15 GB against 3.92."
+    ],
+    [
+     "Accuracy",
+     "Excess loss 0.090 against the published GPTQ's 0.054; MMLU-Pro (1,001) 67.9 (GPTQ 70.1, BF16 73.6), MATH-500 74.2 (75.8, 83.4), IFEval 75.6 (80.8, 82.3)."
+    ],
+    [
+     "Why",
+     "Blaze's own GPTQ (WikiText-2 calibration, no activation ordering) is barely better than plain rounding at 4 bits (0.090 against 0.094); the published GPTQ used 512 chat samples. The ladder and the vision tower are not the cause."
+    ],
+    [
+     "Next",
+     "Build Blaze-S on the published GPTQ body: same body bytes, ladder and 8-bit vision around it."
+    ],
+    [
+     "Run",
+     "r_c92cb877, 16 Oct 15:51–17:13 UTC"
+    ]
+   ],
+   "steps": [
+    {
+     "label": "Pilot: two-layer real export, 10 answers",
+     "status": "passed"
+    },
+    {
+     "label": "GPTQ, real format",
+     "status": "passed"
+    },
+    {
+     "label": "Drift on BF16's answers",
+     "status": "passed"
+    },
+    {
+     "label": "Text panel",
+     "status": "passed"
+    },
+    {
+     "label": "Speed: BF16",
+     "status": "passed"
+    },
+    {
+     "label": "Speed: GPTQ W4A16",
+     "status": "passed"
+    },
+    {
+     "label": "Speed: Blaze-S",
+     "status": "passed"
+    },
+    {
+     "label": "6-bit kernel benchmark",
+     "status": "passed"
+    }
+   ]
+  },
+  {
+   "id": "K6",
+   "column": "missed",
+   "model": "kernel",
+   "title": "6-bit kernel",
+   "summary": "Correct (error 1e-4) but slow: a decode token's body takes 21 ms against Marlin 4-bit's 4.7 ms and BF16's 9.3 ms.",
+   "cost": "in Blaze-S",
+   "details": [
+    [
+     "Measured",
+     "At batch 1 on an A30 it moves about 105 GB/s against Marlin's 500. Batch 256 is 4–6× slower than Marlin."
+    ],
+    [
+     "Why",
+     "A first Triton kernel: per-element unpacking and loads that do not saturate memory bandwidth."
+    ],
+    [
+     "Next",
+     "Build the 6-bit path on Marlin's own dequantize-in-registers design instead of a new Triton kernel."
+    ]
+   ]
+  },
+  {
+   "id": "S2",
+   "column": "next",
+   "model": "4B",
+   "title": "Blaze-S on GPTQ's body",
+   "summary": "The published GPTQ W4A16 body with the ladder and an 8-bit vision tower: GPTQ's accuracy at 2.6 GB.",
+   "cost": "≈₹35",
+   "details": [
+    [
+     "Why",
+     "Blaze-S's accuracy gap came from its own GPTQ, not from the ladder; reusing the published body isolates the byte saving."
+    ]
+   ]
+  },
+  {
+   "id": "K6b",
+   "column": "next",
+   "model": "kernel",
+   "title": "6-bit on Marlin",
+   "summary": "A 6-bit path built on Marlin's kernel design, for a real 4B Blaze-Q.",
+   "cost": "engineering",
+   "details": [
+    [
+     "Why",
+     "The Triton prototype is correct but 4.6× slower than Marlin 4-bit at batch 1."
+    ]
+   ]
   }
  ],
  "spend": {
-  "rupees": 517.74,
-  "dollars": 5.38,
-  "label": "₹517.74 (about $5.38) across all GPU runs"
+  "rupees": 520.33,
+  "dollars": 5.4,
+  "label": "₹520.33 (about $5.40) across all GPU runs"
  },
- "updated": "2026-10-16T17:13:18Z"
+ "updated": "2026-10-16T17:14:45Z"
 }
