@@ -14,7 +14,7 @@ each record.
 | [5. Glaze v1](experiments/05-glaze-v1.md) | Tuning AutoRound's scales and norms end to end: why it did not beat AutoRound, and what that showed |
 | [6. Glaze v2](experiments/06-glaze-v2.md) | Quantizing from BF16 with in-domain data, Fisher-weighted rounding and byte-neutral mixed precision: MATH-500 within 0.2 points of BF16 at AutoRound's size |
 | [7. Glaze v2 controls](experiments/07-glaze-controls.md) | AutoRound on Glaze v2's calibration data: the data alone gives 7.0 of Glaze v2's 10.0-point MATH-500 gain |
-| [8. Blaze](experiments/08-blaze.md) | Moving the vocabulary table's bytes into the body: the usage census, gates G1, G1b and G2 on the 4B, G5 on the 2B (it matches BF16 at W4A16's size), and the 2B's real format served by vLLM |
+| [8. Blaze](experiments/08-blaze.md) | Moving the vocabulary table's bytes into the body: the usage census and gates G1-G3 on the 4B (it matches BF16 at W4A16's size, 8.5x below Glaze v2's excess loss), G5 on the 2B, and the 2B's real format served by vLLM |
 | [Engineering notes](engineering-notes.md) | Pitfalls when evaluating and quantizing Qwen3.5 with vLLM, lm-eval, VLMEvalKit and llm-compressor |
 
 ## Summary
@@ -40,13 +40,14 @@ mode with greedy decoding and up to 8,192 generated tokens.
   about 3 more points there, and 3.5 on IFEval, where the data alone does not help.
 - **Blaze moves the vocabulary table's bytes into the body, with no in-domain data:** storing the
   busiest 65,536 vocabulary rows at 8 bits and the rest at 4 costs almost nothing (excess loss
-  0.0002). On the 4B, a GPTQ-rounded 6-bit body with that table reaches 0.0027, a fifth of Glaze
-  v2's, at 0.4% over W4A16's size. On Qwen3.5-2B at a standard GPTQ W4A16 export's size (2.39 GB),
-  it buys an all-8-bit body: MATH-500 67.8 and MMLU-Pro 56.7 against BF16's 64.6 and 56.4 and
-  W4A16's 52.4 and 45.9, scored as a fake-quantized export. The 2B's real format, served by vLLM
-  with a small plugin, scores the same (excess loss 0.00047), at W4A16's size on disk and 4.5% below
-  its single-stream speed. On the 4B at exactly W4A16's size, Blaze-Q reaches 0.0071, half of Glaze
-  v2's.
+  0.0002). On the 4B at a standard W4A16 export's size, with the vision tower at 8 bits as in Glaze
+  v2, Blaze-Q (a 6/8-bit GPTQ body) reaches excess loss 0.0017, 8.5x below Glaze v2's, and matches
+  BF16 on the panel: MMLU-Pro 73.6 (BF16 73.6, Glaze v2 71.1), MATH-500 83.0 (83.4), IFEval 82.4
+  (82.3), MMMU 68.7 (69.6). These 4B scores are from a fake-quantized export; a 6-bit kernel is
+  still needed to serve it. On Qwen3.5-2B at W4A16's size it buys an all-8-bit body: MATH-500 67.8
+  and MMLU-Pro 56.7 against BF16's 64.6 and 56.4 and W4A16's 52.4 and 45.9. That 2B export is served
+  for real by vLLM with a small plugin, with the same scores, W4A16's size on disk, and 229 tokens
+  per second single stream (W4A16 240, BF16 164).
 
 ## Released artifacts
 

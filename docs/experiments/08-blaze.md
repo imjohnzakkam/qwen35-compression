@@ -6,12 +6,12 @@ the 4B's tied embedding and LM head is 1.27 GB of its 3.78 GB. Blaze stores the 
 choosing each unit's precision by measured KL. Nothing is trained or Fisher-weighted, and no
 in-domain answers are needed.
 
-**Status:** gates G0, G1, G1b, G2 and G5 have run, and the 2B's real export has been served.
-The ladder is free. On the 2B, Blaze-Q at a standard W4A16 export's size scores like BF16 where
-W4A16 loses 10-12 points on MATH-500 and MMLU-Pro, and its real format, served by vLLM with the
-`blaze-vllm` plugin, reproduces the fake-quantized scores exactly. On the 4B, a GPTQ-rounded
-6-bit body reaches 0.0027 but is 0.4% over W4A16's size; at exactly that size (G2) Blaze-Q reaches
-0.0071, 2.0x below Glaze v2 but short of the 2.4x mark, so G3 was not run.
+**Status:** gates G0-G3 and G5 have run, and the 2B's real format has been served by vLLM.
+On the 4B at a standard W4A16 export's size, with the vision tower at 8 bits as Glaze v2 stores
+it, Blaze-Q's excess loss is 0.0017, 8.5x below Glaze v2's, and its panel matches BF16: MMLU-Pro
+73.6 (BF16 73.6), MATH-500 83.0 (83.4), IFEval 82.4 (82.3), MMMU 68.7 (69.6). On the 2B it matches
+BF16 where W4A16 loses 10-12 points, and its real format reproduces the fake-quantized scores
+exactly. The 4B's numbers are fake-quantized: its 6-bit body needs a kernel vLLM does not have.
 
 ## Why bytes rather than rounding
 
@@ -201,6 +201,49 @@ panel) was not run. Two ways forward, neither tried: store the vision tower at 8
 v2 does, which frees about 333 MB and lets an all-6-bit body fit; or price units on more text, or
 with GPTQ-rounded weights, before the market uses them.
 
+## G2b and G3: the 4B with an 8-bit vision tower
+
+G2 kept the vision tower in BF16, as a standard W4A16 export does. Glaze v2 stores it at 8-bit
+g128; doing the same frees 324 MB, enough for the whole body at 6 bits with room left. G2b fills
+that room upward (`blaze_market.py --mode fill`): units move from 6 to 8 bits by their measured
+4-bit prices from G2, scaled to 6 and 8 bits by G1's measured bits rule (19.5x per two bits),
+because G2's prices measured directly at 6 bits sat in the measurement's noise. The body is then
+GPTQ-rounded at each Linear's option, as in G1b. Nothing measured before was run again: G2's
+prices and BF16 drift score, and BF16's and Glaze v2's published panel answers, were reused.
+
+Run `r_512d8da6` on one A30, code `ff33c11`: about 108 minutes with the pilot, the panel, MMMU
+and the single-copy check below; ₹72.98 (about $0.76).
+
+The market raised 23 of 64 units to 8 bits: the token mixers and FFNs of layers 0-6, the mixers of
+layers 7, 8, 10, 11, 15, 19, 27 and 31, and layer 31's FFN, the outlier G1 found.
+
+| | Size (as stored) | Flip rate | Excess loss |
+| --- | ---: | ---: | ---: |
+| Standard W4A16 g128 (the bound) | 3,780,662,272 B | | |
+| G2 (vision BF16, two FFNs at 4 bits) | 3,778,808,832 B | 2.32% | 0.0071 |
+| **G2b** (vision 8-bit, body 6/8-bit) | 3,780,086,784 B | **1.39%** | **0.0017** |
+| Glaze v2 | 3,795,765,945 B | 3.29% | 0.0143 |
+
+G2b passes G2's mark (at most 0.0060, no larger than W4A16): 8.5x below Glaze v2's excess loss, at
+W4A16's size, with no in-domain data.
+
+G3, the panel, on the instruct track's settings, against BF16's and Glaze v2's published answers
+to the same questions (paired bootstrap, 2,000 resamples):
+
+| Task | BF16 | Glaze v2 | Blaze-Q | Blaze-Q − BF16 | Blaze-Q − Glaze v2 |
+| --- | ---: | ---: | ---: | --- | --- |
+| MMLU-Pro (1001-question subset) | 73.6 | 71.1 | **73.6** | 0.0 (−1.9 to +1.9) | **+2.5 (+0.3 to +4.7)** |
+| MATH-500 | 83.4 | 83.2 | 83.0 | −0.4 (−3.2 to +2.4) | −0.2 (−3.6 to +3.0) |
+| IFEval (prompt, strict) | 82.3 | 82.8 | 82.4 | +0.2 (−2.4 to +2.6) | −0.4 (−3.3 to +2.2) |
+| MMMU (val) | 69.6 | 66.7 | 68.7 | −0.9 | +2.0 |
+
+No task is more than a point below BF16, so G3 passes; the decision rule's next step is G4, the
+full suite. Blaze-Q is ahead of Glaze v2 on MMLU-Pro with an interval clear of zero, and level on
+MATH-500 without Glaze v2's in-domain calibration data. MMMU is scored after download by the fixed
+gpt-4o-mini extractor (`score_vision.py`); one of its 900 validation answers could not be
+extracted and was filled at random by VLMEvalKit (BF16's run had 4, Glaze v2's 6). Its paired
+interval is not computed.
+
 ## The real format, on the 2B
 
 The real export (`blaze/real.py`) stores the body as compressed-tensors groups, as any W8A16
@@ -227,7 +270,14 @@ Run `r_a4b06669` on one A30, code `c50e02c`: about 54 minutes, about ₹35 (abou
 | Single stream (4 × 256 tokens) | 164 tok/s | 240 tok/s | 229 tok/s |
 | Excess loss | — | 0.0730 | 0.00047 |
 
-Speed and memory are one A30 and vLLM 0.29, `blaze_speed.py`'s fixed synthetic work. Single
+Speed and memory are one A30 and vLLM 0.29, `blaze_speed.py`'s fixed synthetic work. A second
+run (code `ff33c11`, during G2b's) served the same export with one copy of the table
+(`BLAZE_SINGLE_COPY=1`): logits come straight from the packed lookup blocks through a
+dequantizing Triton matmul (`blaze_vllm/head.py`). It is the same model, with drift identical to
+the two-copy run (excess loss 0.00047, flips 0.71%) and greedy answers as before, and its weight
+memory is 2.53 GB, level with W4A16's 2.52 GB. But the kernel is slow: 57 tokens per second single
+stream and 5,474 batched, against 229 and 7,890 with Marlin. The two-copy layout stays the
+default until that kernel is tuned. Single
 stream, where decoding reads every weight per token, Blaze-Q is 1.39x faster than BF16 and 4.5%
 slower than W4A16, whose body is half as many bytes. Batched, it is 13% slower than W4A16: its
 two-block logits and gather cost more than one BF16 head at large batch. Its GPU memory is
@@ -248,12 +298,14 @@ Blaze-Q on the 2B only, so each is compared with its own model's BF16 and 4-bit 
 | 4B | Glaze v2 | 3.80 GB | 3.29% | 0.014 | 73.7 | 83.2 | 82.8 |
 | 4B | Blaze: ladder + 6-bit GPTQ body (G1b) | 3.81 GB | 1.76% | **0.0027** | not run | not run | not run |
 | 4B | Blaze-Q at W4A16's size (G2) | 3.78 GB | 2.32% | 0.0071 | not run | not run | not run |
+| 4B | Blaze-Q, 8-bit vision tower (G2b, G3) | 3.78 GB | 1.39% | **0.0017** | 73.6\* | 83.0 | 82.4 |
 | 2B | BF16 | 4.55 GB | 0.38% | — | 56.4 | 64.6 | 65.3 |
 | 2B | GPTQ W4A16 g128 | 2.39 GB | 6.78% | 0.073 | 45.9 | 52.4 | 64.5 |
 | 2B | Blaze-Q: ladder + 8-bit body (G5) | 2.39 GB | 0.71% | **0.0005** | 56.7 | 67.8 | 65.8 |
 
 - Flip rate and excess loss are on BF16's own 1,501 MATH-500 and MMLU-Pro answers for each model.
-- MMLU-Pro is the full set on the 4B and the 1001-question subset on the 2B.
+- MMLU-Pro is the full set on the 4B and the 1001-question subset on the 2B. \*G2b's is the
+  subset, where BF16 scores 73.6 and Glaze v2 71.1.
 - Checkpoint sizes are file sizes, except the two Blaze rows, which are counted as the real format
   would store them (both exports are fake-quantized). The 4B's 6-bit body is 0.4% over AutoRound's
   size; an equal-size Blaze-Q on the 4B would put a few units at 4 bits.
@@ -267,7 +319,8 @@ rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
 | --- | --- |
 | Code | G1b: `src/qwen35_compression/blaze/gptq.py`, `scripts/blaze_gptq.py`, `scripts/run_blaze_g1b.py`. G5: `configs/blaze_2b.yaml`, `configs/evaluation/blaze_panel_text.yaml`, `scripts/run_blaze_g5.py`; sizes by `blaze.export.size_plan` |
 | Code (G2, real format) | `src/qwen35_compression/blaze/market.py`, `blaze/real.py`, `plugins/blaze_vllm/`, `scripts/blaze_prices.py`, `blaze_market.py`, `blaze_real_export.py`, `blaze_real_check.py`, `blaze_speed.py`, `run_blaze_g2.py`, `run_blaze_real2b.py` |
-| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; ₹194.86 in all (about $2.02) at ₹38.88 per A30 hour and ₹96.3 per dollar |
+| Code (G2b) | `scripts/run_blaze_g2b.py`, `blaze_market.py --mode fill`, `plugins/blaze_vllm/blaze_vllm/head.py` |
+| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; ₹267.84 in all (about $2.78) at ₹38.88 per A30 hour and ₹96.3 per dollar |
 
 ## Reproduce
 
@@ -281,4 +334,8 @@ uv run python scripts/run_blaze_g1b.py --pilot-limit 10
 uv run python scripts/run_blaze_g5.py --pilot-limit 10
 uv run python scripts/run_blaze_g2.py --pilot-limit 10
 uv run python scripts/run_blaze_real2b.py --traces <G5 run>/panel/bf16
+uv run python scripts/run_blaze_g2b.py --prices <G2 run>/prices.json --bf16 <G2 run>/bf16.json \
+    --g5-answers <G5 run>/panel/bf16 --pilot-limit 10
+# MMMU, after download, with the OpenAI key on the local machine
+uv run python scripts/score_vision.py --run-dir <G2b run>/mmmu
 ```
