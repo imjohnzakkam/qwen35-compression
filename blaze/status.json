@@ -23,12 +23,16 @@
    "column": "running",
    "model": "4B",
    "title": "Full suite on the 4B",
-   "summary": "The rest of the suite for G2b's Blaze-Q, against BF16 and Glaze v2.",
-   "cost": "≈₹140 so far · cap ₹340",
+   "summary": "Text done, every task at BF16's level: MMLU-Pro 75.2 (BF16 74.6). Vision suite running.",
+   "cost": "≈₹144 so far · cap ₹340",
    "details": [
     [
      "Question",
      "Is every task within 1 point of BF16 (MMMU within 2)?"
+    ],
+    [
+     "Text results",
+     "MMLU-Pro (all 12,032) 75.2 (BF16 74.6, Glaze v2 73.7); GSM8K 83.3 (83.2, 82.8); HellaSwag 65.3 (65.4, 64.8); ARC-Challenge 51.0 (51.1, 49.6); WikiText-2 perplexity 10.96 (10.95, 11.30)."
     ],
     [
      "Runs",
@@ -62,18 +66,18 @@
     },
     {
      "label": "Text suite",
-     "status": "running"
+     "status": "passed"
     },
     {
      "label": "Vision suite",
-     "status": "pending"
+     "status": "running"
     }
    ],
    "progress": {
-    "pct": 32,
-    "label": "Text suite · 14,513 of 44,855 answers"
+    "pct": 0,
+    "label": "Vision suite · 0 of 5 tasks answered"
    },
-   "elapsed": "3h 36m on the GPU"
+   "elapsed": "3h 42m on the GPU"
   },
   {
    "id": "G0",
@@ -325,9 +329,9 @@
   }
  ],
  "spend": {
-  "rupees": 408.04,
-  "dollars": 4.24,
-  "label": "₹408.04 (about $4.24) across all GPU runs"
+  "rupees": 411.98,
+  "dollars": 4.28,
+  "label": "₹411.98 (about $4.28) across all GPU runs"
  },
- "updated": "2026-10-16T12:04:57Z"
+ "updated": "2026-10-16T12:11:02Z"
 }
