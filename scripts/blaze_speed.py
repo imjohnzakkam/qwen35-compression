@@ -54,7 +54,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--requests", type=int, default=256)
     parser.add_argument("--tokens", type=int, default=512)
+    parser.add_argument(
+        "--single-copy",
+        action="store_true",
+        help="Serve a real Blaze export's vocabulary table once (BLAZE_SINGLE_COPY=1)",
+    )
     args = parser.parse_args()
+    if args.single_copy:
+        os.environ["BLAZE_SINGLE_COPY"] = "1"
 
     import torch
     from vllm import LLM, SamplingParams
@@ -94,6 +101,7 @@ def main() -> None:
         single_seconds += seconds
     record = {
         "name": args.name,
+        "single_copy": args.single_copy,
         "model": str(args.model),
         "gpu": torch.cuda.get_device_name(),
         "weight_memory_bytes": weights,

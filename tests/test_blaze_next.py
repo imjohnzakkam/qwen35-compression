@@ -171,6 +171,18 @@ def test_plugin_serves_the_real_table_as_the_fake_one(tmp_path: Path, monkeypatc
         assert torch.allclose(logits, hidden @ fake.T, atol=1e-4)
         model.LOGIT_CHUNK = 2  # several chunks, one output
         assert torch.allclose(vocab.quant_method.apply(vocab, hidden), logits)
+
+        # One copy: logits straight from the lookup blocks, no LM-head modules.
+        single = model.TieredVocab(16, 128, 4, None, prefix="x.embed_tokens", single_copy=True)
+        assert not hasattr(single, "hot_head")
+        assert single.load_weights(iter(weights)) == {
+            f"{m}.{p}"
+            for m in ("hot", "cold")
+            for p in ("weight_packed", "weight_scale", "weight_shape")
+        } | {"position"}
+        single.quant_method.process_weights_after_loading(single)
+        assert torch.equal(single(ids).float(), fake[ids])
+        assert torch.allclose(single.quant_method.apply(single, hidden), logits, atol=1e-4)
     finally:
         for name in list(sys.modules):
             if name not in saved:
@@ -272,3 +284,60 @@ def test_g2_and_real2b_plans(tmp_path: Path) -> None:
     assert order.index("check") < order.index("export:gptq_w4a16_g128") < order.index("score:real")
     assert steps_["export:real"][-1] == str(exports["real"])
     assert steps_["score:real"][steps_["score:real"].index("--traces") + 1] == str(tmp_path / "t")
+
+
+def test_best_fill_matches_brute_force() -> None:
+    from qwen35_compression.blaze.market import best_fill
+
+    rng = random.Random(1)
+    for _ in range(40):
+        names = [f"u{i}" for i in range(rng.randint(1, 7))]
+        gains = {n: rng.random() for n in names}
+        costs = {n: rng.randint(1, 9) * 4096 for n in names}
+        budget = rng.randint(0, sum(costs.values()))
+        chosen = best_fill(gains, costs, budget, bin_bytes=4096)
+        assert sum(costs[n] for n in chosen) <= budget
+        best = max(
+            sum(gains[n] for n in combo)
+            for r in range(len(names) + 1)
+            for combo in itertools.combinations(names, r)
+            if sum(costs[n] for n in combo) <= budget
+        )
+        assert sum(gains[n] for n in chosen) == pytest.approx(best)
+
+
+def test_vision_tower_at_8_bits_in_exports_and_sizes(tmp_path: Path) -> None:
+    from safetensors.torch import load_file
+
+    tensors = _checkpoint(tmp_path / "bf16")
+    vision_key = "model.visual.blocks.0.mlp.linear_fc1.weight"
+    record = write_fake_export(
+        tmp_path / "bf16", tmp_path / "out", None, Option(6, 128), vision=Option(8, 128), **QUIET
+    )
+    out = load_file(str(tmp_path / "out" / "model.safetensors"))
+    assert torch.equal(out[vision_key], fake_quantize(tensors[vision_key], Option(8, 128)))
+    assert record["vision"] == {"option": "w8g128", "linears": 1}
+    plan = size_plan(tmp_path / "bf16", Option(6, 128), vision=Option(8, 128))
+    assert plan["parts"]["vision"] == Option(8, 128).tensor_bytes(256, 128)
+    assert size_plan(tmp_path / "bf16", Option(6, 128))["parts"]["vision"] == 256 * 128 * 2
+
+
+def test_g2b_plan_fills_from_reused_prices(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_g2b")
+    prices = tmp_path / "prices.json"
+    full = driver.plan(tmp_path / "g2b", tmp_path / "exports", "S", prices, None)
+    market = full["market"]
+    assert market[market.index("--mode") + 1] == "fill"
+    assert market[market.index("--prices") + 1] == str(prices)
+    assert full["export"][full["export"].index("--vision-bits") + 1] == "8"
+    assert "score:bf16" not in full  # G2's BF16 score is reused
+    pilot = driver.plan(tmp_path / "p", tmp_path / "exports", "S", prices, 10)
+    assert pilot["export"][-2:] == ["--layers", "0,1"]
+    assert pilot["score:blaze_q_g2b"][-2:] == ["--limit", "10"]
+    steps_ = driver.panel_steps(tmp_path / "g2b", tmp_path / "e")
+    assert steps_["mmmu:blaze_q_g2b"][0].endswith(".venv-gpu-vision/bin/python")
+    assert "MMMU_DEV_VAL" in steps_["mmmu:blaze_q_g2b"]
+    single = driver.single_copy_steps(tmp_path, tmp_path / "o2b", "S2", tmp_path / "a")
+    assert (
+        "--single-copy" in single["check2b:single"] and "--single-copy" in single["speed2b:single"]
+    )

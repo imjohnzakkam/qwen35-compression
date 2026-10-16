@@ -66,6 +66,9 @@ def main() -> None:
     parser.add_argument("--damp", type=float, default=DAMP)
     parser.add_argument("--layers", default="", help="Comma-separated layer indices (a pilot)")
     parser.add_argument("--plan", type=Path, help="Per-Linear options from scripts/blaze_market.py")
+    parser.add_argument(
+        "--vision-bits", type=int, default=0, help="Round the vision tower's Linears (0: BF16)"
+    )
     args = parser.parse_args()
 
     import torch
@@ -113,7 +116,14 @@ def main() -> None:
     )
     device = "cuda" if torch.cuda.is_available() else "cpu"
     record = write_fake_export(
-        snapshot, args.output, ladder, option, device, replaced=replaced, options=options or None
+        snapshot,
+        args.output,
+        ladder,
+        option,
+        device,
+        replaced=replaced,
+        options=options or None,
+        vision=Option(args.vision_bits, 128) if args.vision_bits else None,
     )
     record["gptq"] = {
         "model_revision": revision,

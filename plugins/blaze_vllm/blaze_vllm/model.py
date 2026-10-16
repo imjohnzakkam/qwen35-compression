@@ -2,13 +2,15 @@
 
 The table is stored in usage order as two compressed-tensors blocks: `hot` (the busiest rows,
 8-bit g128) and `cold` (the rest, 4-bit g128), with `position`, each token id's row in that
-order. Lookups gather and dequantize rows with vLLM's quantized-embedding kernel; logits run
-both blocks through vLLM's quantized LM head (Marlin) and are put back in token-id order. Each
-block is held twice on the GPU, once per kernel layout; the checkpoint holds it once.
+order. Lookups gather and dequantize rows with vLLM's quantized-embedding kernel. Logits run
+both blocks through vLLM's quantized LM head (Marlin), which holds each block a second time in
+its own layout; with `BLAZE_SINGLE_COPY=1` they come instead from the lookup blocks themselves,
+through a dequantizing matmul (`blaze_vllm.head`), so each block is held once.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 
 import torch
@@ -21,6 +23,7 @@ from vllm.model_executor.layers.vocab_parallel_embedding import (
 from vllm.model_executor.models.qwen3_5 import Qwen3_5ForConditionalGeneration
 
 CONFIG_KEY = "blaze_vocab"
+SINGLE_COPY_ENV = "BLAZE_SINGLE_COPY"
 # Logits are written into one output in row chunks, so the two blocks' partial logits never
 # need more than a chunk's memory beside it.
 LOGIT_CHUNK = 1024
@@ -40,8 +43,18 @@ class _TieredHead(QuantizeMethodBase):
         logits = None
         for start in range(0, flat.shape[0], LOGIT_CHUNK):
             rows = flat[start : start + LOGIT_CHUNK]
-            hot = layer.hot_head.quant_method.apply(layer.hot_head, rows)
-            cold = layer.cold_head.quant_method.apply(layer.cold_head, rows)
+            if layer.single_copy:
+                from blaze_vllm.head import packed_logits
+
+                hot = packed_logits(
+                    rows, layer.hot.weight_packed, layer.hot.weight_scale, layer.hot_bits
+                )
+                cold = packed_logits(
+                    rows, layer.cold.weight_packed, layer.cold.weight_scale, layer.cold_bits
+                )
+            else:
+                hot = layer.hot_head.quant_method.apply(layer.hot_head, rows)
+                cold = layer.cold_head.quant_method.apply(layer.cold_head, rows)
             if logits is None:
                 logits = hot.new_empty(flat.shape[0], layer.vocab_size)
             part = logits[start : start + rows.shape[0]]
@@ -58,8 +71,20 @@ class _TieredHead(QuantizeMethodBase):
 class TieredVocab(nn.Module):
     """A tied vocabulary table in two quantized blocks: embedding lookups and LM head."""
 
-    def __init__(self, vocab_size: int, hidden: int, hot_rows: int, quant_config, prefix: str):
+    def __init__(
+        self,
+        vocab_size: int,
+        hidden: int,
+        hot_rows: int,
+        quant_config,
+        prefix: str,
+        hot_bits: int = 8,
+        cold_bits: int = 4,
+        single_copy: bool = False,
+    ):
         super().__init__()
+        self.hot_bits, self.cold_bits = hot_bits, cold_bits
+        self.single_copy = single_copy
         cold_rows = vocab_size - hot_rows
         self.vocab_size = vocab_size
         self.org_vocab_size = vocab_size
@@ -72,13 +97,16 @@ class TieredVocab(nn.Module):
         self.cold = VocabParallelEmbedding(
             cold_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.cold"
         )
-        self.hot_head = ParallelLMHead(
-            hot_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.hot"
-        )
-        self.cold_head = ParallelLMHead(
-            cold_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.cold"
-        )
-        for part in (self.hot, self.cold, self.hot_head, self.cold_head):
+        parts = [self.hot, self.cold]
+        if not single_copy:
+            self.hot_head = ParallelLMHead(
+                hot_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.hot"
+            )
+            self.cold_head = ParallelLMHead(
+                cold_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.cold"
+            )
+            parts += [self.hot_head, self.cold_head]
+        for part in parts:
             if part.num_embeddings_padded != part.org_vocab_size:
                 raise ValueError("blaze vocabulary blocks must be multiples of 64 rows")
         self.register_buffer("position", torch.zeros(vocab_size, dtype=torch.long))
@@ -103,8 +131,8 @@ class TieredVocab(nn.Module):
             part, rest = name.split(".", 1)
             if part not in ("hot", "cold"):
                 raise KeyError(f"unexpected blaze vocabulary tensor: {name}")
-            # Each block feeds two modules: the lookup and the LM head.
-            for module in (part, f"{part}_head"):
+            # Each block feeds the lookup, and the LM head when it keeps its own copy.
+            for module in (part,) if self.single_copy else (part, f"{part}_head"):
                 key = f"{module}.{rest}"
                 param = params[key]
                 param.weight_loader(param, weight)
@@ -131,6 +159,9 @@ class BlazeQwen3_5ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
             int(blaze["hot_rows"]),
             vllm_config.quant_config,
             prefix=f"{prefix}.language_model.model.embed_tokens".removeprefix("."),
+            hot_bits=int(blaze["hot_bits"]),
+            cold_bits=int(blaze["cold_bits"]),
+            single_copy=os.environ.get(SINGLE_COPY_ENV) == "1",
         )
         language.model.embed_tokens = vocab
         language.lm_head = vocab

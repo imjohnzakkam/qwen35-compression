@@ -146,14 +146,14 @@ def fetch_published(destination: Path) -> str:
     return revision
 
 
-def panel_table(output: Path) -> dict[str, Any]:
+def panel_table(output: Path, name: str = EXPORT) -> dict[str, Any]:
     from panel_scores import paired_delta, per_question
 
     subset = json.loads(SUBSET.read_text(encoding="utf-8"))
     runs = {
         "bf16": output / "published" / "bf16",
         "glaze_v2": output / "published" / "glaze_v2",
-        "blaze_q": output / "panel" / EXPORT,
+        "blaze_q": output / "panel" / name,
     }
     rows = {name: per_question(path, subset) for name, path in runs.items()}
     table: dict[str, Any] = {}

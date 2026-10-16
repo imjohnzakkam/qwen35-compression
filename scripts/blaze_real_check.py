@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -97,7 +98,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--tokens", type=int, default=64)
     parser.add_argument("--generate", type=Path, help="Internal: one model's answers to --output")
+    parser.add_argument(
+        "--single-copy",
+        action="store_true",
+        help="Serve the real export's vocabulary table once (BLAZE_SINGLE_COPY=1)",
+    )
     args = parser.parse_args()
+    if args.single_copy:
+        os.environ["BLAZE_SINGLE_COPY"] = "1"
 
     if args.generate:
         # One engine per process: a second engine in the same process may not get its memory.

@@ -60,3 +60,32 @@ def cheapest_cover(options: list[Step], deficit: int, bin_bytes: int = BIN_BYTES
     if bins > 0:
         raise AssertionError("knapsack backtrack did not reach the deficit")
     return sorted(chosen)
+
+
+def best_fill(
+    gains: Mapping[str, float], costs: Mapping[str, int], budget: int, bin_bytes: int = BIN_BYTES
+) -> list[str]:
+    """The units to step up: most total gain whose extra bytes stay within `budget`.
+
+    An exact 0/1 knapsack over costs rounded up to whole bins, so the result always fits.
+    """
+    if set(gains) != set(costs):
+        raise ValueError("gains and costs must name the same units")
+    capacity = max(0, budget) // bin_bytes
+    names = sorted(gains)
+    sizes = [-(-int(costs[name]) // bin_bytes) for name in names]
+    best = [0.0] * (capacity + 1)
+    taken = [[False] * (capacity + 1) for _ in names]
+    for index, name in enumerate(names):
+        size, gain = sizes[index], max(0.0, gains[name])
+        for room in range(capacity, size - 1, -1):
+            if best[room - size] + gain > best[room]:
+                best[room] = best[room - size] + gain
+                taken[index][room] = True
+    chosen: list[str] = []
+    room = capacity
+    for index in range(len(names) - 1, -1, -1):
+        if taken[index][room]:
+            chosen.append(names[index])
+            room -= sizes[index]
+    return sorted(chosen)
