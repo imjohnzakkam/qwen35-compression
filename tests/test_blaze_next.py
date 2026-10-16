@@ -376,3 +376,70 @@ def test_g4_report_needs_every_task_near_bf16() -> None:
     scores = {task: bf16 for task, (bf16, _) in report.RECORDED.items()}
     scores["WikiText-2"] += 5  # perplexity is reported, not gated
     assert report.g4_report(scores)["checks"] == {"suite": True}
+
+
+def test_real_export_takes_gptq_codes_and_an_8_bit_vision_tower(tmp_path: Path) -> None:
+    from safetensors.torch import load_file
+
+    from qwen35_compression.glaze2.export import rtn_quantized
+    from qwen35_compression.glaze2.rounding import QuantizedLinear
+
+    tensors = _checkpoint(tmp_path / "bf16")
+    item = rtn_quantized(tensors[BODY] * 0.5, Option(4, 128))
+    given = {BODY: QuantizedLinear(item.codes, item.scales, Option(4, 128))}
+    write_real_export(
+        tmp_path / "bf16",
+        tmp_path / "real",
+        PLAN,
+        Option(4, 128),
+        row_multiple=1,
+        quantized=given,
+        vision=Option(8, 128),
+        **QUIET,
+    )
+    stored = load_file(str(tmp_path / "real" / "model.safetensors"))
+    module = BODY.removesuffix(".weight")
+    assert torch.equal(unpack(stored[f"{module}.weight_packed"], 4, (128, 256)), item.codes.int())
+    vision = "model.visual.blocks.0.mlp.linear_fc1"
+    assert f"{vision}.weight_packed" in stored and f"{vision}.weight" not in stored
+    groups = json.loads((tmp_path / "real" / "config.json").read_text())["quantization_config"]
+    assert any(vision in g["targets"] for g in groups["config_groups"].values())
+
+
+def test_six_bit_planes_round_trip_and_match_the_reference() -> None:
+    sys.path.insert(0, "plugins/blaze_vllm")
+    from blaze_vllm import w6
+
+    generator = torch.Generator().manual_seed(3)
+    codes = torch.randint(-32, 32, (32, 256), generator=generator)
+    lo, hi = w6.pack(codes)
+    assert lo.shape == (32, 32) and hi.shape == (32, 16) and lo.dtype == torch.int32
+    assert torch.equal(w6.unpack(lo, hi), codes.int())
+    scale = (torch.rand(32, 2, generator=generator) * 0.01 + 1e-3).to(torch.bfloat16)
+    x = torch.randn(3, 256, generator=generator)
+    weight = (codes.float().reshape(32, 2, 128) * scale.float().unsqueeze(-1)).to(torch.bfloat16)
+    assert torch.allclose(w6.matmul(x, lo, hi, scale), x @ weight.float().reshape(32, 256).T)
+    assert w6.choose(1, 2560, 9216, 56)[2] > 1  # small outputs split the inputs
+    assert w6.choose(256, 18432, 2560, 56)[2] == 1
+
+
+def test_blaze_s_plan_builds_the_real_format_and_times_it(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_s")
+    full = driver.plan(tmp_path / "s", tmp_path / "e", tmp_path / "o", "S", None)
+    assert list(full) == [
+        "export",
+        "score:blaze_s",
+        "panel:blaze_s",
+        "speed:bf16",
+        "speed:gptq_w4a16_g128",
+        "speed:blaze_s",
+        "kernel",
+    ]
+    export = full["export"]
+    assert "--real" in export and export[export.index("--bits") + 1] == "4"
+    assert export[export.index("--vision-bits") + 1] == "8"
+    pilot = driver.plan(tmp_path / "p", tmp_path / "e", tmp_path / "o", "S", 10)
+    assert list(pilot) == ["export", "score:blaze_s"] and pilot["export"][-2:] == [
+        "--layers",
+        "0,1",
+    ]

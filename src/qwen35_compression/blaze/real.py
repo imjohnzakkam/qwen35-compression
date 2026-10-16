@@ -35,6 +35,7 @@ from qwen35_compression.glaze2.export import (
     quantized_tensors,
     rtn_quantized,
     unpack,
+    vision_linear,
 )
 from qwen35_compression.glaze2.quant import Option, dequantize
 from qwen35_compression.glaze2.rounding import QuantizedLinear
@@ -75,10 +76,14 @@ def write_real_export(
     device: str = "cpu",
     log: Callable[[str], None] = print,
     row_multiple: int = ROW_MULTIPLE,
+    quantized: Mapping[str, QuantizedLinear] | None = None,
+    vision: Option | None = None,
 ) -> dict[str, Any]:
     """Write the real export of `source`: the laddered tied table and every body Linear at
-    `body` (one option, or checkpoint key -> option), rounded to nearest. The MTP head is left
-    out, as every quantized export leaves it."""
+    `body` (one option, or checkpoint key -> option), rounded to nearest unless `quantized`
+    (checkpoint key -> codes and scales, e.g. from GPTQ) gives them. `vision` stores the vision
+    tower's Linears at that option, rounded to nearest. The MTP head is left out, as every
+    quantized export leaves it."""
     from safetensors import safe_open
     from safetensors.torch import save_file
 
@@ -106,12 +111,30 @@ def write_real_export(
                     tensors[POSITION] = positions(ladder)
                     continue
                 if is_body_linear(key, tensor.shape):
-                    option = body if isinstance(body, Option) else body[key]
-                    item = rtn_quantized(tensor.to(device), option)
-                    item = QuantizedLinear(item.codes.cpu(), item.scales.cpu(), option)
+                    if quantized is not None and key in quantized:
+                        item = quantized[key]
+                        if tuple(item.codes.shape) != tuple(tensor.shape):
+                            raise ValueError(f"{key}: codes of shape {tuple(item.codes.shape)}")
+                        option = item.option
+                    else:
+                        option = body if isinstance(body, Option) else body[key]
+                        item = rtn_quantized(tensor.to(device), option)
+                        item = QuantizedLinear(item.codes.cpu(), item.scales.cpu(), option)
                     module = key.removesuffix(".weight")
                     tensors.update(quantized_tensors(module, item))
                     groups.setdefault(option, []).append(module)
+                    continue
+                if (
+                    vision is not None
+                    and vision_linear(key)
+                    and len(tensor.shape) == 2
+                    and tensor.shape[-1] % vision.group == 0
+                ):
+                    item = rtn_quantized(tensor.to(device), vision)
+                    item = QuantizedLinear(item.codes.cpu(), item.scales.cpu(), vision)
+                    module = key.removesuffix(".weight")
+                    tensors.update(quantized_tensors(module, item))
+                    groups.setdefault(vision, []).append(module)
                     continue
                 tensors[key] = tensor.contiguous()
     if not hidden:

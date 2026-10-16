@@ -69,7 +69,14 @@ def main() -> None:
     parser.add_argument(
         "--vision-bits", type=int, default=0, help="Round the vision tower's Linears (0: BF16)"
     )
+    parser.add_argument(
+        "--real",
+        action="store_true",
+        help="Write the real format (blaze.real), not a fake-quantized export; needs --ladder",
+    )
     args = parser.parse_args()
+    if args.real and not args.ladder:
+        parser.error("--real stores the laddered table; pass --ladder")
 
     import torch
 
@@ -93,15 +100,13 @@ def main() -> None:
         for key, value in options.items()
     }
     layers = [int(index) for index in args.layers.split(",")] if args.layers else None
-    chosen = (lambda name: by_module.get(name, option)) if by_module else None
-    stored = gptq_body(
-        teacher,
-        blocks,
-        {name: chosen(name) for name in _linear_names(teacher)} if chosen else option,
-        args.batch,
-        layers,
-        args.damp,
+    per_linear = (
+        {name: by_module.get(name, option) for name in _linear_names(teacher)}
+        if by_module
+        else option
     )
+    kept: dict = {} if args.real else None
+    stored = gptq_body(teacher, blocks, per_linear, args.batch, layers, args.damp, codes=kept)
     replaced = {f"{TEXT_PREFIX}{name}.weight": weight for name, weight in stored.items()}
     peak = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else None
     gptq_seconds = round(time.perf_counter() - started)
@@ -115,16 +120,31 @@ def main() -> None:
         else None
     )
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    record = write_fake_export(
-        snapshot,
-        args.output,
-        ladder,
-        option,
-        device,
-        replaced=replaced,
-        options=options or None,
-        vision=Option(args.vision_bits, 128) if args.vision_bits else None,
-    )
+    vision = Option(args.vision_bits, 128) if args.vision_bits else None
+    if args.real:
+        from qwen35_compression.blaze.real import write_real_export
+
+        record = write_real_export(
+            snapshot,
+            args.output,
+            ladder,
+            options or option,
+            device,
+            quantized={f"{TEXT_PREFIX}{name}.weight": item for name, item in kept.items()},
+            vision=vision,
+        )
+        record["real"] = True
+    else:
+        record = write_fake_export(
+            snapshot,
+            args.output,
+            ladder,
+            option,
+            device,
+            replaced=replaced,
+            options=options or None,
+            vision=vision,
+        )
     record["gptq"] = {
         "model_revision": revision,
         "replay": {"repo": REPLAY_REPO, "revision": REPLAY_REVISION, "file": REPLAY_FILE},

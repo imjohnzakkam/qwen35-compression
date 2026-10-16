@@ -18,7 +18,7 @@ import torch
 from torch import nn
 
 from qwen35_compression.glaze2.quant import SCALE_DTYPE, Option, code_range, group_scales
-from qwen35_compression.glaze2.rounding import capture_inputs
+from qwen35_compression.glaze2.rounding import QuantizedLinear, capture_inputs
 
 DAMP = 0.01
 
@@ -102,13 +102,15 @@ def gptq_body(
     layers: Sequence[int] | None = None,
     damp: float = DAMP,
     log: Callable[[str], None] = print,
+    codes: dict[str, QuantizedLinear] | None = None,
 ) -> dict[str, torch.Tensor]:
     """GPTQ every Linear of the decoder layers in order, in place; return module path (relative
     to `text_model`, e.g. `layers.3.mlp.up_proj`) -> stored BF16 weight on the CPU.
 
     `option` is one option for every Linear, or module path -> option.
-    `layers` limits the work to those layer indices (a pilot); every later layer still runs, on
-    the quantized chain, only when it is quantized itself.
+    With `codes`, each Linear's int8 codes and BF16 scales are also kept there (for a real
+    export). `layers` limits the work to those layer indices (a pilot); every later layer still
+    runs, on the quantized chain, only when it is quantized itself.
     """
     if len(blocks) % batch:
         raise ValueError(f"{len(blocks)} blocks are not a multiple of batch {batch}")
@@ -141,7 +143,9 @@ def gptq_body(
                 h = collectors[name].remove()
                 original = module.weight.detach().float()
                 chosen = option if isinstance(option, Option) else option[name]
-                stored, _, _ = gptq_weight(original, h, chosen, damp)
+                stored, q, scale = gptq_weight(original, h, chosen, damp)
+                if codes is not None:
+                    codes[name] = QuantizedLinear(q.cpu(), scale.cpu(), chosen)
                 # Output error on the calibration inputs, relative to the weight's own output.
                 delta = stored.float() - original
                 ratio = float(((delta @ h) * delta).sum() / ((original @ h) * original).sum())
