@@ -283,6 +283,37 @@ Run `r_f7c16f6c` on one A30, code `a76a268`: 4 hours 53 minutes (text 3.0 h, vis
   vocabulary table; Blaze-Q spends those bytes on a 6/8-bit body. Averaged over every weight, all
   four quantized checkpoints sit near 6.7 bits.
 
+## Blaze-S and a first 6-bit kernel
+
+Blaze-S keeps a standard 4-bit body and banks the bytes the ladder and an 8-bit vision tower free,
+instead of spending them. Its body runs on vLLM's 4-bit Marlin kernels, so it was built directly in
+the real format (`blaze_gptq.py --real`) and served with the `blaze-vllm` plugin. The same run
+benchmarked a first 6-bit kernel for Blaze-Q's body (`blaze_vllm/w6.py`).
+
+Run `r_c92cb877` on one A30, code `d7f07ab`: 82 minutes with the pilot, ₹55.62 (about $0.58).
+
+| Qwen3.5-4B, one A30 | On disk | GPU weights | One stream | Batched | Excess loss |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 9.32 GB | 9.21 GB | 80 tok/s | 2,670 tok/s | — |
+| GPTQ W4A16 g128 (published) | 3.78 GB | 3.92 GB | 151 tok/s | 3,128 tok/s | 0.054 |
+| Blaze-S, real | **2.60 GB** | 3.15 GB | **174 tok/s** | 2,901 tok/s | 0.090 |
+
+Panel against the same questions: MMLU-Pro (1001) 67.9 (GPTQ 70.1, BF16 73.6), MATH-500 74.2
+(75.8, 83.4), IFEval 75.6 (80.8, 82.3); against GPTQ the paired changes are −2.2 (−4.5 to +0.3),
+−1.6 (−5.8 to +2.2) and −5.2 (−8.5 to −1.9).
+
+- **Size and speed hold.** Blaze-S is 31% smaller than GPTQ W4A16 and 16% faster for a single
+  stream, where decoding reads every weight; batched it is 7% slower, the cost of its two-block
+  vocabulary head.
+- **Accuracy does not, and the body is why.** Blaze's own GPTQ (WikiText-2, no activation
+  ordering) is barely better than plain rounding at 4 bits (0.090 against G1's 0.094), while the
+  published GPTQ export reaches 0.054. The ladder costs 0.0002 (G1). The next Blaze-S keeps the
+  published GPTQ body and changes only the vocabulary and vision bytes.
+- **The 6-bit kernel is correct but slow.** Its output matches the reference to 1e-4 at every
+  shape, but one decode token's body takes 21.3 ms against 4.7 ms with Marlin at 4 bits, 5.9 ms at
+  8 bits and 9.3 ms in BF16 (about 105 GB/s against Marlin's 500). A real 4B Blaze-Q needs the
+  6-bit path built on Marlin's design.
+
 ## The real format, on the 2B
 
 The real export (`blaze/real.py`) stores the body as compressed-tensors groups, as any W8A16
@@ -360,7 +391,8 @@ rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
 | Code (G2, real format) | `src/qwen35_compression/blaze/market.py`, `blaze/real.py`, `plugins/blaze_vllm/`, `scripts/blaze_prices.py`, `blaze_market.py`, `blaze_real_export.py`, `blaze_real_check.py`, `blaze_speed.py`, `run_blaze_g2.py`, `run_blaze_real2b.py` |
 | Code (G2b) | `scripts/run_blaze_g2b.py`, `blaze_market.py --mode fill`, `plugins/blaze_vllm/blaze_vllm/head.py` |
 | Code (G4) | `scripts/run_blaze_g4.py`, `scripts/blaze_g4_report.py`, `configs/evaluation/blaze_g4_text.yaml`, `blaze_g4_vision.yaml` |
-| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; ₹464.71 in all (about $4.83) at ₹38.88 per A30 hour and ₹96.3 per dollar |
+| Code (Blaze-S, 6-bit kernel) | `scripts/run_blaze_s.py`, `blaze_gptq.py --real`, `plugins/blaze_vllm/blaze_vllm/w6.py`, `scripts/blaze_kernel_bench.py` |
+| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; ₹520.33 in all (about $5.40) at ₹38.88 per A30 hour and ₹96.3 per dollar |
 
 ## Reproduce
 
