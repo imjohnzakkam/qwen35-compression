@@ -20,60 +20,63 @@
  "cards": [
   {
    "id": "G4",
-   "column": "running",
+   "column": "missed",
    "model": "4B",
    "title": "Full suite on the 4B",
-   "summary": "Finished on the GPU; MMBench and MathVista are being scored, then the full table.",
-   "cost": "≈₹192 so far · cap ₹340",
+   "summary": "12 of 13 tasks within 1 point of BF16; MathVista −1.1 (paired interval −2.6 to +0.5), 0.1 past the mark.",
+   "cost": "₹196.87",
    "details": [
     [
      "Question",
      "Is every task within 1 point of BF16 (MMMU within 2)?"
     ],
     [
-     "Text results",
-     "MMLU-Pro (all 12,032) 75.2 (BF16 74.6, Glaze v2 73.7); GSM8K 83.3 (83.2, 82.8); HellaSwag 65.3 (65.4, 64.8); ARC-Challenge 51.0 (51.1, 49.6); WikiText-2 perplexity 10.96 (10.95, 11.30)."
+     "Text",
+     "MMLU-Pro (all 12,032) 75.2 (BF16 74.6, Glaze v2 73.7); GSM8K 83.3 (83.2, 82.8); MATH-500 83.0 (83.4, 83.2); IFEval 82.4 (82.3, 82.8); HellaSwag 65.3 (65.4, 64.8); ARC-Challenge 51.0 (51.1, 49.6); WikiText-2 perplexity 10.96 (10.95, 11.30)."
     ],
     [
-     "Runs",
-     "MMLU-Pro (all 12,032), GSM8K, HellaSwag, ARC-Challenge, WikiText-2, MMBench, MathVista, TextVQA, OCRBench, DocVQA. MATH-500, IFEval and MMMU come from G3."
+     "Vision",
+     "MMBench 84.9 (85.4, 85.7); MMMU 68.7 (69.6, 66.7); MathVista 79.9 (81.0, 80.6); OCRBench 86.5 (86.3, 86.3); DocVQA 95.5 (95.3, 95.4); TextVQA 82.9 (82.8, 82.2)."
     ],
     [
-     "Checked first",
-     "The export was rebuilt from G2b's plan; its drift matched G2b's exactly (0.0016895)."
+     "MathVista",
+     "−1.1 against BF16 on the same 1,000 questions, paired interval −2.6 to +0.5: not distinguishable from BF16, but past the 1-point mark. Glaze v2 is −0.4 (−2.2 to +1.5)."
+    ],
+    [
+     "Decision",
+     "By the rule, report the drop as measured. Against Glaze v2, Blaze-Q is level or ahead on 10 of 13 tasks."
     ],
     [
      "Run",
-     "r_f7c16f6c on one A30, started 16 Oct 08:28 UTC"
+     "r_f7c16f6c on one A30, 16 Oct 08:28–13:21 UTC; the export was rebuilt from G2b's plan and its drift matched G2b's exactly."
     ]
    ],
    "steps": [
     {
      "label": "Rebuild G2b's export",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Check it is G2b's model",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Pilot, text",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Pilot, vision",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Text suite",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Vision suite",
-     "status": "pending"
+     "status": "passed"
     }
-   ],
-   "elapsed": "4h 56m on the GPU"
+   ]
   },
   {
    "id": "G0",
@@ -325,9 +328,9 @@
   }
  ],
  "spend": {
-  "rupees": 460.26,
-  "dollars": 4.78,
-  "label": "₹460.26 (about $4.78) across all GPU runs"
+  "rupees": 464.71,
+  "dollars": 4.83,
+  "label": "₹464.71 (about $4.83) across all GPU runs"
  },
- "updated": "2026-10-16T13:25:32Z"
+ "updated": "2026-10-16T13:31:15Z"
 }
