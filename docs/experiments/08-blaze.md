@@ -283,6 +283,36 @@ Run `r_f7c16f6c` on one A30, code `a76a268`: 4 hours 53 minutes (text 3.0 h, vis
   vocabulary table; Blaze-Q spends those bytes on a 6/8-bit body. Averaged over every weight, all
   four quantized checkpoints sit near 6.7 bits.
 
+## The ladder as an add-on, and Blaze-Q on 4/8-bit kernels
+
+The ladder needs nothing else from Blaze. `blaze.addon` rewrites only an existing
+compressed-tensors export's BF16 vocabulary table into the tiered form and copies every other
+tensor and quantization group as it is. Applied to the published GPTQ, AutoRound and Glaze v2
+exports of the 4B, it isolates exactly what the ladder costs and saves. The same run built a
+Blaze-Q that serves on today's kernels: the GPTQ export, laddered, with the units the market
+picks (by G2's measured 4-bit prices) re-quantized to 8-bit g128 from BF16, at W4A16's size.
+
+Run `r_e5d73d36` on one A30, code `e63c8b0`: 90 minutes with the pilot, ₹60.93 (about $0.63).
+
+| Qwen3.5-4B | Before | With the ladder | Excess loss before | After | Flip rate after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPTQ W4A16 g128 | 3.78 GB | **2.92 GB** | 0.0541 | 0.0542 | 5.70% |
+| AutoRound W4A16 g128 | 3.78 GB | **2.92 GB** | 0.0417 | 0.0417 | 4.96% |
+| Glaze v2 | 3.77 GB | **2.91 GB** | 0.0143 | 0.0144 | 3.30% |
+
+- **The ladder is free on every export.** Each loses 0.86 GB (23%) and its excess loss moves by
+  at most 0.0001. Glaze v2's quality at 2.91 GB, and any 4-bit Qwen3.5 checkpoint 23% smaller,
+  serve today on vLLM with the `blaze-vllm` plugin.
+- **It is faster for a single stream.** GPTQ with the ladder decodes 175 tokens per second against
+  151 without it (+16%); batched it is 2,912 against 3,126 (−7%), the cost of the two-block head.
+  GPU weights are 3.47 GB against 3.92.
+- **Blaze-Q on 4/8-bit kernels does not reach the 6-bit result.** With 34 of 64 units at 8 bits
+  (3.774 GB), its excess loss is 0.0235: 2.3x below GPTQ and 1.8x below AutoRound, but above
+  Glaze v2's 0.0143 and far from G2b's 0.0017. Its panel: MATH-500 80.4 (GPTQ 75.8, paired +4.6,
+  +1.0 to +8.2; BF16 83.4), MMLU-Pro (1001) 71.2 (70.1, 73.6), IFEval 81.3 (80.8, 82.3). It decodes
+  a single stream at 147 tokens per second. With sensitivity spread evenly across layers (G1), 4
+  and 8 bits are too coarse: the equal-size result needs the 6-bit kernel.
+
 ## Blaze-S and a first 6-bit kernel
 
 Blaze-S keeps a standard 4-bit body and banks the bytes the ladder and an 8-bit vision tower free,
@@ -391,8 +421,9 @@ rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
 | Code (G2, real format) | `src/qwen35_compression/blaze/market.py`, `blaze/real.py`, `plugins/blaze_vllm/`, `scripts/blaze_prices.py`, `blaze_market.py`, `blaze_real_export.py`, `blaze_real_check.py`, `blaze_speed.py`, `run_blaze_g2.py`, `run_blaze_real2b.py` |
 | Code (G2b) | `scripts/run_blaze_g2b.py`, `blaze_market.py --mode fill`, `plugins/blaze_vllm/blaze_vllm/head.py` |
 | Code (G4) | `scripts/run_blaze_g4.py`, `scripts/blaze_g4_report.py`, `configs/evaluation/blaze_g4_text.yaml`, `blaze_g4_vision.yaml` |
+| Code (add-on) | `src/qwen35_compression/blaze/addon.py`, `scripts/blaze_addon.py`, `scripts/run_blaze_addon.py` |
 | Code (Blaze-S, 6-bit kernel) | `scripts/run_blaze_s.py`, `blaze_gptq.py --real`, `plugins/blaze_vllm/blaze_vllm/w6.py`, `scripts/blaze_kernel_bench.py` |
-| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; ₹520.33 in all (about $5.40) at ₹38.88 per A30 hour and ₹96.3 per dollar |
+| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; the add-on run ₹60.93; ₹581.26 in all (about $6.04) at ₹38.88 per A30 hour and ₹96.3 per dollar |
 
 ## Reproduce
 

@@ -49,6 +49,10 @@ mode with greedy decoding and up to 8,192 generated tokens.
   MMLU-Pro 56.7 against BF16's 64.6 and 56.4 and W4A16's 52.4 and 45.9. That 2B export is served for
   real by vLLM with a small plugin, with the same scores, W4A16's size on disk, and 229 tokens per
   second single stream (W4A16 240, BF16 164).
+- **The ladder alone shrinks any 4-bit export for free:** applied to the published GPTQ, AutoRound
+  and Glaze v2 checkpoints, changing only the BF16 vocabulary table, it cuts each from 3.78 to 2.92
+  GB (−23%) with excess loss unchanged to 0.0001, and decodes a single stream 16% faster. Glaze v2's
+  quality at 2.91 GB serves today on vLLM with a small plugin.
 
 ## Released artifacts
 
