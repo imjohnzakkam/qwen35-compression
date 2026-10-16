@@ -24,7 +24,7 @@
    "model": "4B",
    "title": "Full suite on the 4B",
    "summary": "The rest of the suite for G2b's Blaze-Q, against BF16 and Glaze v2.",
-   "cost": "≈₹101 so far · cap ₹340",
+   "cost": "≈₹108 so far · cap ₹340",
    "details": [
     [
      "Question",
@@ -70,10 +70,10 @@
     }
    ],
    "progress": {
-    "pct": 44,
-    "label": "Text suite · 5,906 of 13,351 answers"
+    "pct": 50,
+    "label": "Text suite · 6,673 of 13,351 answers"
    },
-   "elapsed": "2h 35m on the GPU"
+   "elapsed": "2h 45m on the GPU"
   },
   {
    "id": "G0",
@@ -325,9 +325,9 @@
   }
  ],
  "spend": {
-  "rupees": 368.81,
-  "dollars": 3.83,
-  "label": "₹368.81 (about $3.83) across all GPU runs"
+  "rupees": 375.37,
+  "dollars": 3.9,
+  "label": "₹375.37 (about $3.90) across all GPU runs"
  },
- "updated": "2026-10-16T11:04:24Z"
+ "updated": "2026-10-16T11:14:32Z"
 }
