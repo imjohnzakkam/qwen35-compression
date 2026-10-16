@@ -19,91 +19,6 @@
  ],
  "cards": [
   {
-   "id": "ADD",
-   "column": "running",
-   "model": "4B",
-   "title": "Ladder add-on and Blaze-Q 4/8",
-   "summary": "Only the vocabulary table laddered on the published GPTQ, AutoRound and Glaze v2 exports; and a Blaze-Q on today's 4/8-bit kernels.",
-   "cost": "≈₹53 so far · cap ₹110",
-   "details": [
-    [
-     "Question 1",
-     "Does the ladder shrink any 4-bit export by about 0.86 GB without changing its drift?"
-    ],
-    [
-     "Question 2",
-     "At W4A16's size, how close does a Blaze-Q that runs on today's kernels (GPTQ body, market-chosen units at 8 bits) get to G2b's 0.0017?"
-    ],
-    [
-     "Reused",
-     "G2's prices and BF16 drift score, the sources' recorded drift, and the published panel answers."
-    ],
-    [
-     "Run",
-     "r_e5d73d36 on one A30, started 16 Oct 17:39 UTC"
-    ]
-   ],
-   "steps": [
-    {
-     "label": "Pilot: GPTQ add-on, 10 answers",
-     "status": "passed"
-    },
-    {
-     "label": "Ladder GPTQ W4A16",
-     "status": "passed"
-    },
-    {
-     "label": "Ladder AutoRound",
-     "status": "passed"
-    },
-    {
-     "label": "Ladder Glaze v2",
-     "status": "passed"
-    },
-    {
-     "label": "Build Blaze-Q 4/8",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: GPTQ + ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: AutoRound + ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: Glaze v2 + ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: Blaze-Q 4/8",
-     "status": "passed"
-    },
-    {
-     "label": "Panel: Blaze-Q 4/8",
-     "status": "passed"
-    },
-    {
-     "label": "Speed: GPTQ W4A16",
-     "status": "passed"
-    },
-    {
-     "label": "Speed: GPTQ + ladder",
-     "status": "running"
-    },
-    {
-     "label": "Speed: Blaze-Q 4/8",
-     "status": "pending"
-    }
-   ],
-   "progress": {
-    "pct": 100,
-    "label": "Speed: GPTQ + ladder · 2,042 of 2,042 running generate_until requests"
-   },
-   "elapsed": "1h 21m on the GPU"
-  },
-  {
    "id": "G4",
    "column": "missed",
    "model": "4B",
@@ -161,6 +76,36 @@
      "label": "Vision suite",
      "status": "passed"
     }
+   ]
+  },
+  {
+   "id": "ADD",
+   "column": "done",
+   "model": "4B",
+   "title": "Ladder add-on",
+   "summary": "Free on every published export: GPTQ, AutoRound and Glaze v2 each lose 0.86 GB (−23%) with drift unchanged to 0.0001.",
+   "cost": "₹60.93 (with 4/8)",
+   "details": [
+    [
+     "Question",
+     "Does laddering only the vocabulary table of an existing 4-bit export keep its quality?"
+    ],
+    [
+     "Measured",
+     "GPTQ 0.0541 → 0.0542, 3.78 → 2.92 GB. AutoRound 0.0417 → 0.0417, 3.78 → 2.92 GB. Glaze v2 0.0143 → 0.0144, 3.77 → 2.91 GB. Flip rates unchanged."
+    ],
+    [
+     "Speed",
+     "GPTQ + ladder: one stream 175 tok/s against 151 (+16%); batched 2,912 against 3,126 (−7%); GPU weights 3.47 GB against 3.92."
+    ],
+    [
+     "Meaning",
+     "Glaze v2's quality at 2.91 GB, and any 4-bit Qwen3.5 export 23% smaller, servable today with the blaze-vllm plugin."
+    ],
+    [
+     "Run",
+     "r_e5d73d36, 16 Oct 17:39–19:09 UTC"
+    ]
    ]
   },
   {
@@ -388,12 +333,12 @@
    "column": "next",
    "model": "2B",
    "title": "Publish the 2B",
-   "summary": "Blaze-Q 2B as a private Kiln repo with the vLLM plugin.",
+   "summary": "Glaze v2 + ladder (2.91 GB) and the real 2B Blaze-Q as private Kiln repos with the vLLM plugin.",
    "cost": "free",
    "details": [
     [
      "Why",
-     "It is the one result that is real and deployable today."
+     "Both are real, servable today, and keep their quality at fewer bytes."
     ]
    ]
   },
@@ -492,7 +437,7 @@
    "column": "next",
    "model": "kernel",
    "title": "6-bit on Marlin",
-   "summary": "A 6-bit path built on Marlin's kernel design, for a real 4B Blaze-Q.",
+   "summary": "The deciding project: a 6-bit path on Marlin's design, to serve the equal-size 4B Blaze-Q (0.0017).",
    "cost": "engineering",
    "details": [
     [
@@ -500,12 +445,38 @@
      "The Triton prototype is correct but 4.6× slower than Marlin 4-bit at batch 1."
     ]
    ]
+  },
+  {
+   "id": "Q48",
+   "column": "missed",
+   "model": "4B",
+   "title": "Blaze-Q on 4/8-bit kernels",
+   "summary": "Excess loss 0.0235 at W4A16's size: 2.3× below GPTQ and 1.8× below AutoRound, but above Glaze v2 (0.0143). The 6-bit option is needed.",
+   "cost": "in add-on run",
+   "details": [
+    [
+     "Setup",
+     "The published GPTQ export, laddered, with 34 of 64 units re-quantized to 8 bits by measured 4-bit prices; 3.774 GB."
+    ],
+    [
+     "Panel",
+     "MATH-500 80.4 (GPTQ 75.8, +4.6 with interval +1.0 to +8.2; BF16 83.4); MMLU-Pro (1,001) 71.2 (GPTQ 70.1, BF16 73.6); IFEval 81.3 (80.8, 82.3)."
+    ],
+    [
+     "Speed",
+     "One stream 147 tok/s against GPTQ's 151; GPU weights 4.32 GB."
+    ],
+    [
+     "Meaning",
+     "Confirms G1: with flat sensitivity, 4 and 8 bits cannot match the 6-bit body's 0.0017. A real equal-size Blaze-Q needs the 6-bit kernel."
+    ]
+   ]
   }
  ],
  "spend": {
-  "rupees": 573.09,
-  "dollars": 5.95,
-  "label": "₹573.09 (about $5.95) across all GPU runs"
+  "rupees": 581.26,
+  "dollars": 6.04,
+  "label": "₹581.26 (about $6.04) across all GPU runs"
  },
- "updated": "2026-10-16T19:00:46Z"
+ "updated": "2026-10-16T19:10:30Z"
 }
