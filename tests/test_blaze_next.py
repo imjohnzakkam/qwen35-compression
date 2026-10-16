@@ -443,3 +443,94 @@ def test_blaze_s_plan_builds_the_real_format_and_times_it(tmp_path: Path) -> Non
         "--layers",
         "0,1",
     ]
+
+
+def _four_bit_export(tmp_path: Path) -> tuple[dict[str, torch.Tensor], Path]:
+    """A tiny compressed-tensors export: the body at 4-bit g128, the table left BF16."""
+    from qwen35_compression.glaze2.export import rtn_quantized, write_export
+
+    tensors = _checkpoint(tmp_path / "bf16")
+    module = BODY.removesuffix(".weight").removeprefix("model.language_model.")
+    item = rtn_quantized(tensors[BODY], Option(4, 128))
+    write_export(
+        tmp_path / "bf16",
+        tmp_path / "w4",
+        {module: item},
+        quantize_vision=False,
+        log=lambda _: None,
+    )
+    return tensors, tmp_path / "w4"
+
+
+def test_ladder_add_on_changes_only_the_table(tmp_path: Path) -> None:
+    from safetensors.torch import load_file
+
+    from qwen35_compression.blaze.addon import ladder_export
+
+    tensors, source = _four_bit_export(tmp_path)
+    record = ladder_export(source, tmp_path / "out", PLAN, row_multiple=1, log=lambda _: None)
+    before = load_file(str(source / "model.safetensors"))
+    after = load_file(str(tmp_path / "out" / "model.safetensors"))
+    for key, value in before.items():
+        if key != TIED_TABLE:
+            assert torch.equal(after[key], value), key
+    assert TIED_TABLE not in after
+    assert torch.equal(read_table(tmp_path / "out"), ladder_table(tensors[TIED_TABLE], PLAN))
+    config = json.loads((tmp_path / "out" / "config.json").read_text())
+    groups = config["quantization_config"]["config_groups"]
+    assert {"blaze_hot", "blaze_cold"} <= set(groups) and config[ARCHITECTURE_KEY]["hot_rows"] == 4
+    assert record["upgraded"] == {}
+    with pytest.raises(ValueError, match="already laddered"):
+        ladder_export(tmp_path / "out", tmp_path / "again", PLAN, row_multiple=1)
+
+
+def test_ladder_add_on_widens_planned_units_from_bf16(tmp_path: Path) -> None:
+    from safetensors.torch import load_file
+
+    from qwen35_compression.blaze.addon import ladder_export
+
+    tensors, source = _four_bit_export(tmp_path)
+    module = BODY.removesuffix(".weight")
+    ladder_export(
+        source,
+        tmp_path / "out",
+        PLAN,
+        bf16=tmp_path / "bf16",
+        upgrade={module: Option(8, 128)},
+        row_multiple=1,
+        log=lambda _: None,
+    )
+    after = load_file(str(tmp_path / "out" / "model.safetensors"))
+    codes = unpack(after[f"{module}.weight_packed"], 8, (128, 256))
+    widened = dequantize(codes.float(), after[f"{module}.weight_scale"], Option(8, 128))
+    assert torch.equal(widened, fake_quantize(tensors[BODY], Option(8, 128)))
+    groups = json.loads((tmp_path / "out" / "config.json").read_text())["quantization_config"]
+    assert groups["config_groups"]["blaze_upgrade_w8g128"]["targets"] == [module]
+    with pytest.raises(ValueError, match="BF16 checkpoint"):
+        ladder_export(
+            source, tmp_path / "x", PLAN, upgrade={module: Option(8, 128)}, row_multiple=1
+        )
+
+
+def test_addon_plan_reuses_published_exports(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_addon")
+    full = driver.plan(tmp_path / "a", tmp_path / "o", "S", tmp_path / "prices.json", None)
+    assert [n for n in full if n.startswith("addon:")] == [
+        "addon:gptq",
+        "addon:autoround",
+        "addon:glaze",
+    ]
+    market = full["market"]
+    assert market[market.index("--lower") + 1] == "4" and market[market.index("--upper") + 1] == "8"
+    assert "--vision-bits" not in market  # the vision tower stays as each source stores it
+    build = full["build:blaze_q48"]
+    assert build[build.index("--source") + 1] == str(tmp_path / "o" / "published" / "gptq")
+    assert "--plan" in build and "--bf16" in build
+    assert [n for n in full if n.startswith("score:")] == [
+        "score:addon_gptq",
+        "score:addon_autoround",
+        "score:addon_glaze",
+        "score:blaze_q48",
+    ]
+    pilot = driver.plan(tmp_path / "p", tmp_path / "o", "S", tmp_path / "prices.json", 10)
+    assert list(pilot) == ["addon:gptq", "score:addon_gptq"]
