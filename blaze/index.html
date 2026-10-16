@@ -143,6 +143,8 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
 }
 .tabs button:hover { color: var(--heading); }
 .tabs button[aria-selected="true"] { color: var(--heading); border-bottom-color: var(--accent); }
+.tab-link { margin-left: auto; align-self: center; font: 500 13px/20px var(--sans); color: var(--accent); text-decoration: none; padding: 8px 4px 10px; }
+.tab-link:hover { color: var(--heading); }
 .tab-live { font: 500 10px/14px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); border: 1px solid #3a2118; border-radius: 999px; padding: 1px 7px; }
 /* Board: one column per state, stacking on narrow screens. */
 .board-wrap { padding-block: 48px 96px; }
@@ -207,6 +209,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
   <div class="tabs" role="tablist" aria-label="Page views">
     <button type="button" role="tab" id="tab-report" aria-selected="true" aria-controls="panel-report">Report</button>
     <button type="button" role="tab" id="tab-experiments" aria-selected="false" aria-controls="panel-experiments">Experiments <span class="tab-live">live</span></button>
+    <a class="tab-link" href="https://imjohnzakkam.github.io/qwen35-compression/blaze/standing.html">Where we stand →</a>
   </div>
 
   <div class="layout" id="panel-report" role="tabpanel" aria-labelledby="tab-report">
@@ -238,12 +241,12 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
         <div><dt>What was predicted</dt><dd>On the 4B at a 4-bit export's size: excess loss of 0.0011–0.002 with a 6-bit option, 7–13× below Glaze v2's 0.014, or about 1.1–1.4% flips against 3.29%.</dd></div>
         <div><dt>What was measured</dt><dd>On the 4B at W4A16's size: excess loss <b>0.0017</b> and <b>1.39%</b> flips, inside the prediction, and every panel task within a point of BF16. On the 2B: <b>0.0005</b> against standard W4A16's 0.073, served for real by vLLM at W4A16's size. Full suite on the 4B: 12 of 13 tasks within a point of BF16; MathVista is −1.1, with an interval that includes zero.</dd></div>
         <div><dt>Shippable today</dt><dd>The ladder alone, added to the published GPTQ, AutoRound and Glaze v2 checkpoints, cuts each by 0.86 GB (−23%) with drift unchanged to 0.0001: Glaze v2's quality at <b>2.91 GB</b>, served by vLLM with a small plugin.</dd></div>
-        <div><dt>Cost</dt><dd>₹581.26 (about $6.04) for ten A30 runs, the full suite included.</dd></div>
+        <div><dt>Cost</dt><dd>₹581.26 (about $6.04) for nine A30 runs, the full suite included.</dd></div>
       </dl>
 
 
       <h2 id="results">Results</h2>
-      <p>Ten GPU runs on one A30 each, between October 15 and 16. Every 4B number below comes from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The 2B also ran in its real format.</p>
+      <p>Nine GPU runs on one A30 each, between October 15 and 16. Every 4B number below comes from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The 2B also ran in its real format.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Gate</th><th>Question</th><th>Measured</th><th>Verdict</th><th class="num">Cost</th></tr></thead>
@@ -695,7 +698,7 @@ export(quantize(model, choice), vocab)</pre>
 
   <footer>
     <span>Blaze · draft 15 Oct · results 16 Oct 2026</span>
-    <span>Ten GPU runs · predictions are labeled</span>
+    <span>Nine GPU runs · predictions are labeled</span>
   </footer>
 </div>
 

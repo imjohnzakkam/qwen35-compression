@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Where Blaze Stands</title>
+<meta name="description" content="Where the Blaze compression study stands: what is proven, what ships today, and what is blocked.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Same visual world as the Blaze research page: one dark reading column, figures in panels. */
+:root {
+  --bg: #0a0a0a; --panel: #111111; --line: #222222; --heading: #fafafa; --text: #a1a1a1;
+  --faint: #7a7a7a; --ink: #e8e6df; --accent: #e8593d; --accent-soft: #1d1512;
+  --ok: #8fbf7a; --warn: #d9a441;
+  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html { background: var(--bg); }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 28px; letter-spacing: 0.01em; -webkit-font-smoothing: antialiased; margin: 0; }
+[hidden] { display: none !important; }
+a { color: var(--heading); text-decoration: underline; text-decoration-color: #4a4a4a; text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+strong { color: #e4e4e4; font-weight: 600; }
+.shell { max-width: 760px; margin-inline: auto; padding-inline: 16px; }
+.topbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding-block: 18px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.topbar b { color: var(--ink); font-weight: 500; }
+main { padding-block: 48px 80px; }
+h1 { margin: 0; color: var(--heading); font-weight: 500; font-size: clamp(34px, 6vw, 50px); line-height: 1.06; letter-spacing: -0.03em; text-wrap: balance; }
+.dek { margin: 22px 0 0; font-size: 19px; line-height: 31px; color: #c9c9c9; text-wrap: pretty; }
+.meta { margin-top: 18px; font-family: var(--mono); font-size: 12px; line-height: 20px; color: var(--faint); }
+h2 { color: var(--heading); font-size: 24px; line-height: 32px; font-weight: 600; margin: 72px 0 12px; text-wrap: balance; }
+p { margin: 16px 0 0; text-wrap: pretty; }
+ul { margin: 16px 0 0; padding-left: 22px; }
+li { margin-top: 10px; }
+li::marker { color: #555; }
+.verdicts { display: grid; gap: 12px; margin-top: 36px; }
+@media (min-width: 640px) { .verdicts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.verdict { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; background: #0f0f0f; min-width: 0; }
+.verdict b { display: block; font: 500 11px/16px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.verdict.proven b { color: var(--ok); }
+.verdict.ship b { color: var(--ink); }
+.verdict.blocked b { color: var(--warn); }
+.verdict.spend b { color: var(--faint); }
+.verdict p { margin: 0; font-size: 14.5px; line-height: 23px; color: #cfcfcf; }
+figure { margin: 36px 0; }
+.fig-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.fig-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fig-svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.fig-svg .t-title { font: 600 13px var(--sans); fill: var(--ink); }
+.fig-svg .t-sub, .fig-svg .t-tick { font: 400 10.5px var(--mono); fill: #85827a; }
+.fig-svg .t-axis { font: 600 12px var(--sans); fill: var(--ink); }
+.fig-svg .t-lab { font: 400 10.5px var(--mono); fill: #a29e95; }
+.fig-svg .t-lab.strong { fill: var(--heading); font-weight: 600; }
+.fig-svg .t-note { font: 400 10px var(--mono); fill: #6f6c66; }
+.series.off { display: none; }
+.keys { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 18px; }
+.key { display: inline-flex; align-items: center; gap: 8px; font: 500 12px/18px var(--sans); color: var(--ink); background: transparent; border: 1px solid #2a2a2a; border-radius: 999px; padding: 4px 12px 4px 8px; cursor: pointer; text-align: left; }
+.key i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.key span { font: 400 10.5px var(--mono); color: var(--faint); }
+.key[aria-pressed="false"] { opacity: 0.4; }
+figcaption { margin: 14px 4px 0; font-size: 14px; line-height: 24px; }
+figcaption b { color: #dedede; font-weight: 600; }
+.table-wrap { margin: 22px 0 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 22px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font: 400 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); padding: 12px 14px; border-bottom: 1px solid var(--line); background: #0e0e0e; white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid #1a1a1a; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: #dcdcdc; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.tag { font: 500 10.5px/16px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.tag.ok { color: var(--ok); background: #121a10; }
+.tag.wait { color: var(--warn); background: #1c1709; }
+.note { margin-top: 14px; font-family: var(--mono); font-size: 12px; line-height: 20px; color: var(--faint); }
+footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; color: var(--faint); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; text-transform: uppercase; }
+</style>
+<style>body { margin: 0; }</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar"><span><b>Kiln</b> · Qwen3.5 compression</span><span>Status · 17 Oct 2026</span></header>
+  <main>
+    <h1>Where Blaze stands</h1>
+    <p class="dek">The idea holds: a 4-bit Qwen3.5 checkpoint wastes a quarter of its bytes on vocabulary rows it rarely uses. Moving those bytes is free, and spending them on a 6-bit body brings the 4B to BF16's level at a standard 4-bit file's size. Part of that ships today; the best version waits on one kernel.</p>
+    <div class="meta">Nine A30 runs, 15–16 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a></div>
+
+    <div class="verdicts">
+      <div class="verdict proven"><b>Proven</b><p>The vocabulary ladder costs nothing (0.0002 excess loss). At W4A16's 3.78 GB, a 6-bit Blaze-Q drifts 8.5× less than Glaze v2 and is within a point of BF16 on 12 of 13 tasks.</p></div>
+      <div class="verdict ship"><b>Ships today</b><p>Glaze v2, GPTQ and AutoRound with the ladder: 23% smaller (2.91–2.92 GB) at unchanged quality, 16% faster for one user. The 2B Blaze-Q matches BF16 at W4A16's size, served for real.</p></div>
+      <div class="verdict blocked"><b>Blocked</b><p>The 4B result above runs only as a fake-quantized export: vLLM has no 6-bit kernel, and the first Triton one is 4.6× too slow. On 4- and 8-bit kernels the same budget reaches 0.0235, not 0.0017.</p></div>
+      <div class="verdict spend"><b>Spent</b><p>₹581.26 (about $6.04) of GPU time across every gate, the full suite and four follow-ups. ₹714 left; nothing is running.</p></div>
+    </div>
+
+    <h2>Quality, against BF16</h2>
+    <p>Every model here is a Qwen3.5-4B checkpoint scored on the same questions as BF16. Three axes are benchmarks; two measure drift on BF16's own 1,501 answers: how often the model would pick a different next token, and how likely it finds BF16's tokens. The ladder add-on versions overlap their sources, so they are not drawn separately.</p>
+    <figure>
+      <div class="fig-box">
+        <div class="fig-scroll"><svg viewBox="0 0 640 630" role="img" aria-label="Radar of 4B checkpoints against BF16 on five measures" class="fig-svg radar">
+<text x="40" y="34" class="t-title">five measures, each scaled to BF16</text>
+<text x="40" y="52" class="t-sub">center = 85% of BF16 · dashed ring = BF16 · Qwen3.5-4B, same questions for every model</text>
+<polygon points="320.0,269.3 373.9,308.5 353.3,371.8 286.7,371.8 266.1,308.5" fill="none" stroke="#1f1f22" stroke-width="1"/>
+<text x="326.0" y="273.3" class="t-tick">90%</text>
+<polygon points="320.0,212.7 427.8,291.0 386.6,417.7 253.4,417.7 212.2,291.0" fill="none" stroke="#1f1f22" stroke-width="1"/>
+<text x="326.0" y="216.7" class="t-tick">95%</text>
+<line x1="320" y1="326" x2="320.0" y2="136.0" stroke="#1f1f22" stroke-width="1"/>
+<line x1="320" y1="326" x2="500.7" y2="267.3" stroke="#1f1f22" stroke-width="1"/>
+<line x1="320" y1="326" x2="431.7" y2="479.7" stroke="#1f1f22" stroke-width="1"/>
+<line x1="320" y1="326" x2="208.3" y2="479.7" stroke="#1f1f22" stroke-width="1"/>
+<line x1="320" y1="326" x2="139.3" y2="267.3" stroke="#1f1f22" stroke-width="1"/>
+<polygon points="320.0,156.0 481.7,273.5 419.9,463.5 220.1,463.5 158.3,273.5" fill="none" stroke="#85827a" stroke-width="1.4" stroke-dasharray="5 5"/>
+<g class="series" data-s="gptq"><title>GPTQ W4A16: 3.78 GB · 2.92 GB with ladder</title><polygon points="320.0,209.9 383.5,305.4 407.9,447.0 255.8,414.3 215.1,291.9" fill="#6b8fd6" fill-opacity="0.04" stroke="#6b8fd6" stroke-width="1.6"/>
+<circle cx="320.0" cy="209.9" r="2.8" fill="#6b8fd6"/>
+<circle cx="383.5" cy="305.4" r="2.8" fill="#6b8fd6"/>
+<circle cx="407.9" cy="447.0" r="2.8" fill="#6b8fd6"/>
+<circle cx="255.8" cy="414.3" r="2.8" fill="#6b8fd6"/>
+<circle cx="215.1" cy="291.9" r="2.8" fill="#6b8fd6"/>
+</g>
+<g class="series" data-s="autoround"><title>AutoRound W4A16: 3.78 GB · 2.92 GB with ladder</title><polygon points="320.0,189.9 349.9,316.3 406.4,444.9 250.9,421.1 202.3,287.8" fill="#4fb3a6" fill-opacity="0.04" stroke="#4fb3a6" stroke-width="1.6"/>
+<circle cx="320.0" cy="189.9" r="2.8" fill="#4fb3a6"/>
+<circle cx="349.9" cy="316.3" r="2.8" fill="#4fb3a6"/>
+<circle cx="406.4" cy="444.9" r="2.8" fill="#4fb3a6"/>
+<circle cx="250.9" cy="421.1" r="2.8" fill="#4fb3a6"/>
+<circle cx="202.3" cy="287.8" r="2.8" fill="#4fb3a6"/>
+</g>
+<g class="series" data-s="glaze"><title>Glaze v2: 3.77 GB · 2.91 GB with ladder</title><polygon points="320.0,194.5 479.1,274.3 424.4,469.7 239.7,436.5 173.6,278.4" fill="#d9a441" fill-opacity="0.04" stroke="#d9a441" stroke-width="1.8"/>
+<circle cx="320.0" cy="194.5" r="2.8" fill="#d9a441"/>
+<circle cx="479.1" cy="274.3" r="2.8" fill="#d9a441"/>
+<circle cx="424.4" cy="469.7" r="2.8" fill="#d9a441"/>
+<circle cx="239.7" cy="436.5" r="2.8" fill="#d9a441"/>
+<circle cx="173.6" cy="278.4" r="2.8" fill="#d9a441"/>
+</g>
+<g class="series" data-s="q48"><title>Blaze-Q on 4/8-bit kernels: 3.77 GB · serves today</title><polygon points="320.0,192.9 442.9,286.1 412.4,453.2 243.5,431.3 183.4,281.6" fill="#b48ed8" fill-opacity="0.04" stroke="#b48ed8" stroke-width="1.8" stroke-dasharray="5 4"/>
+<circle cx="320.0" cy="192.9" r="2.8" fill="#b48ed8"/>
+<circle cx="442.9" cy="286.1" r="2.8" fill="#b48ed8"/>
+<circle cx="412.4" cy="453.2" r="2.8" fill="#b48ed8"/>
+<circle cx="243.5" cy="431.3" r="2.8" fill="#b48ed8"/>
+<circle cx="183.4" cy="281.6" r="2.8" fill="#b48ed8"/>
+</g>
+<g class="series" data-s="q6"><title>Blaze-Q, 6-bit body: 3.78 GB · needs a 6-bit kernel</title><polygon points="320.0,156.0 476.5,275.1 421.4,465.5 227.0,454.0 160.1,274.1" fill="#e8593d" fill-opacity="0.10" stroke="#e8593d" stroke-width="2.8"/>
+<circle cx="320.0" cy="156.0" r="3.6" fill="#e8593d"/>
+<circle cx="476.5" cy="275.1" r="3.6" fill="#e8593d"/>
+<circle cx="421.4" cy="465.5" r="3.6" fill="#e8593d"/>
+<circle cx="227.0" cy="454.0" r="3.6" fill="#e8593d"/>
+<circle cx="160.1" cy="274.1" r="3.6" fill="#e8593d"/>
+</g>
+<text x="320.0" y="94.0" text-anchor="middle" class="t-axis">MMLU-Pro (1,001)</text>
+<text x="320.0" y="109.0" text-anchor="middle" class="t-tick">BF16 73.6</text>
+<text x="533.0" y="248.8" text-anchor="start" class="t-axis">MATH-500</text>
+<text x="533.0" y="263.8" text-anchor="start" class="t-tick">BF16 83.4</text>
+<text x="451.7" y="513.2" text-anchor="start" class="t-axis">IFEval</text>
+<text x="451.7" y="528.2" text-anchor="start" class="t-tick">BF16 82.3</text>
+<text x="188.3" y="513.2" text-anchor="end" class="t-axis">Token agreement</text>
+<text x="188.3" y="528.2" text-anchor="end" class="t-tick">BF16 99.6</text>
+<text x="107.0" y="248.8" text-anchor="end" class="t-axis">Token likelihood</text>
+<text x="107.0" y="263.8" text-anchor="end" class="t-tick">BF16 88.0</text>
+</svg></div>
+        <div class="keys" role="group" aria-label="Show or hide a model"><button type="button" class="key" id="key-gptq" data-s="gptq" aria-pressed="true"><i style="background:#6b8fd6"></i>GPTQ W4A16<span>3.78 GB · 2.92 GB with ladder</span></button>
+<button type="button" class="key" id="key-autoround" data-s="autoround" aria-pressed="true"><i style="background:#4fb3a6"></i>AutoRound W4A16<span>3.78 GB · 2.92 GB with ladder</span></button>
+<button type="button" class="key" id="key-glaze" data-s="glaze" aria-pressed="true"><i style="background:#d9a441"></i>Glaze v2<span>3.77 GB · 2.91 GB with ladder</span></button>
+<button type="button" class="key" id="key-q48" data-s="q48" aria-pressed="true"><i style="background:#b48ed8"></i>Blaze-Q on 4/8-bit kernels<span>3.77 GB · serves today</span></button>
+<button type="button" class="key" id="key-q6" data-s="q6" aria-pressed="true"><i style="background:#e8593d"></i>Blaze-Q, 6-bit body<span>3.78 GB · needs a 6-bit kernel</span></button></div>
+      </div>
+      <figcaption><b>The 6-bit Blaze-Q traces BF16's ring on all five axes.</b> Glaze v2 matches it on MATH-500 and IFEval but drifts more; GPTQ and AutoRound fall short on MATH-500 and on both drift axes. The 4/8-bit Blaze-Q, which serves today, sits between Glaze v2 and AutoRound. Tap a model to hide it.</figcaption>
+    </figure>
+
+    <h2>Size, against drift</h2>
+    <p>Down is better quality, left is a smaller file. The ladder moves every published checkpoint left by 0.86 GB without moving it up. The 6-bit Blaze-Q is the lowest point at the standard size, and the only one that cannot be served yet.</p>
+    <figure>
+      <div class="fig-box"><div class="fig-scroll"><svg viewBox="0 0 640 440" role="img" aria-label="Checkpoint size against excess loss for every 4B checkpoint" class="fig-svg">
+<defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4a4844"/></marker></defs>
+<text x="40" y="34" class="t-title">size on disk against drift, Qwen3.5-4B</text>
+<text x="40" y="52" class="t-sub">lower-left is better · filled: serves today · hollow: needs a 6-bit kernel</text>
+<line x1="140" y1="380.0" x2="600" y2="380.0" stroke="#1f1f22"/>
+<text x="132" y="384.0" text-anchor="end" class="t-tick">0.001</text>
+<line x1="140" y1="312.0" x2="600" y2="312.0" stroke="#1f1f22"/>
+<text x="132" y="316.0" text-anchor="end" class="t-tick">0.003</text>
+<line x1="140" y1="237.5" x2="600" y2="237.5" stroke="#1f1f22"/>
+<text x="132" y="241.5" text-anchor="end" class="t-tick">0.01</text>
+<line x1="140" y1="169.6" x2="600" y2="169.6" stroke="#1f1f22"/>
+<text x="132" y="173.6" text-anchor="end" class="t-tick">0.03</text>
+<line x1="140" y1="95.1" x2="600" y2="95.1" stroke="#1f1f22"/>
+<text x="132" y="99.1" text-anchor="end" class="t-tick">0.1</text>
+<line x1="178.3" y1="70" x2="178.3" y2="380" stroke="#1f1f22"/>
+<text x="178.3" y="398" text-anchor="middle" class="t-tick">2.5 GB</text>
+<line x1="274.2" y1="70" x2="274.2" y2="380" stroke="#1f1f22"/>
+<text x="274.2" y="398" text-anchor="middle" class="t-tick">3.0 GB</text>
+<line x1="370.0" y1="70" x2="370.0" y2="380" stroke="#1f1f22"/>
+<text x="370.0" y="398" text-anchor="middle" class="t-tick">3.5 GB</text>
+<line x1="465.8" y1="70" x2="465.8" y2="380" stroke="#1f1f22"/>
+<text x="465.8" y="398" text-anchor="middle" class="t-tick">4.0 GB</text>
+<line x1="561.7" y1="70" x2="561.7" y2="380" stroke="#1f1f22"/>
+<text x="561.7" y="398" text-anchor="middle" class="t-tick">4.5 GB</text>
+<text x="66" y="225.0" class="t-tick" transform="rotate(-90 66 225.0)" text-anchor="middle">excess loss over BF16 (log)</text>
+<line x1="416.7" y1="133.1" x2="265.8" y2="133.0" stroke="#4a4844" stroke-width="1.2" stroke-dasharray="3 4" marker-end="url(#arr)"/>
+<line x1="416.7" y1="149.2" x2="265.8" y2="149.2" stroke="#4a4844" stroke-width="1.2" stroke-dasharray="3 4" marker-end="url(#arr)"/>
+<line x1="414.8" y1="215.4" x2="263.9" y2="215.0" stroke="#4a4844" stroke-width="1.2" stroke-dasharray="3 4" marker-end="url(#arr)"/>
+<text x="341.2" y="255.3" text-anchor="middle" class="t-note">ladder add-on: −0.86 GB, same drift</text>
+<circle cx="423.7" cy="133.1" r="5.5" fill="#6b8fd6"><title>GPTQ: 3.78 GB, excess 0.0541</title></circle>
+<text x="433.7" y="127.1" text-anchor="start" class="t-lab">GPTQ · 0.0541</text>
+<circle cx="423.7" cy="149.2" r="5.5" fill="#4fb3a6"><title>AutoRound: 3.78 GB, excess 0.0417</title></circle>
+<text x="433.7" y="153.2" text-anchor="start" class="t-lab">AutoRound · 0.0417</text>
+<circle cx="421.8" cy="215.4" r="5.5" fill="#d9a441"><title>Glaze v2: 3.77 GB, excess 0.0143</title></circle>
+<text x="431.8" y="219.4" text-anchor="start" class="t-lab">Glaze v2 · 0.0143</text>
+<circle cx="422.5" cy="184.7" r="5.5" fill="#b48ed8"><title>Blaze-Q 4/8: 3.774 GB, excess 0.0235</title></circle>
+<text x="432.5" y="188.7" text-anchor="start" class="t-lab">Blaze-Q 4/8 · 0.0235</text>
+<circle cx="423.7" cy="347.2" r="6.5" fill="none" stroke="#e8593d" stroke-width="2.2"><title>Blaze-Q 6-bit: 3.78 GB, excess 0.0017 (fake-quantized)</title></circle>
+<text x="433.7" y="351.2" text-anchor="start" class="t-lab strong">Blaze-Q 6-bit · 0.0017</text>
+<circle cx="258.8" cy="133.0" r="5.5" fill="#6b8fd6"><title>GPTQ + ladder: 2.92 GB, excess 0.0542</title></circle>
+<text x="248.8" y="127.0" text-anchor="end" class="t-lab">GPTQ + ladder · 0.0542</text>
+<circle cx="258.8" cy="149.2" r="5.5" fill="#4fb3a6"><title>AutoRound + ladder: 2.92 GB, excess 0.0417</title></circle>
+<text x="248.8" y="153.2" text-anchor="end" class="t-lab">AutoRound + ladder · 0.0417</text>
+<circle cx="256.9" cy="215.0" r="5.5" fill="#d9a441"><title>Glaze v2 + ladder: 2.91 GB, excess 0.0144</title></circle>
+<text x="246.9" y="219.0" text-anchor="end" class="t-lab strong">Glaze v2 + ladder · 0.0144</text>
+<circle cx="197.5" cy="101.7" r="5.5" fill="#85827a"><title>Blaze-S (own GPTQ): 2.6 GB, excess 0.0899</title></circle>
+<text x="207.5" y="105.7" text-anchor="start" class="t-lab">Blaze-S (own GPTQ) · 0.0899</text>
+<text x="40" y="426" class="t-tick">BF16 is 9.32 GB with no excess loss · INT8 W8A8 is 5.51 GB at 0.011</text>
+</svg></div></div>
+      <figcaption><b>Glaze v2 with the ladder is the best checkpoint you can serve today:</b> 2.91 GB at 0.0144 excess loss. Blaze-S, with its own weaker 4-bit GPTQ, is the smallest but the least accurate.</figcaption>
+    </figure>
+
+    <h2>What you can ship today</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Checkpoint</th><th class="num">Size</th><th class="num">Excess loss</th><th class="num">One stream</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Glaze v2 + ladder (4B)</td><td class="num">2.91 GB</td><td class="num">0.0144</td><td class="num">≈175 tok/s*</td><td><span class="tag ok">Ready</span></td></tr>
+          <tr><td>AutoRound + ladder (4B)</td><td class="num">2.92 GB</td><td class="num">0.0417</td><td class="num">≈175 tok/s*</td><td><span class="tag ok">Ready</span></td></tr>
+          <tr><td>GPTQ + ladder (4B)</td><td class="num">2.92 GB</td><td class="num">0.0542</td><td class="num">175 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
+          <tr><td>Blaze-Q, 8-bit body (2B)</td><td class="num">2.39 GB</td><td class="num">0.0005</td><td class="num">229 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
+          <tr><td>Blaze-Q, 6-bit body (4B)</td><td class="num">3.78 GB</td><td class="num">0.0017</td><td class="num">—</td><td><span class="tag wait">Needs kernel</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">All on one A30 with vLLM 0.29 and the blaze-vllm plugin. *Measured for GPTQ + ladder; the others store the same body format and size. For reference, GPTQ W4A16 without the ladder: 3.78 GB, 151 tok/s.</p>
+
+    <h2>What is in the way</h2>
+    <ul>
+      <li><strong>A 6-bit kernel.</strong> The 4B's best result needs 6-bit weights served at Marlin's speed. A first Triton kernel is correct but moves about 105 GB/s against Marlin's 500. Building 6-bit into Marlin itself is several days of CUDA work.</li>
+      <li><strong>The vocabulary held twice.</strong> The plugin keeps each table block once per kernel, 0.3–0.4 GB more GPU memory than needed. The single-copy head works but needs the same faster kernel.</li>
+      <li><strong>Blaze's own 4-bit GPTQ.</strong> It barely beats plain rounding at 4 bits, which is why Blaze-S lost accuracy. Reusing the published bodies, as the add-on does, sidesteps it.</li>
+      <li><strong>One MathVista point.</strong> The full suite missed its 1-point rule on MathVista alone (−1.1, interval −2.6 to +0.5), within noise.</li>
+    </ul>
+
+    <h2>Decisions waiting on you</h2>
+    <ul>
+      <li><strong>Start the 6-bit kernel project</strong>, the only path to serving the equal-size 4B result.</li>
+      <li><strong>Publish to Hugging Face</strong>, private first: Glaze v2 + ladder at 2.91 GB, and the real 2B Blaze-Q.</li>
+      <li><strong>Confirm the yardstick:</strong> every comparison here holds checkpoint size equal, not bits per weight.</li>
+      <li><strong>Review and merge</strong> PR #34 (Blaze) and PR #33 (the Glaze README).</li>
+      <li><strong>The 9B check</strong> stays on hold, as asked.</li>
+    </ul>
+  </main>
+  <footer><span>Blaze · status 17 Oct 2026</span><span>Measured unless labeled</span></footer>
+</div>
+
+<script>
+(function () {
+  document.querySelectorAll(".key").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var on = b.getAttribute("aria-pressed") !== "true";
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      var g = document.querySelector('.series[data-s="' + b.dataset.s + '"]');
+      if (g) g.classList.toggle("off", !on);
+    });
+  });
+})();
+</script>
+</body>
+</html>
