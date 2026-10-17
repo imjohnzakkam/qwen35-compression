@@ -30,7 +30,7 @@ from qwen35_compression.blaze.real import (
     read_table,
     write_real_export,
 )
-from qwen35_compression.glaze2.export import unpack
+from qwen35_compression.glaze2.export import pack, quantization_config, unpack
 from qwen35_compression.glaze2.quant import Option, dequantize, fake_quantize
 
 PLAN = LadderPlan((5, 1, 9, 0, 2, 3, 4, 6, 7, 8, 10, 11, 12, 13, 14, 15), 4)
@@ -534,3 +534,81 @@ def test_addon_plan_reuses_published_exports(tmp_path: Path) -> None:
     ]
     pilot = driver.plan(tmp_path / "p", tmp_path / "o", "S", tmp_path / "prices.json", 10)
     assert list(pilot) == ["addon:gptq", "score:addon_gptq"]
+
+
+def test_six_bit_groups_run_on_eight_bit_words_with_the_same_codes() -> None:
+    sys.path.insert(0, "plugins/blaze_vllm")
+    from blaze_vllm import widen
+    from compressed_tensors.quantization import QuantizationArgs
+
+    generator = torch.Generator().manual_seed(5)
+    codes = torch.randint(-32, 32, (5, 384), generator=generator)
+    six = pack(codes, 6)
+    assert six.shape == (5, 72)  # dense: exactly 6 bits a weight
+    assert torch.equal(widen.widen_packed(six), pack(codes, 8))
+    with pytest.raises(ValueError):
+        widen.widen_packed(six[:, :70])
+
+    config = quantization_config({Option(6, 128): ["a.q_proj", "a.k_proj"], Option(8, 128): ["b"]})
+    assert widen.six_bit_modules(config) == {"a.q_proj", "a.k_proj"}
+    with pytest.raises(ValueError):
+        group = {"targets": ["Linear"], "weights": {"num_bits": 6}}
+        widen.six_bit_modules({"config_groups": {"g": group}})
+
+    def args(bits: int) -> QuantizationArgs:
+        return QuantizationArgs(num_bits=bits, group_size=128, strategy="group", symmetric=True)
+
+    schemes = types.SimpleNamespace(
+        target_scheme_map={"a.q_proj": {"weights": args(6)}, "b": {"weights": args(8)}}
+    )
+    assert widen.widen_schemes(schemes) == 1
+    assert [s["weights"].num_bits for s in schemes.target_scheme_map.values()] == [8, 8]
+
+    weights = [
+        ("a.q_proj.weight_packed", six),
+        ("a.q_proj.weight_scale", torch.ones(5, 3)),
+        ("b.weight_packed", pack(codes, 8)),
+    ]
+    out = dict(widen.widened(iter(weights), {"a.q_proj"}))
+    assert torch.equal(out["a.q_proj.weight_packed"], pack(codes, 8))
+    assert out["b.weight_packed"] is weights[2][1]
+
+
+def test_q6_plan_serves_both_ways_and_scores_domains(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_q6")
+    plan_file = tmp_path / "plan.json"
+    full = driver.plan(tmp_path / "q", tmp_path / "e", tmp_path / "o", "S", plan_file, None)
+    assert list(full) == [
+        "export",
+        "score:native",
+        "speed:native",
+        "score:w8",
+        "speed:w8",
+        "domain_answers",
+        "domain:bf16",
+        "build:ladder",
+        "domain:ladder",
+        "build:ladder_ml",
+        "domain:ladder_ml",
+        "score:ladder_ml",
+        "domain:gptq_w4a16_g128",
+        "domain:blaze_q6",
+    ]
+    export = full["export"]
+    assert export[export.index("--bits") + 1] == "6" and "--real" in export
+    assert export[export.index("--plan") + 1] == str(plan_file)
+    assert full["score:native"][0] != "env"
+    assert full["score:w8"][:2] == ["env", "BLAZE_W6_AS_W8=1"]
+    assert full["domain:blaze_q6"][:2] == ["env", "BLAZE_W6_AS_W8=1"]
+    assert all(full[k][-1] == "--domains" for k in full if k.startswith("domain:"))
+    census = full["build:ladder_ml"]
+    assert census[census.index("--census") + 1] == "data/blaze/census_multilingual.json"
+    assert census[census.index("--cover") + 1] == "1e-9"  # 65,536 rows, as the English ladder
+    assert "--cover" not in full["build:ladder"]
+    pilot = driver.plan(tmp_path / "p", tmp_path / "e", tmp_path / "o", "S", plan_file, 10)
+    assert list(pilot) == ["export", "score:native", "score:w8", "domain_answers", "domain:bf16"]
+    assert pilot["export"][-2:] == ["--layers", "0,1"]
+
+    scores = _load_script("drift_scores")
+    assert scores.groups("domain_ml_zh") == ("ml", "ml_zh", "both")
+    assert scores.groups("minerva_math500") == ("math500", "both")

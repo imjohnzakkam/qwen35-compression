@@ -33,6 +33,8 @@ CAP_SLACK = 12
 # The "long" cohort: finished answers of at least this many tokens, so early and late positions
 # are compared within the same answers rather than across easy and hard questions.
 LONG_ANSWER = 2048
+# Answers outside the record's benchmarks (scripts/blaze_domain_answers.py): domain_<group>_<name>.
+DOMAIN_PREFIX = "domain_"
 
 
 @dataclass
@@ -50,17 +52,24 @@ def task_of(path: Path) -> str:
 
 
 def load_traces(
-    directory: Path, subset: dict[str, list[int]], limit: int | None = None
+    directory: Path, subset: dict[str, list[int]], limit: int | None = None, domains: bool = False
 ) -> list[Trace]:
-    """BF16 answers for MATH-500 and the MMLU-Pro subset, from lm-eval sample files."""
+    """BF16 answers for MATH-500 and the MMLU-Pro subset, from lm-eval sample files; with
+    `domains`, the `domain_*` files of scripts/blaze_domain_answers.py instead."""
     traces: list[Trace] = []
     files = [
         path
         for path in sorted(directory.rglob("*.jsonl"))
-        if task_of(path) == "minerva_math500" or task_of(path) in subset
+        if (
+            task_of(path).startswith(DOMAIN_PREFIX)
+            if domains
+            else task_of(path) == "minerva_math500" or task_of(path) in subset
+        )
     ]
     if not files:
-        raise FileNotFoundError(f"no MATH-500 or MMLU-Pro samples under {directory}")
+        raise FileNotFoundError(
+            f"no {'domain' if domains else 'MATH-500 or MMLU-Pro'} samples under {directory}"
+        )
     per_task: dict[str, list[Trace]] = {}
     for path in files:
         task = task_of(path)
@@ -197,13 +206,22 @@ def cohorts(answer_tokens: int) -> list[str]:
     return names
 
 
+def groups(task: str) -> tuple[str, ...]:
+    """The summaries an answer of `task` counts towards: its group and "both" (every answer);
+    a domain answer also counts towards its own file's summary."""
+    if task.startswith(DOMAIN_PREFIX):
+        name = task.removeprefix(DOMAIN_PREFIX)
+        return (name.split("_")[0], name, "both")
+    return ("math500" if task.startswith("minerva") else "mmlu_pro", "both")
+
+
 def score(args: argparse.Namespace) -> None:
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
     from vllm.inputs import TokensPrompt
 
     subset = json.loads(Path(args.subset).read_text(encoding="utf-8"))
-    traces = load_traces(Path(args.traces), subset, args.limit)
+    traces = load_traces(Path(args.traces), subset, args.limit, args.domains)
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer or args.model)
     encoded = []
     for trace in traces:
@@ -244,8 +262,7 @@ def score(args: argparse.Namespace) -> None:
                 ranks.append(int(entry.rank))
                 logprobs.append(float(entry.logprob))
             per_answer.append(answer_record(trace.task, trace.doc_id, ranks, logprobs))
-            task = "math500" if trace.task.startswith("minerva") else "mmlu_pro"
-            for group in (task, "both"):
+            for group in groups(trace.task):
                 for cohort in cohorts(len(answer)):
                     tallies.setdefault(group, {}).setdefault(cohort, Tally()).add(ranks, logprobs)
         print(
@@ -335,6 +352,9 @@ def main() -> None:
     run.add_argument("--tokenizer", help="Defaults to --model")
     run.add_argument("--output", required=True)
     run.add_argument("--limit", type=int, help="First N answers per task (pilot)")
+    run.add_argument(
+        "--domains", action="store_true", help="Score the domain_* answers (code, multilingual)"
+    )
     run.add_argument("--batch", type=int, default=128, help="Answers per vLLM call")
     run.add_argument("--max-model-len", type=int, default=12288)
     run.add_argument("--gpu-memory-utilization", type=float, default=0.85)

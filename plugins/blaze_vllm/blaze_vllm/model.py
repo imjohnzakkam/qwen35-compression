@@ -6,6 +6,9 @@ order. Lookups gather and dequantize rows with vLLM's quantized-embedding kernel
 both blocks through vLLM's quantized LM head (Marlin), which holds each block a second time in
 its own layout; with `BLAZE_SINGLE_COPY=1` they come instead from the lookup blocks themselves,
 through a dequantizing matmul (`blaze_vllm.head`), so each block is held once.
+
+With `BLAZE_W6_AS_W8=1`, a checkpoint's 6-bit body groups run on the 8-bit kernels with the same
+codes (`blaze_vllm.widen`); without it, vLLM serves them with its own 6-bit kernel.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from vllm.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
 from vllm.model_executor.models.qwen3_5 import Qwen3_5ForConditionalGeneration
+
+from blaze_vllm import widen
 
 CONFIG_KEY = "blaze_vocab"
 SINGLE_COPY_ENV = "BLAZE_SINGLE_COPY"
@@ -144,8 +149,14 @@ class BlazeQwen3_5ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
     """Qwen3.5 with Blaze's tiered vocabulary table when the config names one."""
 
     def __init__(self, *, vllm_config, prefix: str = "model"):
-        super().__init__(vllm_config=vllm_config, prefix=prefix)
         config = vllm_config.model_config.hf_config
+        six_bit: set[str] = set()
+        if os.environ.get(widen.ENV) == "1":
+            six_bit = widen.six_bit_modules(getattr(config, "quantization_config", None) or {})
+            if six_bit and not widen.widen_schemes(vllm_config.quant_config):
+                raise ValueError("the checkpoint's 6-bit groups are not in vLLM's quant config")
+        super().__init__(vllm_config=vllm_config, prefix=prefix)
+        self.six_bit = six_bit
         blaze = getattr(config, CONFIG_KEY, None)
         if blaze is None:
             return
@@ -165,3 +176,8 @@ class BlazeQwen3_5ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
         )
         language.model.embed_tokens = vocab
         language.lm_head = vocab
+
+    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
+        if self.six_bit:
+            weights = widen.widened(weights, self.six_bit)
+        return super().load_weights(weights)
