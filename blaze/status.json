@@ -17,12 +17,6 @@
    "label": "Next"
   }
  ],
- "spend": {
-  "rupees": 766.14,
-  "dollars": 7.96,
-  "label": "₹766.14 (about $7.96) across all GPU runs"
- },
- "updated": "2026-10-17T23:17:57Z",
  "cards": [
   {
    "id": "V1",
@@ -30,7 +24,7 @@
    "model": "plugin",
    "title": "Vocabulary held once",
    "summary": "Each vocabulary block is held once: lookups read the Marlin head's own copy. −0.41 GB GPU memory per 4B checkpoint (Blaze-Q 3.92 GB, = GPTQ W4A16; Blaze-S 2.74 GB), same drift and single-stream speed.",
-   "cost": "₹80.35 (two runs; over cap by ₹15.67)",
+   "cost": "≈₹60 so far · cap ₹60",
    "details": [
     [
      "Rows",
@@ -56,7 +50,42 @@
      "Runs",
      "r_34835ea9 (17 Oct), r_a3c04262 (18 Oct)"
     ]
-   ]
+   ],
+   "steps": [
+    {
+     "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
+     "status": "pending"
+    },
+    {
+     "label": "Build real Blaze-Q",
+     "status": "pending"
+    },
+    {
+     "label": "Exact rows on vLLM's Marlin repack",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-S, one copy",
+     "status": "pending"
+    },
+    {
+     "label": "Speed and memory: Blaze-S",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-Q, one copy",
+     "status": "pending"
+    },
+    {
+     "label": "Speed and memory: Blaze-Q",
+     "status": "pending"
+    }
+   ],
+   "progress": {
+    "pct": null,
+    "label": "Setting up the GPU"
+   },
+   "elapsed": "2h 00m on the GPU"
   },
   {
    "id": "S2",
@@ -612,5 +641,11 @@
     ]
    ]
   }
- ]
+ ],
+ "spend": {
+  "rupees": 750.47,
+  "dollars": 7.79,
+  "label": "₹750.47 (about $7.79) across all GPU runs"
+ },
+ "updated": "2026-10-17T23:19:46Z"
 }
