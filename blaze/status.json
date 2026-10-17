@@ -24,7 +24,7 @@
    "model": "4B",
    "title": "Real 6-bit Blaze-Q + languages",
    "summary": "G2b's Blaze-Q as a real checkpoint at W4A16's size, served on vLLM's own 6-bit kernel and on 8-bit Marlin; and the ladder's drift on code and 11 languages.",
-   "cost": "≈₹7 so far · cap ₹80",
+   "cost": "≈₹14 so far · cap ₹80",
    "details": [
     [
      "Question",
@@ -42,11 +42,11 @@
    "steps": [
     {
      "label": "Pilot: 2-layer export, both modes, domains",
-     "status": "running"
+     "status": "passed"
     },
     {
      "label": "Build real 6-bit Blaze-Q",
-     "status": "pending"
+     "status": "running"
     },
     {
      "label": "Drift: native 6-bit kernel",
@@ -103,9 +103,9 @@
    ],
    "progress": {
     "pct": 100,
-    "label": "Pilot: 2-layer export, both modes, domains · 723 of 723 loading weights"
+    "label": "Build real 6-bit Blaze-Q · 723 of 723 loading weights"
    },
-   "elapsed": "0h 10m on the GPU"
+   "elapsed": "0h 20m on the GPU"
   },
   {
    "id": "G4",
@@ -563,9 +563,9 @@
   }
  ],
  "spend": {
-  "rupees": 588.32,
-  "dollars": 6.11,
-  "label": "₹588.32 (about $6.11) across all GPU runs"
+  "rupees": 594.87,
+  "dollars": 6.18,
+  "label": "₹594.87 (about $6.18) across all GPU runs"
  },
- "updated": "2026-10-17T04:45:23Z"
+ "updated": "2026-10-17T04:55:28Z"
 }
