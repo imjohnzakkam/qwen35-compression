@@ -17,67 +17,42 @@
    "label": "Next"
   }
  ],
+ "spend": {
+  "rupees": 685.79,
+  "dollars": 7.12,
+  "label": "₹685.79 (about $7.12) across all GPU runs"
+ },
+ "updated": "2026-10-17T09:36:34Z",
  "cards": [
   {
    "id": "S2",
-   "column": "running",
+   "column": "done",
    "model": "4B",
    "title": "Blaze-S, corrected",
-   "summary": "The published AutoRound W4A16 body with the multilingual ladder and an 8-bit vision tower: 2.598 GB (−31%). Measuring drift, speed and MMMU.",
-   "cost": "≈₹26 so far · cap ₹65",
+   "summary": "AutoRound's quality at 2.60 GB (−31%): excess loss 0.0418 against 0.0417, one stream 174 tok/s against 151, GPU weights 3.15 GB against 3.92. MMMU within noise.",
+   "cost": "₹32.81",
    "details": [
     [
      "Question",
-     "With a good 4-bit body, does Blaze-S keep AutoRound's quality (0.042) at 31% less size and more speed?"
+     "With the published AutoRound body, does Blaze-S keep its quality at 31% less size?"
     ],
     [
-     "Why",
-     "The first Blaze-S used this repo's own 4-bit GPTQ, barely better than rounding (0.090)."
+     "Measured",
+     "2,598,000,440 B. Excess loss 0.0418 (AutoRound 0.0417), flips 4.97%. One stream 174 tok/s, batched 2,861 (W4A16: 151, 3,128). GPU weights 3.15 GB."
+    ],
+    [
+     "MMMU",
+     "65.8 against AutoRound's 66.9 and BF16's 69.6; paired −1.1 (−3.3 to +1.0) against AutoRound."
+    ],
+    [
+     "Recipe",
+     "Published body copied as is; vocabulary laddered on the multilingual census; 98 vision Linears at 8-bit g128. Rounding only, no calibration."
     ],
     [
      "Run",
-     "r_37d0bd84 on A30 539071, 17 Oct"
+     "r_37d0bd84, 17 Oct 08:42–09:31 UTC"
     ]
-   ],
-   "steps": [
-    {
-     "label": "Pilot: drift on 10 answers",
-     "status": "passed"
-    },
-    {
-     "label": "Build corrected Blaze-S",
-     "status": "reused"
-    },
-    {
-     "label": "Drift on BF16's answers",
-     "status": "passed"
-    },
-    {
-     "label": "Speed and memory",
-     "status": "passed"
-    },
-    {
-     "label": "Vision environment",
-     "status": "passed"
-    },
-    {
-     "label": "Plugin in vision env",
-     "status": "passed"
-    },
-    {
-     "label": "Vision preflight",
-     "status": "passed"
-    },
-    {
-     "label": "MMMU (val)",
-     "status": "running"
-    }
-   ],
-   "progress": {
-    "pct": 100,
-    "label": "MMMU (val) · 15 of 15 fetching 15 files"
-   },
-   "elapsed": "0h 40m on the GPU"
+   ]
   },
   {
    "id": "Q6",
@@ -478,7 +453,7 @@
    "column": "missed",
    "model": "4B",
    "title": "Blaze-S: the smaller 4B",
-   "summary": "31% smaller than GPTQ W4A16 (2.60 GB) and 16% faster single-stream, but less accurate: its own 4-bit GPTQ is weaker than the published one.",
+   "summary": "31% smaller than GPTQ W4A16 (2.60 GB) and 16% faster single-stream, but less accurate: its own 4-bit GPTQ is weaker than the published one. Superseded by Blaze-S, corrected.",
    "cost": "₹55.62",
    "details": [
     [
@@ -603,11 +578,5 @@
     ]
    ]
   }
- ],
- "spend": {
-  "rupees": 679.43,
-  "dollars": 7.06,
-  "label": "₹679.43 (about $7.06) across all GPU runs"
- },
- "updated": "2026-10-17T09:23:03Z"
+ ]
 }

@@ -78,13 +78,13 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
   <main>
     <h1>Where Blaze stands</h1>
     <p class="dek">The idea holds: a 4-bit Qwen3.5 checkpoint wastes a quarter of its bytes on vocabulary rows it rarely uses. Moving those bytes is free, and spending them on a 6-bit body brings the 4B to BF16's level at a standard 4-bit file's size. As of 17 October all of it serves on stock vLLM, using vLLM's own 6-bit kernel.</p>
-    <div class="meta">Eleven A30 runs, 15–17 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a></div>
+    <div class="meta">Twelve A30 runs, 15–17 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a></div>
 
     <div class="verdicts">
       <div class="verdict proven"><b>Proven</b><p>The vocabulary ladder costs nothing (0.0002 excess loss). At W4A16's 3.78 GB, a 6-bit Blaze-Q drifts 8.5× less than Glaze v2 and is within a point of BF16 on 12 of 13 tasks.</p></div>
-      <div class="verdict ship"><b>Ships today</b><p>Glaze v2, GPTQ and AutoRound with the ladder: 23% smaller (2.91–2.92 GB) at unchanged quality, 16% faster for one user. The 2B Blaze-Q matches BF16 at W4A16's size, served for real.</p></div>
+      <div class="verdict ship"><b>Ships today</b><p>Glaze v2, GPTQ and AutoRound with the ladder: 23% smaller (2.91–2.92 GB) at unchanged quality, 16% faster for one user. Blaze-S on AutoRound's body: 2.60 GB at AutoRound's quality, 174 tok/s. The 2B Blaze-Q matches BF16 at W4A16's size, served for real.</p></div>
       <div class="verdict ship"><b>Unblocked</b><p>The real 4B Blaze-Q, 385 KB under GPTQ W4A16's file, runs on vLLM 0.29's bundled 6-bit kernel with the same 0.0017 drift, at 147 tokens a second for one user against GPTQ's 151. No custom kernel was needed.</p></div>
-      <div class="verdict spend"><b>Spent</b><p>₹652.98 (about $6.78) of GPU time across every gate, the full suite and six follow-ups. ₹643 left; nothing is running.</p></div>
+      <div class="verdict spend"><b>Spent</b><p>₹685.79 (about $7.12) of GPU time across every gate, the full suite and seven follow-ups. ₹610 left; nothing is running.</p></div>
     </div>
 
     <h2>Quality, against BF16</h2>
@@ -204,14 +204,16 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
 <circle cx="258.8" cy="133.0" r="5.5" fill="#6b8fd6"><title>GPTQ + ladder: 2.92 GB, excess 0.0542</title></circle>
 <text x="248.8" y="127.0" text-anchor="end" class="t-lab">GPTQ + ladder · 0.0542</text>
 <circle cx="258.8" cy="149.2" r="5.5" fill="#4fb3a6"><title>AutoRound + ladder: 2.92 GB, excess 0.0417</title></circle>
-<text x="248.8" y="153.2" text-anchor="end" class="t-lab">AutoRound + ladder · 0.0417</text>
+<text x="258.8" y="169.2" text-anchor="middle" class="t-lab">AutoRound + ladder · 0.0417</text>
 <circle cx="256.9" cy="215.0" r="5.5" fill="#d9a441"><title>Glaze v2 + ladder: 2.91 GB, excess 0.0144</title></circle>
 <text x="246.9" y="219.0" text-anchor="end" class="t-lab strong">Glaze v2 + ladder · 0.0144</text>
 <circle cx="197.5" cy="101.7" r="5.5" fill="#85827a"><title>Blaze-S (own GPTQ): 2.6 GB, excess 0.0899</title></circle>
 <text x="207.5" y="105.7" text-anchor="start" class="t-lab">Blaze-S (own GPTQ) · 0.0899</text>
+<circle cx="197.1" cy="149.1" r="5.5" fill="#4fb3a6"><title>Blaze-S: 2.598 GB, excess 0.0418</title></circle>
+<text x="187.1" y="153.1" text-anchor="end" class="t-lab">Blaze-S · 0.0418</text>
 <text x="40" y="426" class="t-tick">BF16 is 9.32 GB with no excess loss · INT8 W8A8 is 5.51 GB at 0.011</text>
 </svg></div></div>
-      <figcaption><b>Two checkpoints lead:</b> the real 6-bit Blaze-Q at 3.78 GB and 0.0017 excess loss, and Glaze v2 with the ladder at 2.91 GB and 0.0144. Blaze-S, with its own weaker 4-bit GPTQ, is the smallest but the least accurate.</figcaption>
+      <figcaption><b>Two checkpoints lead:</b> the real 6-bit Blaze-Q at 3.78 GB and 0.0017 excess loss, and Glaze v2 with the ladder at 2.91 GB and 0.0144. Blaze-S on AutoRound's body is the smallest at AutoRound's quality; the first Blaze-S, on this repo's own 4-bit GPTQ, is the least accurate.</figcaption>
     </figure>
 
     <h2>What you can ship today</h2>
@@ -219,6 +221,7 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
       <table>
         <thead><tr><th>Checkpoint</th><th class="num">Size</th><th class="num">Excess loss</th><th class="num">One stream</th><th>Status</th></tr></thead>
         <tbody>
+          <tr><td>Blaze-S: AutoRound + ladder + 8-bit vision (4B)</td><td class="num">2.60 GB</td><td class="num">0.0418</td><td class="num">174 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
           <tr><td>Glaze v2 + ladder (4B)</td><td class="num">2.91 GB</td><td class="num">0.0144</td><td class="num">≈175 tok/s*</td><td><span class="tag ok">Ready</span></td></tr>
           <tr><td>AutoRound + ladder (4B)</td><td class="num">2.92 GB</td><td class="num">0.0417</td><td class="num">≈175 tok/s*</td><td><span class="tag ok">Ready</span></td></tr>
           <tr><td>GPTQ + ladder (4B)</td><td class="num">2.92 GB</td><td class="num">0.0542</td><td class="num">175 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
