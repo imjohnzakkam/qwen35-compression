@@ -368,6 +368,39 @@ Panel against the same questions: MMLU-Pro (1001) 67.9 (GPTQ 70.1, BF16 73.6), M
   8 bits and 9.3 ms in BF16 (about 105 GB/s against Marlin's 500). A real 4B Blaze-Q needs the
   6-bit path built on Marlin's design.
 
+## Blaze-S, corrected: a published body, the ladder and an 8-bit vision tower
+
+Blaze-S lost accuracy to its own 4-bit GPTQ body. `scripts/run_blaze_s2.py` keeps the published
+AutoRound W4A16 body as it is and changes only the bytes it spends elsewhere: the BF16 vocabulary
+table, laddered with the multilingual census at 65,536 8-bit rows, and the BF16 vision tower, whose
+98 Linears published 4-bit exports keep in BF16 and list in `ignore`, stored at 8-bit g128 as Glaze
+v2 stores them (`blaze_addon.py --vision-bits 8 --cover 1e-9`). No calibration and no GPTQ: the
+export is rounding only.
+
+Run `r_37d0bd84` on one A30, code `1416094`: 49 minutes with the pilot and MMMU, ₹32.81 (about
+$0.34).
+
+| Qwen3.5-4B, one A30 | On disk | GPU weights | One stream | Batched | Excess loss | MMMU (val) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 9.32 GB | 9.21 GB | 80 tok/s | 2,670 tok/s | — | 69.6 |
+| GPTQ W4A16 (published) | 3.78 GB | 3.92 GB | 151 tok/s | 3,128 tok/s | 0.0541 | 64.9 |
+| AutoRound W4A16 (published) | 3.78 GB | 3.92 GB | ≈151 tok/s | ≈3,128 tok/s | 0.0417 | 66.9 |
+| Blaze-S, first (own GPTQ) | 2.60 GB | 3.15 GB | 174 tok/s | 2,901 tok/s | 0.0899 | — |
+| **Blaze-S, corrected** | **2,598,000,440 B** | **3.15 GB** | **174 tok/s** | 2,861 tok/s | **0.0418** | 65.8 |
+
+AutoRound's speed and memory are GPTQ's: the same format and bytes. MMMU is scored locally with the
+fixed extractor (`score_vision.py`; one of 1,050 answers needed the random fill, as in G2b), paired
+over the 900 validation questions with the published answers: −1.1 points against AutoRound (−3.3
+to +1.0) and −3.8 against BF16 (−6.3 to −1.3), where AutoRound itself is −2.7.
+
+- **It keeps its body's quality.** Excess loss 0.0418 against AutoRound's 0.0417, flips 4.97%: the
+  multilingual ladder and the 8-bit vision tower cost nothing on text, and MMMU's change is within
+  noise. Less than half the first Blaze-S's drift at the same bytes, and below GPTQ W4A16's.
+- **31% smaller and 15% faster for one user** than any W4A16 export, with 0.77 GB less GPU memory.
+  Batched decoding is 9% slower, the cost of the two-block vocabulary head.
+- **It works on any published 4-bit Qwen3.5 export.** The same command on Glaze v2, which already
+  stores its vision tower at 8 bits, gives the ladder add-on (2.91 GB, 0.0144).
+
 ## The real 4B Blaze-Q, and the ladder outside English
 
 G2b's Blaze-Q (GPTQ 6-bit body on WikiText-2, 23 units at 8 bits, the ladder, an 8-bit vision
@@ -538,6 +571,9 @@ uv run python scripts/blaze_g4_report.py --g4 <G4 run> --g4-scored <G4 run>/visi
 uv run python scripts/blaze_domain_coverage.py --census data/blaze/census.json \
     data/blaze/census_multilingual.json
 uv run python scripts/blaze_census_multilingual.py --tokens 300000
+# Blaze-S corrected: the AutoRound body, the multilingual ladder, an 8-bit vision tower
+uv run python scripts/run_blaze_s2.py --bf16 <G2 run>/bf16.json --mmmu --pilot-limit 10
+uv run python scripts/score_vision.py --run-dir <S2 run>/mmmu
 # The real 4B Blaze-Q, both serving modes, and drift on code and 11 languages
 uv run python scripts/run_blaze_q6.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
     --pilot-limit 10

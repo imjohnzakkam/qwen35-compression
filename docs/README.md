@@ -56,7 +56,10 @@ mode with greedy decoding and up to 8,192 generated tokens.
 - **The ladder alone shrinks any 4-bit export for free:** applied to the published GPTQ, AutoRound
   and Glaze v2 checkpoints, changing only the BF16 vocabulary table, it cuts each from 3.78 to 2.92
   GB (−23%) with excess loss unchanged to 0.0001, and decodes a single stream 16% faster. Glaze v2's
-  quality at 2.91 GB serves today on vLLM with a small plugin.
+  quality at 2.91 GB serves today on vLLM with a small plugin. With the vision tower also at 8 bits,
+  AutoRound's body becomes Blaze-S: 2.60 GB (−31%), excess loss 0.0418 against AutoRound's 0.0417,
+  174 tokens per second single stream against 151, and MMMU within noise of AutoRound's (−1.1,
+  interval −3.3 to +1.0).
 
 ## Released artifacts
 
