@@ -236,7 +236,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
       <p>Blaze stops tuning 4-bit rounding and moves bytes instead.</p>
       <dl class="tldr">
         <div><dt>Why not better rounding</dt><dd>WaterSIC proves per-layer quantization can get within 0.25 bit of its limit, and rotated GPTQ lands within 0.1 bit of WaterSIC. Glaze v2's drift gain is about what its extra 0.7 bit per weight predicts.</dd></div>
-        <div><dt>Where the bytes are</dt><dd>The vocabulary table is 34% of Glaze v2's 3.77 GB. 68% of its 248,320 rows never appeared in 57M tokens of English text and model output.</dd></div>
+        <div><dt>Where the bytes are</dt><dd>The vocabulary table is 34% of Glaze v2's 3.77 GB. 68% of its 248,320 rows never appeared in the ladder's 42M-token census of training text and model answers.</dd></div>
         <div><dt>The method</dt><dd>A usage ladder (busy rows 8-bit, the rest 4-bit), a byte market that prices every body unit by measured KL, and stock Marlin kernels.</dd></div>
         <div><dt>What was predicted</dt><dd>On the 4B at a 4-bit export's size: excess loss of 0.0011–0.002 with a 6-bit option, 7–13× below Glaze v2's 0.014, or about 1.1–1.4% flips against 3.29%.</dd></div>
         <div><dt>What was measured</dt><dd>On the 4B at W4A16's size: excess loss <b>0.0017</b> and <b>1.39%</b> flips, inside the prediction, and every panel task within a point of BF16. On the 2B: <b>0.0005</b> against standard W4A16's 0.073, served for real by vLLM at W4A16's size. Full suite on the 4B: 12 of 13 tasks within a point of BF16; MathVista is −1.1, with an interval that includes zero.</dd></div>
@@ -423,15 +423,16 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
       </figure>
 
       <h3><span class="eyebrow">Observation 4</span>Most of the vocabulary sits idle</h3>
-      <p>In 57M tokens (ten cached English datasets plus 22M tokens the BF16 4B generated itself), only 80,300 of 248,320 rows ever appear. The other 68% never do, and frequencies follow Zipf's law with a slope of −1.10. The 96,677 rows added since Qwen3's vocabulary carry 0.2–0.3% of tokens.</p>
+      <p>The ladder is built from a census of 42.3M tokens: public training splits (MATH, GSM8K, ARC, SciQ, HellaSwag, WikiText-2, UltraChat, COCO captions) plus 3.0M tokens BF16 wrote answering Glaze v2's training prompts. No benchmark question or answer is in it. Only 80,010 of 248,320 rows ever appear; the other 68% never do, and frequencies follow Zipf's law with a slope of −1.08.</p>
+      <p class="note"><b>Correction, 17 October.</b> Earlier versions of this page quoted 57M tokens here. That exploratory count included the benchmarks' test questions and BF16's answers to them, so its coverage figures were partly in-sample. The ladder itself was never built from it. Every number in this section is now the real census's, scored on text it never saw.</p>
       <figure>
         <div class="fig-box"><div class="fig-scroll" id="fig-vocab"></div></div>
-        <figcaption><b>Two-thirds of the vocabulary never appeared.</b> Sorted by use, the busiest 65,536 rows hold 99.99% of the model's own output tokens, and 168,020 rows never showed up at all.</figcaption>
+        <figcaption><b>Two-thirds of the vocabulary never appeared in the census.</b> Sorted by use, the busiest 65,536 rows hold 99.88% of the 19.1M tokens BF16 wrote answering the record's benchmarks, which the census never saw. 168,310 rows never showed up at all.</figcaption>
       </figure>
-      <p>Idle depends on the domain, though. A ranking built only from chat and Wikipedia text leaves 7.8% of the model's own math and multiple-choice output tokens outside its top 32,768 rows, and 1.6% outside 65,536. Tiers need broad data and a precision floor, not a hard cut.</p>
+      <p>Idle depends on the domain, though. A ranking built only from chat and Wikipedia text leaves 7.9% of BF16's benchmark answer tokens outside its top 32,768 rows, and 1.7% outside 65,536. And the census is English. Held out, its 8-bit rung covers 96.5% of code tokens (HumanEval, MBPP, MultiPL-E in five languages) but only 26.5% of non-English text in MGSM and Belebele: 36% for Chinese, 28% for Japanese and Russian, 15% for Thai, 5% for Tamil. Non-English text runs mostly on 4-bit rows. Tiers need broad data and a precision floor, not a hard cut.</p>
       <figure>
         <div class="fig-box"><div class="fig-scroll" id="fig-coverage"></div></div>
-        <figcaption><b>Which data ranks the rows matters.</b> The full census is ranked on the same tokens it is scored on, so it is an upper bound. Token ID order needs no data and does no better than chat text.</figcaption>
+        <figcaption><b>Which data ranks the rows matters.</b> Every curve is scored on text its ranking never saw. The census covers English benchmark answers almost completely and non-English text poorly. Token ID order needs no data and does no better than chat text.</figcaption>
       </figure>
 
       <h3><span class="eyebrow">Observation 5</span>Idle rows are cheap to store, but must still be stored well</h3>
@@ -918,9 +919,9 @@ export(quantize(model, choice), vocab)</pre>
     T(p, anchorEnd ? x2 : x1, up ? y + d - 7 : y + d + 14, label, { size: 9.5, fill: color, anchor: anchorEnd ? "end" : "start" });
   }
   function figVocab() {
-    var svg = mk("fig-vocab", 232, "The 248,320 vocabulary rows sorted by use: 65,536 busy rows, 14,764 rarely used, 168,020 never used");
+    var svg = mk("fig-vocab", 232, "The 248,320 vocabulary rows sorted by use: 65,536 busy rows, 14,474 rarely used, 168,310 never used");
     if (!svg) return;
-    head(svg, "248,320 vocabulary rows, sorted by how often they were used", "each cell is 1,024 rows · 57M tokens of English text plus the model’s own answers");
+    head(svg, "248,320 vocabulary rows, sorted by how often they were used", "each cell is 1,024 rows · the ladder’s census: 42M tokens of training text and model answers");
     var N = 243, X0 = 40, step = 560 / N, w = step - 0.55, y = 120, h = 30;
     for (var i = 0; i < N; i++) {
       var f = i < 64 ? C.acc : (i < 79 ? C.muted : "#26262a");
@@ -928,41 +929,43 @@ export(quantize(model, choice), vocab)</pre>
     }
     bracket(svg, X0, X0 + 64 * step - 1, y - 8, true, "8-bit rung · busiest 65,536 rows", C.acc, false);
     bracket(svg, X0 + 64 * step + 1, X0 + N * step, y - 8, true, "4-bit rung · the other 182,784 rows", C.muted, true);
-    bracket(svg, X0, X0 + 79 * step - 1, y + h + 8, false, "used at least once · 80,300 rows", C.ink, false);
-    bracket(svg, X0 + 79 * step + 1, X0 + N * step, y + h + 8, false, "never used · 168,020 rows · 68%", C.ink, true);
-    T(svg, 40, 222, "the 8-bit rung holds 99.99% of the 22M tokens the model generated itself", { size: 10 });
+    bracket(svg, X0, X0 + 79 * step - 1, y + h + 8, false, "used at least once · 80,010 rows", C.ink, false);
+    bracket(svg, X0 + 79 * step + 1, X0 + N * step, y + h + 8, false, "never used · 168,310 rows · 68%", C.ink, true);
+    T(svg, 40, 222, "held out: 99.88% of BF16’s answers in the 8-bit rung, 26.5% of non-English text", { size: 10 });
   }
 
   /* 6. Coverage curves */
   function figCoverage() {
     var svg = mk("fig-coverage", 342, "Share of the model’s own output tokens covered by the busiest rows, by ranking source");
     if (!svg) return;
-    head(svg, "ranked on chat text alone, 32k rows miss 8% of the model’s own output", "share of 22M tokens the BF16 4B generated that fall in the busiest K rows · x is log scale");
+    head(svg, "the census ranks English answers well and other languages badly", "share of held-out tokens in the busiest K rows · x is log scale");
     var ser = {
-      chat: [60.65, 68.00, 73.09, 80.03, 87.72, 92.20, 98.38],
-      census: [81.18, 86.18, 90.61, 94.48, 97.53, 99.44, 99.99],
-      id: [63.25, 70.14, 76.05, 81.65, 88.94, 93.66, 98.00]
+      chat: [60.84, 68.18, 73.17, 80.02, 87.65, 92.12, 98.32],
+      census: [75.62, 81.61, 86.42, 90.86, 94.74, 98.11, 99.88],
+      id: [63.73, 70.60, 76.49, 82.00, 89.18, 93.81, 98.04],
+      ml: [9.54, 10.49, 11.39, 12.70, 14.35, 16.25, 26.52]
     };
     var style = {
-      chat: { c: C.acc, w: 2.2, d: null, n: "chat + Wikipedia ranking" },
-      census: { c: C.ink, w: 1.6, d: null, n: "full census (in-sample)" },
-      id: { c: C.muted, w: 1.6, d: "5 4", n: "token ID order, no data" }
+      chat: { c: C.light, w: 1.6, d: null, n: "chat + Wikipedia, on BF16 answers" },
+      census: { c: C.ink, w: 2.2, d: null, n: "ladder census, on BF16 answers" },
+      id: { c: C.muted, w: 1.6, d: "5 4", n: "token ID order, on BF16 answers" },
+      ml: { c: C.acc, w: 2.2, d: null, n: "ladder census, on non-English text" }
     };
     var K = [1, 2, 4, 8, 16, 32, 64];
-    var X = function (i) { return 80 + i * (500 / 6); }, Y = function (v) { return 292 - (v - 50) / 50 * 186; };
-    [60, 70, 80, 90, 100].forEach(function (v) { L(svg, 80, Y(v), 580, Y(v), C.grid); T(svg, 72, Y(v) + 3, v + "%", { size: 9.5, anchor: "end" }); });
+    var X = function (i) { return 80 + i * (500 / 6); }, Y = function (v) { return 292 - v / 100 * 186; };
+    [0, 20, 40, 60, 80, 100].forEach(function (v) { L(svg, 80, Y(v), 580, Y(v), C.grid); T(svg, 72, Y(v) + 3, v + "%", { size: 9.5, anchor: "end" }); });
     K.forEach(function (k, i) { T(svg, X(i), 310, k + "k", { size: 9.5, anchor: "middle" }); });
     T(svg, 330, 328, "busiest rows kept", { size: 9.5, anchor: "middle" });
     L(svg, X(6), 96, X(6), 292, C.acc, 1, "3 4");
     T(svg, X(6) - 6, 284, "Blaze’s 8-bit rung · 65,536 rows", { size: 9.5, anchor: "end", fill: C.acc });
-    ["chat", "census", "id"].forEach(function (k, n) {
+    ["census", "chat", "id", "ml"].forEach(function (k, n) {
       var st = style[k];
-      swatch(svg, 80 + n * 176, 76, st.c, st.n, { fill: k === "chat" ? C.ink : C.muted });
+      swatch(svg, 80 + (n % 2) * 250, 72 + Math.floor(n / 2) * 16, st.c, st.n, { fill: k === "census" || k === "ml" ? C.ink : C.muted });
       S("path", { d: ser[k].map(function (v, i) { return (i ? "L" : "M") + X(i) + " " + Y(v); }).join(""), fill: "none", stroke: st.c, "stroke-width": st.w, "stroke-dasharray": st.d }, svg);
       ser[k].forEach(function (v, i) { tip(S("circle", { cx: X(i), cy: Y(v), r: 2.8, fill: st.c }, svg), st.n + ", " + K[i] + "k rows: " + v + "%"); });
     });
-    T(svg, X(5), Y(92.2) + 18, "92.2%", { size: 10, anchor: "middle", fill: C.acc, weight: 600 });
-    T(svg, X(5), Y(99.44) - 9, "99.4%", { size: 10, anchor: "middle", fill: C.ink, weight: 600 });
+    T(svg, X(6) - 8, Y(99.88) + 16, "99.9%", { size: 10, anchor: "end", fill: C.ink, weight: 600 });
+    T(svg, X(6) - 8, Y(26.52) - 6, "26.5%", { size: 10, anchor: "end", fill: C.acc, weight: 600 });
   }
 
   /* 7. Logit noise per bit-width */
