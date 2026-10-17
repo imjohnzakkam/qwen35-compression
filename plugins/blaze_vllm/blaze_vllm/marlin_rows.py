@@ -91,14 +91,17 @@ def gather_reference(
     return (codes.float() * scale.float()).to(scales.dtype)
 
 
-_kernel = None
-
-
-def _build():
+try:  # vLLM's Triton; absent in CPU-only test environments, which use gather_reference
     from vllm.triton_utils import tl, triton
+except ImportError:
+    tl = triton = None
+
+# Defined at import, as vLLM's own quantized-embedding kernel is: vLLM compiles the model's
+# forward with torch.compile, which can launch a Triton kernel but not define one mid-trace.
+if triton is not None:
 
     @triton.jit
-    def marlin_rows_kernel(
+    def _marlin_rows_kernel(
         ids_ptr,
         packed_ptr,
         scale_ptr,
@@ -130,8 +133,6 @@ def _build():
         out = code.to(tl.float32) * scale.to(tl.float32)
         tl.store(out_ptr + row * hidden + k, out.to(out_ptr.dtype.element_ty), mask=mask)
 
-    return marlin_rows_kernel
-
 
 def gather(
     ids: torch.Tensor,
@@ -150,16 +151,11 @@ def gather(
         )
     if not packed.is_cuda:
         return gather_reference(ids, packed, scales, bits, hidden)
-    global _kernel
-    if _kernel is None:
-        _kernel = _build()
-    from vllm.triton_utils import triton
-
     flat = ids.reshape(-1).contiguous()
     out = torch.empty(flat.numel(), hidden, dtype=scales.dtype, device=packed.device)
     block = min(triton.next_power_of_2(hidden), 1024)
     grid = (flat.numel(), triton.cdiv(hidden, block))
-    _kernel[grid](
+    _marlin_rows_kernel[grid](
         flat,
         packed,
         scales,

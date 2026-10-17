@@ -723,6 +723,9 @@ def test_plugin_reads_lookups_from_the_marlin_head_with_one_copy(monkeypatch) ->
         vocab.quant_method.process_weights_after_loading(vocab)
         ids = torch.tensor([[0, 5, 191], [64, 100, 3]])
         assert torch.equal(vocab(ids), expected[ids])
+        # vLLM captures the forward whole with torch.compile; the lookup must trace without a break.
+        compiled = torch.compile(vocab.forward, fullgraph=True, backend="eager")
+        assert torch.equal(compiled(ids), expected[ids])
         x = torch.randn(4, hidden)
         assert torch.allclose(vocab.quant_method.apply(vocab, x), x @ expected.float().T, atol=1e-3)
         with pytest.raises(ValueError, match="unknown blaze vocabulary layout"):
