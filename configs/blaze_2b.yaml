@@ -1,0 +1,43 @@
+# Blaze gate G5 (scripts/run_blaze_g5.py): does Qwen3.5-2B agree with the 4B? Standard GPTQ
+# W4A16 g128 against Blaze-Q (the vocabulary ladder and an 8-bit body) at the same size.
+# Calibration, evaluation protocol and the GPTQ recipe are Feature 1's, unchanged.
+feature: blaze_2b
+model:
+  id: Qwen/Qwen3.5-2B
+  revision: 15852e8c16360a2fea060d615a32b45270f8a8fc
+  dtype: bfloat16
+  trust_remote_code: false
+calibration:
+  path: data/calibration/feature1.jsonl
+  lock_path: data/calibration/feature1.lock.json
+  num_samples: 512
+  max_sequence_length: 2048
+  seed: 42
+  source:
+    dataset_id: HuggingFaceH4/ultrachat_200k
+    revision: 8049631c405ae6576f93f445c6b8166f76f5505a
+    split: train_sft
+    messages_column: messages
+evaluation:
+  mode: benchmark
+  suite_path: configs/evaluation/blaze_panel_text.yaml
+  max_samples: null
+  max_new_tokens: 256
+  seed: 42
+paths:
+  outputs: outputs/blaze_2b
+  results: results/blaze_2b
+variants:
+  - name: bf16
+    method: bf16
+
+  # Feature 1's gptq_w4a16_g128, as published for the 4B (Kiln).
+  - name: gptq_w4a16_g128
+    method: gptq
+    scheme: W4A16
+    bits: 4
+    group_size: 128
+    ignore:
+      - lm_head
+      - "re:.*visual.*"
+      - "re:.*embed_tokens$"

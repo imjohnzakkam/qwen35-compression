@@ -1,0 +1,76 @@
+{
+  "path": "data/blaze/census.json",
+  "sha256": "d8df511842abbe5012146f8c7809378b126f501e9d9660fae47edaeab2fc5aea",
+  "sources": {
+    "arc_train": {
+      "files": "ARC-Challenge/train-*.parquet",
+      "repo": "allenai/ai2_arc",
+      "revision": "210d026faf9955653af8916fad021475a3f00453",
+      "rows": 1119
+    },
+    "bf16_answers": {
+      "path": "logs/jarvis/glaze2-4b-a100-20261005/results/answers.jsonl",
+      "rows": 4419,
+      "sha256": "3291123d4c90f34cbb3a98afde35b418b084a0ae8a03b7629add9bc416c210db"
+    },
+    "coco_captions_train": {
+      "files": "data/train-*.parquet",
+      "repo": "phiyodr/coco2017",
+      "revision": "036f3f8291db64d17faad9b09e59dd30bb65c4d7",
+      "rows": 20000
+    },
+    "gsm8k_train": {
+      "files": "main/train-*.parquet",
+      "repo": "openai/gsm8k",
+      "revision": "740312add88f781978c0658806c59bc2815b9866",
+      "rows": 7473
+    },
+    "hellaswag_train": {
+      "files": "data/train-*.parquet",
+      "repo": "Rowan/hellaswag",
+      "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+      "rows": 39905
+    },
+    "math_train": {
+      "files": "*/train-*.parquet",
+      "repo": "EleutherAI/hendrycks_math",
+      "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+      "rows": 7500
+    },
+    "sciq_train": {
+      "files": "data/train-*.parquet",
+      "repo": "allenai/sciq",
+      "revision": "2c94ad3e1aafab77146f384e23536f97a4849815",
+      "rows": 11679
+    },
+    "ultrachat_train": {
+      "files": "data/train_sft-00000-*.parquet",
+      "repo": "HuggingFaceH4/ultrachat_200k",
+      "revision": "8049631c405ae6576f93f445c6b8166f76f5505a",
+      "rows": 20000
+    },
+    "wikitext_train": {
+      "files": "wikitext-2-raw-v1/wikitext-2-raw-v1-train.parquet",
+      "repo": "EleutherAI/wikitext_document_level",
+      "revision": "647234772b9554e208af6c826f23b99e3cac88c8",
+      "rows": 629
+    }
+  },
+  "tokenizer": {
+    "model": "Qwen/Qwen3.5-4B",
+    "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+  },
+  "tokens": {
+    "arc_train": 69043,
+    "bf16_answers": 3032404,
+    "coco_captions_train": 1261719,
+    "gsm8k_train": 1377570,
+    "hellaswag_train": 6937484,
+    "math_train": 2318258,
+    "sciq_train": 1250050,
+    "ultrachat_train": 23554170,
+    "wikitext_train": 2505902
+  },
+  "used_rows": 80010,
+  "vocab_size": 248320
+}
