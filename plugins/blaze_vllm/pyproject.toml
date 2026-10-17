@@ -1,0 +1,16 @@
+[project]
+name = "blaze-vllm"
+version = "0.1.0"
+description = "Serves Blaze's tiered vocabulary table (real exports from qwen35_compression.blaze.real) in vLLM 0.29"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.entry-points."vllm.general_plugins"]
+blaze = "blaze_vllm:register"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["blaze_vllm"]
