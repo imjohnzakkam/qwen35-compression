@@ -597,7 +597,8 @@ def test_q6_plan_serves_both_ways_and_scores_domains(tmp_path: Path) -> None:
     export = full["export"]
     assert export[export.index("--bits") + 1] == "6" and "--real" in export
     assert export[export.index("--plan") + 1] == str(plan_file)
-    assert full["score:native"][0] != "env"
+    native = full["score:native"]
+    assert native[0] == "env" and native[1].startswith("LD_LIBRARY_PATH=") and "cu13" in native[1]
     assert full["score:w8"][:2] == ["env", "BLAZE_W6_AS_W8=1"]
     assert full["domain:blaze_q6"][:2] == ["env", "BLAZE_W6_AS_W8=1"]
     assert all(full[k][-1] == "--domains" for k in full if k.startswith("domain:"))

@@ -59,7 +59,21 @@ CENSUS = Path("data/blaze/census.json")
 CENSUS_MULTILINGUAL = Path("data/blaze/census_multilingual.json")
 PLUGIN = Path("plugins/blaze_vllm")
 EXPORT = "blaze_q6"
-MODES = {"native": {}, "w8": {"BLAZE_W6_AS_W8": "1"}}
+# Humming (vLLM's 6-bit kernel) compiles with NVRTC, whose builtins library the pip CUDA wheels
+# ship outside the loader's path; without it the first 6-bit layer fails to build.
+NVRTC_LIB = (
+    TEXT_PYTHON.parents[1] / "lib" / "python3.13" / "site-packages" / "nvidia" / "cu13" / "lib"
+)
+MODES = {
+    "native": {
+        "LD_LIBRARY_PATH": ":".join(
+            p for p in (str(NVRTC_LIB), os.environ.get("LD_LIBRARY_PATH")) if p
+        )
+    },
+    # vLLM's compile cache is keyed on the model and its config, not on BLAZE_W6_AS_W8: the 8-bit
+    # mode reusing the native mode's graph fails on its different parameters (KeyError: 'weight').
+    "w8": {"BLAZE_W6_AS_W8": "1", "VLLM_CACHE_ROOT": str(Path.home() / ".cache" / "vllm-blaze-w8")},
+}
 GPTQ = "gptq_w4a16_g128"
 GPTQ_REPO = "lazybrick/Qwen3.5-4B-Kiln-GPTQ-W4A16-g128"
 LADDERS = {"ladder": CENSUS, "ladder_ml": CENSUS_MULTILINGUAL}
@@ -286,8 +300,17 @@ def run_gate(args: argparse.Namespace, output: Path, limit: int | None) -> dict[
             "fetch_gptq", lambda: copy_published(GPTQ_REPO, gptq)
         )
     steps = plan(output, exports, config.paths.outputs, snapshot, args.plan, limit)
+    if args.reuse and not limit:
+        # Results an earlier run already measured, on the same export code and plan.
+        for path in sorted(args.reuse.glob("*.json")):
+            if path.name != "run_manifest.json":
+                shutil.copyfile(path, output / path.name)
+        run.manifest["reused_from"] = str(args.reuse)
     for name, command in steps.items():
         target = command[command.index("--output") + 1] if "--output" in command else None
+        if target and target.endswith(".json") and Path(target).exists():
+            run.reuse(name)
+            continue
         if name in ("export",) or name.startswith("build:"):
             if target and (Path(target) / MANIFEST).exists():
                 run.reuse(name)
@@ -319,6 +342,9 @@ def main() -> None:
     parser.add_argument("--plan", type=Path, required=True, help="G2b's market plan")
     parser.add_argument("--bf16", type=Path, required=True, help="G2's BF16 drift score")
     parser.add_argument("--pilot-limit", type=int, help="Run small into <output>-pilot first")
+    parser.add_argument(
+        "--reuse", type=Path, help="Score and speed results of an earlier run, not measured again"
+    )
     parser.add_argument("--skip-bootstrap", action="store_true")
     parser.add_argument("--code-revision", help="Producer Git revision for uploaded checkouts")
     parser.add_argument("--dry-run", action="store_true")
