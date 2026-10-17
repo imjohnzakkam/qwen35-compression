@@ -24,7 +24,7 @@
    "model": "plugin",
    "title": "Vocabulary held once",
    "summary": "Rows exact on vLLM's own Marlin repack at every 2B and 4B block shape. The first end-to-end run stopped on a compile error in the plugin (fixed); drift, memory and speed still to measure.",
-   "cost": "≈₹0 so far · cap ₹60",
+   "cost": "≈₹56 so far · cap ₹60",
    "details": [
     [
      "Measured",
@@ -42,38 +42,34 @@
    "steps": [
     {
      "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Build real Blaze-Q",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Exact rows on vLLM's Marlin repack",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Drift: Blaze-S, one copy",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Speed and memory: Blaze-S",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Drift: Blaze-Q, one copy",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Speed and memory: Blaze-Q",
-     "status": "pending"
+     "status": "passed"
     }
    ],
-   "progress": {
-    "pct": null,
-    "label": "Setting up the GPU"
-   },
-   "elapsed": "0h 00m on the GPU"
+   "elapsed": "1h 26m on the GPU"
   },
   {
    "id": "S2",
@@ -631,9 +627,9 @@
   }
  ],
  "spend": {
-  "rupees": 690.91,
-  "dollars": 7.17,
-  "label": "₹690.91 (about $7.17) across all GPU runs"
+  "rupees": 746.72,
+  "dollars": 7.75,
+  "label": "₹746.72 (about $7.75) across all GPU runs"
  },
- "updated": "2026-10-17T21:19:52Z"
+ "updated": "2026-10-17T22:46:00Z"
 }
