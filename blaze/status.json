@@ -24,7 +24,7 @@
    "model": "4B",
    "title": "Blaze-S, corrected",
    "summary": "The published AutoRound W4A16 body with the multilingual ladder and an 8-bit vision tower: 2.598 GB (−31%). Measuring drift, speed and MMMU.",
-   "cost": "≈₹7 so far · cap ₹65",
+   "cost": "≈₹13 so far · cap ₹65",
    "details": [
     [
      "Question",
@@ -50,11 +50,11 @@
     },
     {
      "label": "Drift on BF16's answers",
-     "status": "running"
+     "status": "passed"
     },
     {
      "label": "Speed and memory",
-     "status": "pending"
+     "status": "running"
     },
     {
      "label": "Vision environment",
@@ -75,9 +75,9 @@
    ],
    "progress": {
     "pct": 100,
-    "label": "Drift on BF16's answers · 15 of 15 fetching 15 files"
+    "label": "Speed and memory · 15 of 15 fetching 15 files"
    },
-   "elapsed": "0h 10m on the GPU"
+   "elapsed": "0h 20m on the GPU"
   },
   {
    "id": "Q6",
@@ -605,9 +605,9 @@
   }
  ],
  "spend": {
-  "rupees": 659.83,
-  "dollars": 6.85,
-  "label": "₹659.83 (about $6.85) across all GPU runs"
+  "rupees": 666.36,
+  "dollars": 6.92,
+  "label": "₹666.36 (about $6.92) across all GPU runs"
  },
- "updated": "2026-10-17T08:52:48Z"
+ "updated": "2026-10-17T09:02:53Z"
 }
