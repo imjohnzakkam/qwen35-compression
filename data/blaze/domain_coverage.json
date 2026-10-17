@@ -1,0 +1,248 @@
+{
+  "tokenizer": "Qwen/Qwen3.5-4B",
+  "censuses": {
+    "data/blaze/census.json": {
+      "hot_rows": 65536
+    },
+    "data/blaze/census_multilingual.json": {
+      "hot_rows": 65536
+    }
+  },
+  "sources": [
+    {
+      "domain": "code",
+      "source": "HumanEval (Python)",
+      "tokens": 32828,
+      "hot_share": {
+        "data/blaze/census.json": 0.9887291336663824,
+        "data/blaze/census_multilingual.json": 0.9569574753259412
+      }
+    },
+    {
+      "domain": "code",
+      "source": "MBPP (Python)",
+      "tokens": 38770,
+      "hot_share": {
+        "data/blaze/census.json": 0.8984524116584989,
+        "data/blaze/census_multilingual.json": 0.8641217436161981
+      }
+    },
+    {
+      "domain": "code",
+      "source": "MultiPL-E (JavaScript)",
+      "tokens": 21710,
+      "hot_share": {
+        "data/blaze/census.json": 0.9920773836941502,
+        "data/blaze/census_multilingual.json": 0.9494702901888531
+      }
+    },
+    {
+      "domain": "code",
+      "source": "MultiPL-E (C++)",
+      "tokens": 31160,
+      "hot_share": {
+        "data/blaze/census.json": 0.9625160462130937,
+        "data/blaze/census_multilingual.json": 0.9099807445442876
+      }
+    },
+    {
+      "domain": "code",
+      "source": "MultiPL-E (Java)",
+      "tokens": 38497,
+      "hot_share": {
+        "data/blaze/census.json": 0.9649583084396187,
+        "data/blaze/census_multilingual.json": 0.9104605553679508
+      }
+    },
+    {
+      "domain": "code",
+      "source": "MultiPL-E (Go)",
+      "tokens": 25442,
+      "hot_share": {
+        "data/blaze/census.json": 0.9910777454602625,
+        "data/blaze/census_multilingual.json": 0.9327096926342269
+      }
+    },
+    {
+      "domain": "code",
+      "source": "MultiPL-E (Rust)",
+      "tokens": 24009,
+      "hot_share": {
+        "data/blaze/census.json": 0.9873797326002749,
+        "data/blaze/census_multilingual.json": 0.8725894456245574
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Chinese)",
+      "tokens": 14805,
+      "hot_share": {
+        "data/blaze/census.json": 0.3553529213103681,
+        "data/blaze/census_multilingual.json": 0.6441742654508612
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Japanese)",
+      "tokens": 17004,
+      "hot_share": {
+        "data/blaze/census.json": 0.2801693719124912,
+        "data/blaze/census_multilingual.json": 0.748882615855093
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Russian)",
+      "tokens": 18409,
+      "hot_share": {
+        "data/blaze/census.json": 0.28448041718724537,
+        "data/blaze/census_multilingual.json": 0.7595198000977783
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (German)",
+      "tokens": 17983,
+      "hot_share": {
+        "data/blaze/census.json": 0.7513762998387365,
+        "data/blaze/census_multilingual.json": 0.8460212422843797
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (French)",
+      "tokens": 18319,
+      "hot_share": {
+        "data/blaze/census.json": 0.8321414924395436,
+        "data/blaze/census_multilingual.json": 0.8765216441945521
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Spanish)",
+      "tokens": 17706,
+      "hot_share": {
+        "data/blaze/census.json": 0.8518581271885237,
+        "data/blaze/census_multilingual.json": 0.8779509770699198
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Thai)",
+      "tokens": 29566,
+      "hot_share": {
+        "data/blaze/census.json": 0.14837989582628694,
+        "data/blaze/census_multilingual.json": 0.9551850098085639
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Swahili)",
+      "tokens": 25210,
+      "hot_share": {
+        "data/blaze/census.json": 0.935382784609282,
+        "data/blaze/census_multilingual.json": 0.9837366124553748
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Bengali)",
+      "tokens": 40766,
+      "hot_share": {
+        "data/blaze/census.json": 0.17136829711033705,
+        "data/blaze/census_multilingual.json": 0.9999754697542069
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "MGSM (Telugu)",
+      "tokens": 55338,
+      "hot_share": {
+        "data/blaze/census.json": 0.0819870613321768,
+        "data/blaze/census_multilingual.json": 0.9898623007698146
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Arabic)",
+      "tokens": 63430,
+      "hot_share": {
+        "data/blaze/census.json": 0.2629670502916601,
+        "data/blaze/census_multilingual.json": 0.8031846129591675
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Hindi)",
+      "tokens": 149589,
+      "hot_share": {
+        "data/blaze/census.json": 0.356951380114848,
+        "data/blaze/census_multilingual.json": 0.9996055859722306
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Korean)",
+      "tokens": 59042,
+      "hot_share": {
+        "data/blaze/census.json": 0.16376477761593441,
+        "data/blaze/census_multilingual.json": 0.7584939534568612
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Vietnamese)",
+      "tokens": 62453,
+      "hot_share": {
+        "data/blaze/census.json": 0.25230173090163804,
+        "data/blaze/census_multilingual.json": 0.9003410564744688
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Turkish)",
+      "tokens": 68218,
+      "hot_share": {
+        "data/blaze/census.json": 0.6418100794511713,
+        "data/blaze/census_multilingual.json": 0.9247119528570172
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Tamil)",
+      "tokens": 195952,
+      "hot_share": {
+        "data/blaze/census.json": 0.0475014289213685,
+        "data/blaze/census_multilingual.json": 0.9992038866661224
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Hebrew)",
+      "tokens": 87996,
+      "hot_share": {
+        "data/blaze/census.json": 0.11765307513977909,
+        "data/blaze/census_multilingual.json": 0.9971589617709896
+      }
+    },
+    {
+      "domain": "multilingual",
+      "source": "Belebele (Persian)",
+      "tokens": 76428,
+      "hot_share": {
+        "data/blaze/census.json": 0.16289841419375098,
+        "data/blaze/census_multilingual.json": 0.9105040037682525
+      }
+    }
+  ],
+  "domains": {
+    "data/blaze/census.json": {
+      "code": 0.9645695239529979,
+      "multilingual": 0.265158404814705
+    },
+    "data/blaze/census_multilingual.json": {
+      "code": 0.9114897182886411,
+      "multilingual": 0.9323698161683104
+    }
+  }
+}

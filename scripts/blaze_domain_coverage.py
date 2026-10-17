@@ -3,7 +3,7 @@
 
 Tokenizes HumanEval, MBPP and MultiPL-E (five languages) for code, and MGSM (ten languages) and
 Belebele (eight more) for non-English text, and reports, per source and per domain, the share of
-tokens whose row is in each census's 8-bit rung (DEFAULT_COVER, DEFAULT_AT_LEAST).
+tokens whose row is in each census's 8-bit rung (at the 65,536-row floor unless --cover is given).
 
     uv run python scripts/blaze_domain_coverage.py --census data/blaze/census.json \
         data/blaze/census_multilingual.json --output data/blaze/domain_coverage.json
@@ -73,6 +73,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--census", type=Path, nargs="+", default=[Path("data/blaze/census.json")])
     parser.add_argument("--output", type=Path, default=Path("data/blaze/domain_coverage.json"))
+    parser.add_argument(
+        "--cover",
+        type=float,
+        default=1e-9,
+        help="Ladder cover; the default keeps every census at the 65,536-row floor (equal bytes)",
+    )
     args = parser.parse_args()
 
     from transformers import AutoTokenizer
@@ -81,7 +87,7 @@ def main() -> None:
     ladders = {}
     for path in args.census:
         census = load_census(path)
-        plan = plan_ladder(census)
+        plan = plan_ladder(census, cover=args.cover)
         hot = np.zeros(census.vocab_size, dtype=bool)
         hot[list(plan.order[: plan.hot_rows])] = True
         ladders[path.as_posix()] = (plan.hot_rows, hot)

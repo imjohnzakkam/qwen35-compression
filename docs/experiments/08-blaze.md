@@ -54,6 +54,30 @@ counts and their sources are locked in `data/blaze/census.lock.json`.
 The last two coverage figures are in-sample: the answers they score are part of the census. G1
 measures the ladder on BF16's MATH-500 and MMLU-Pro answers, which the census never saw.
 
+### Held-out coverage, and the census's blind spot
+
+Scored on text no census saw (`scripts/blaze_domain_coverage.py`), the share of tokens whose row
+is in the 8-bit rung. The research page's early 57M-token count included the benchmarks' test
+questions and BF16's answers to them; it was exploratory, the ladder was never built from it, and
+the page now quotes this census instead (corrected 2026-10-17).
+
+| Held-out text | Tokens | English census (as built) | + FineWeb-2, 30 languages |
+| --- | ---: | ---: | ---: |
+| BF16's answers on the record's benchmarks | 19.1M | 99.88% | 98.81% |
+| Code: HumanEval, MBPP, MultiPL-E (JS, C++, Java, Go, Rust) | 212k | 96.5% | 91.2% |
+| Non-English: MGSM (10 languages), Belebele (8 more) | 1.02M | 26.5% | 93.2% |
+| … MGSM Chinese / Japanese / Russian | 50k | 35.5% / 28.0% / 28.5% | 64.4% / 74.9% / 76.0% |
+| … MGSM Thai / Bengali / Telugu | 126k | 14.8% / 17.1% / 8.2% | 95.5% / 100% / 99.0% |
+| … Belebele Arabic / Korean / Tamil | 318k | 26.3% / 16.4% / 4.8% | 80.3% / 75.9% / 99.9% |
+
+The English census leaves most non-English tokens on 4-bit rows; MBPP (89.8%) is its weakest code
+source, and the multilingual census costs code most in Rust (98.7% to 87.3%).
+`scripts/blaze_census_multilingual.py` adds the first 300,000 tokens of FineWeb-2's training text in
+each of 30 languages (`data/blaze/census_multilingual.json`). At the default 99.9% cover that census
+would want 152,794 8-bit rows (about 112 MB more); planned at the same 65,536 rows (`--cover 1e-9`),
+the table's bytes are unchanged and only the choice of rows moves. Whether the lost English and code
+coverage costs anything is for drift to say; `scripts/run_blaze_q6.py` measures it.
+
 | Model | Vocabulary in BF16 | Laddered, index map included |
 | --- | ---: | ---: |
 | Qwen3.5-0.8B | 0.509 GB | 0.166 GB |
