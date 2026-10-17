@@ -22,39 +22,47 @@
    "id": "Q6",
    "column": "running",
    "model": "4B",
-   "title": "Real 6-bit Blaze-Q + languages",
-   "summary": "G2b's Blaze-Q as a real checkpoint at W4A16's size, served on vLLM's own 6-bit kernel and on 8-bit Marlin; and the ladder's drift on code and 11 languages.",
-   "cost": "≈₹27 so far · cap ₹80",
+   "title": "Real 6-bit Blaze-Q",
+   "summary": "Stopped (exit_1); results so far were saved.",
+   "cost": "≈₹30 so far · cap ₹80",
    "details": [
     [
      "Question",
-     "Does the equal-size 4B Blaze-Q (0.0017) run for real, how fast, and does the English-only ladder hurt code or other languages?"
+     "Does the equal-size 4B Blaze-Q run for real, and how fast?"
     ],
     [
-     "Why now",
-     "vLLM 0.29 ships a 6-bit kernel (Humming); the census covers only 26.5% of non-English tokens in its 8-bit rows."
+     "Measured",
+     "3,780,277,088 bytes (GPTQ W4A16: 3,780,662,272). Excess loss 0.00169, flips 1.40%, the same as G2b's fake export. GPU weights 4.34 GB (GPTQ 3.92)."
+    ],
+    [
+     "Kernel",
+     "vLLM 0.29 picks Humming for the 6-bit groups and Marlin for the 8-bit ones; Humming needed NVRTC's builtins on the library path."
+    ],
+    [
+     "Not measured",
+     "The 8-bit fallback crashed on vLLM's compile cache (fixed in code); the code and multilingual drift never started."
     ],
     [
      "Run",
-     "r_d164352b on A30 538982, 17 Oct"
+     "r_d164352b, 17 Oct 04:34–05:19 UTC"
     ]
    ],
    "steps": [
     {
      "label": "Pilot: 2-layer export, both modes, domains",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Build real 6-bit Blaze-Q",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Drift: native 6-bit kernel",
-     "status": "passed"
+     "status": "pending"
     },
     {
      "label": "Speed: native 6-bit",
-     "status": "running"
+     "status": "pending"
     },
     {
      "label": "Drift: 6-bit on 8-bit Marlin",
@@ -101,11 +109,21 @@
      "status": "pending"
     }
    ],
-   "progress": {
-    "pct": 100,
-    "label": "Speed: native 6-bit · 723 of 723 loading weights"
-   },
-   "elapsed": "0h 41m on the GPU"
+   "elapsed": "0h 45m on the GPU"
+  },
+  {
+   "id": "LANG",
+   "column": "next",
+   "model": "4B",
+   "title": "Ladder on code and languages",
+   "summary": "The English census covers 26.5% of non-English tokens in 8-bit rows; a multilingual census at the same size covers 93.2%. Drift test pending.",
+   "cost": "est. ₹45–52",
+   "details": [
+    [
+     "Question",
+     "Does the English-only ladder hurt code or other languages, and does the multilingual census fix it without hurting English?"
+    ]
+   ]
   },
   {
    "id": "G4",
@@ -523,11 +541,11 @@
   },
   {
    "id": "K6b",
-   "column": "next",
+   "column": "done",
    "model": "kernel",
-   "title": "6-bit on Marlin",
-   "summary": "May not be needed: vLLM 0.29 ships a 6-bit kernel (Humming). Q6 measures it.",
-   "cost": "engineering",
+   "title": "6-bit kernel: not needed",
+   "summary": "vLLM 0.29's bundled Humming kernel serves dense 6-bit groups at 3% below Marlin 4-bit's single-stream speed.",
+   "cost": "none",
    "details": [
     [
      "Why",
@@ -563,9 +581,9 @@
   }
  ],
  "spend": {
-  "rupees": 607.93,
-  "dollars": 6.31,
-  "label": "₹607.93 (about $6.31) across all GPU runs"
+  "rupees": 610.89,
+  "dollars": 6.34,
+  "label": "₹610.89 (about $6.34) across all GPU runs"
  },
- "updated": "2026-10-17T05:15:38Z"
+ "updated": "2026-10-17T05:20:12Z"
 }
