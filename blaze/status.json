@@ -17,13 +17,60 @@
    "label": "Next"
   }
  ],
- "spend": {
-  "rupees": 685.79,
-  "dollars": 7.12,
-  "label": "₹685.79 (about $7.12) across all GPU runs"
- },
- "updated": "2026-10-17T09:36:34Z",
  "cards": [
+  {
+   "id": "V1",
+   "column": "running",
+   "model": "plugin",
+   "title": "Vocabulary held once",
+   "summary": "Lookups read straight from the Marlin LM head, so each vocabulary block is held once: about 0.41 GB less GPU memory on the 4B. Checking exact rows, drift, memory and speed.",
+   "cost": "≈₹0 so far · cap ₹60",
+   "details": [
+    [
+     "Question",
+     "Does the one-copy layout give bit-identical rows and the same drift, with less memory and the same speed?"
+    ],
+    [
+     "Run",
+     "r_34835ea9 on A30 539333, 17 Oct"
+    ]
+   ],
+   "steps": [
+    {
+     "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
+     "status": "pending"
+    },
+    {
+     "label": "Build real Blaze-Q",
+     "status": "pending"
+    },
+    {
+     "label": "Exact rows on vLLM's Marlin repack",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-S, one copy",
+     "status": "pending"
+    },
+    {
+     "label": "Speed and memory: Blaze-S",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-Q, one copy",
+     "status": "pending"
+    },
+    {
+     "label": "Speed and memory: Blaze-Q",
+     "status": "pending"
+    }
+   ],
+   "progress": {
+    "pct": null,
+    "label": "Setting up the GPU"
+   },
+   "elapsed": "0h 00m on the GPU"
+  },
   {
    "id": "S2",
    "column": "done",
@@ -407,7 +454,7 @@
    "column": "missed",
    "model": "2B",
    "title": "Vocabulary held once",
-   "summary": "Correct, and at W4A16's memory, but the kernel is 4× slower single-stream.",
+   "summary": "Correct, and at W4A16's memory, but the kernel is 4× slower single-stream. Replaced by the Marlin-layout lookup (V1).",
    "cost": "in G2b",
    "details": [
     [
@@ -578,5 +625,11 @@
     ]
    ]
   }
- ]
+ ],
+ "spend": {
+  "rupees": 686.22,
+  "dollars": 7.13,
+  "label": "₹686.22 (about $7.13) across all GPU runs"
+ },
+ "updated": "2026-10-17T17:08:33Z"
 }
