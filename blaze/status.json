@@ -17,14 +17,20 @@
    "label": "Next"
   }
  ],
+ "spend": {
+  "rupees": 610.89,
+  "dollars": 6.34,
+  "label": "₹610.89 (about $6.34) across all GPU runs"
+ },
+ "updated": "2026-10-17T05:20:25Z",
  "cards": [
   {
    "id": "Q6",
-   "column": "running",
+   "column": "done",
    "model": "4B",
    "title": "Real 6-bit Blaze-Q",
-   "summary": "Stopped (exit_1); results so far were saved.",
-   "cost": "≈₹30 so far · cap ₹80",
+   "summary": "Servable at W4A16's size on vLLM's own 6-bit kernel: drift 0.00169 (= G2b), one stream 147 tok/s against GPTQ's 151, batched 2,900 against 3,126.",
+   "cost": "₹30.14 (stopped early)",
    "details": [
     [
      "Question",
@@ -46,70 +52,7 @@
      "Run",
      "r_d164352b, 17 Oct 04:34–05:19 UTC"
     ]
-   ],
-   "steps": [
-    {
-     "label": "Pilot: 2-layer export, both modes, domains",
-     "status": "pending"
-    },
-    {
-     "label": "Build real 6-bit Blaze-Q",
-     "status": "pending"
-    },
-    {
-     "label": "Drift: native 6-bit kernel",
-     "status": "pending"
-    },
-    {
-     "label": "Speed: native 6-bit",
-     "status": "pending"
-    },
-    {
-     "label": "Drift: 6-bit on 8-bit Marlin",
-     "status": "pending"
-    },
-    {
-     "label": "Speed: 6-bit on 8-bit Marlin",
-     "status": "pending"
-    },
-    {
-     "label": "BF16 answers: code + 11 languages",
-     "status": "pending"
-    },
-    {
-     "label": "Domain drift: BF16",
-     "status": "pending"
-    },
-    {
-     "label": "Build English ladder",
-     "status": "pending"
-    },
-    {
-     "label": "Domain drift: English ladder",
-     "status": "pending"
-    },
-    {
-     "label": "Build multilingual ladder",
-     "status": "pending"
-    },
-    {
-     "label": "Domain drift: multilingual ladder",
-     "status": "pending"
-    },
-    {
-     "label": "English drift: multilingual ladder",
-     "status": "pending"
-    },
-    {
-     "label": "Domain drift: GPTQ W4A16",
-     "status": "pending"
-    },
-    {
-     "label": "Domain drift: Blaze-Q",
-     "status": "pending"
-    }
-   ],
-   "elapsed": "0h 45m on the GPU"
+   ]
   },
   {
    "id": "LANG",
@@ -579,11 +522,5 @@
     ]
    ]
   }
- ],
- "spend": {
-  "rupees": 610.89,
-  "dollars": 6.34,
-  "label": "₹610.89 (about $6.34) across all GPU runs"
- },
- "updated": "2026-10-17T05:20:12Z"
+ ]
 }
