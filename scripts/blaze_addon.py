@@ -41,6 +41,15 @@ def main() -> None:
     parser.add_argument("--bf16", type=Path, help="BF16 snapshot, for --plan's upgrades")
     parser.add_argument("--plan", type=Path, help="Units to widen, from blaze_market.py fill")
     parser.add_argument("--device", default=None)
+    parser.add_argument(
+        "--cover",
+        type=float,
+        default=DEFAULT_COVER,
+        help="Ladder cover; 1e-9 keeps the 65,536-row floor (the multilingual census's size)",
+    )
+    parser.add_argument(
+        "--vision-bits", type=int, default=0, help="Quantize the BF16 vision Linears (0: keep)"
+    )
     args = parser.parse_args()
     if args.plan and not args.bf16:
         parser.error("--plan needs --bf16")
@@ -48,9 +57,12 @@ def main() -> None:
     import torch
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    ladder = plan_ladder(load_census(args.census), DEFAULT_COVER, DEFAULT_AT_LEAST)
+    ladder = plan_ladder(load_census(args.census), args.cover, DEFAULT_AT_LEAST)
     widen = upgrades(args.plan) if args.plan else None
-    record = ladder_export(args.source, args.output, ladder, args.bf16, widen, device)
+    vision = Option(args.vision_bits, 128) if args.vision_bits else None
+    record = ladder_export(
+        args.source, args.output, ladder, args.bf16, widen, device, vision=vision
+    )
     print(json.dumps(record, indent=2))
 
 

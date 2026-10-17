@@ -613,3 +613,50 @@ def test_q6_plan_serves_both_ways_and_scores_domains(tmp_path: Path) -> None:
     scores = _load_script("drift_scores")
     assert scores.groups("domain_ml_zh") == ("ml", "ml_zh", "both")
     assert scores.groups("minerva_math500") == ("math500", "both")
+
+
+def test_ladder_add_on_can_store_the_vision_tower_at_8_bits(tmp_path: Path) -> None:
+    from safetensors.torch import load_file
+
+    from qwen35_compression.blaze.addon import ladder_export
+    from qwen35_compression.glaze2.export import rtn_quantized
+
+    tensors, source = _four_bit_export(tmp_path)
+    vision = "model.visual.blocks.0.mlp.linear_fc1"
+    config = json.loads((source / "config.json").read_text())
+    config["quantization_config"]["ignore"] = ["lm_head", vision]  # as published exports list it
+    (source / "config.json").write_text(json.dumps(config))
+    record = ladder_export(
+        source, tmp_path / "out", PLAN, row_multiple=1, log=lambda _: None, vision=Option(8, 128)
+    )
+    after = load_file(str(tmp_path / "out" / "model.safetensors"))
+    assert f"{vision}.weight" not in after
+    expected = rtn_quantized(tensors[f"{vision}.weight"], Option(8, 128))
+    assert torch.equal(
+        unpack(after[f"{vision}.weight_packed"], 8, (256, 128)), expected.codes.int()
+    )
+    quant = json.loads((tmp_path / "out" / "config.json").read_text())["quantization_config"]
+    assert quant["config_groups"]["blaze_vision_w8g128"]["targets"] == [vision]
+    assert quant["config_groups"]["blaze_vision_w8g128"]["weights"]["num_bits"] == 8
+    assert quant["ignore"] == ["lm_head"]
+    assert record["vision"] == {"option": "w8g128", "modules": 1}
+
+
+def test_corrected_blaze_s_plan_reuses_the_autoround_body(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_s2")
+    full = driver.plan(tmp_path / "s2", tmp_path / "o", "S", None, mmmu=False)
+    assert list(full) == ["export", "score:blaze_s2", "speed:blaze_s2"]
+    export = full["export"]
+    assert export[export.index("--source") + 1] == str(tmp_path / "o" / "autoround_w4a16_g128")
+    assert export[export.index("--vision-bits") + 1] == "8"
+    assert export[export.index("--cover") + 1] == "1e-9"
+    assert export[export.index("--census") + 1] == "data/blaze/census_multilingual.json"
+    with_mmmu = driver.plan(tmp_path / "s2", tmp_path / "o", "S", None, mmmu=True)
+    assert list(with_mmmu)[-4:] == [
+        "bootstrap_vision",
+        "plugin_vision",
+        "preflight_vision",
+        "mmmu:blaze_s2",
+    ]
+    pilot = driver.plan(tmp_path / "p", tmp_path / "o", "S", 10, mmmu=True)
+    assert list(pilot) == ["export", "score:blaze_s2"]

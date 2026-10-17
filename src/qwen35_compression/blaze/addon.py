@@ -5,7 +5,9 @@ Any 4-bit Qwen3.5 export (GPTQ, AutoRound, Glaze v2) stores its tied vocabulary 
 tensor, the vision tower and the export's own quantization groups are copied as they are, so
 the result isolates what the ladder costs and saves. With `upgrade`, named body Linears are
 re-quantized from the BF16 checkpoint at a wider option (round-to-nearest) in a group of their
-own, which vLLM matches by name ahead of a generic `Linear` target.
+own, which vLLM matches by name ahead of a generic `Linear` target. With `vision`, the vision
+tower's Linears, which published 4-bit exports keep in BF16 and list in `ignore`, are quantized to
+nearest at that option (as Glaze v2 stores them) and taken out of `ignore`.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from qwen35_compression.blaze.real import (
     positions,
     table_parts,
 )
-from qwen35_compression.glaze2.export import quantized_tensors, rtn_quantized
+from qwen35_compression.glaze2.export import quantized_tensors, rtn_quantized, vision_linear
 from qwen35_compression.glaze2.quant import Option
 from qwen35_compression.glaze2.rounding import QuantizedLinear
 
@@ -66,10 +68,12 @@ def ladder_export(
     device: str = "cpu",
     log: Callable[[str], None] = print,
     row_multiple: int = ROW_MULTIPLE,
+    vision: Option | None = None,
 ) -> dict[str, Any]:
     """Write `source` (a compressed-tensors export with a BF16 tied table) to `output` with the
     table laddered. `upgrade` maps body module names (`model.language_model.layers.N....`) to a
-    wider option, quantized to nearest from the BF16 checkpoint `bf16`."""
+    wider option, quantized to nearest from the BF16 checkpoint `bf16`. `vision` quantizes the
+    source's BF16 vision Linears at that option."""
     from safetensors import safe_open
     from safetensors.torch import save_file
 
@@ -89,6 +93,7 @@ def ladder_export(
 
     output.mkdir(parents=True, exist_ok=True)
     tensors: dict[str, torch.Tensor] = {}
+    vision_modules: list[str] = []
     dropped = 0
     table_found = False
     for path in _shards(source):
@@ -108,9 +113,24 @@ def ladder_export(
                     continue
                 if key == "lm_head.weight":
                     raise ValueError("ladder add-ons support tied vocabulary tables only")
-                tensors[key] = handle.get_tensor(key).contiguous()
+                tensor = handle.get_tensor(key)
+                if (
+                    vision is not None
+                    and vision_linear(key)
+                    and tensor.dim() == 2
+                    and tensor.shape[-1] % vision.group == 0
+                ):
+                    item = rtn_quantized(tensor.to(device), vision)
+                    item = QuantizedLinear(item.codes.cpu(), item.scales.cpu(), vision)
+                    module = key.removesuffix(".weight")
+                    tensors.update(quantized_tensors(module, item))
+                    vision_modules.append(module)
+                    continue
+                tensors[key] = tensor.contiguous()
     if not table_found:
         raise ValueError(f"no BF16 vocabulary table ({TIED_TABLE}) in {source}")
+    if vision is not None and not vision_modules:
+        raise ValueError(f"no BF16 vision Linears to quantize in {source}")
     missing = [m for m in upgrade if f"{m}.weight_packed" not in _keys(source)]
     if missing:
         raise KeyError(f"upgraded modules are not quantized in {source}: {missing[:3]}")
@@ -138,6 +158,12 @@ def ladder_export(
         quant["config_groups"][f"blaze_upgrade_{option.name}"] = _group(
             template, sorted(modules), option
         )
+    if vision is not None:
+        quant["config_groups"][f"blaze_vision_{vision.name}"] = _group(
+            template, sorted(vision_modules), vision
+        )
+        quantized = set(vision_modules)
+        quant["ignore"] = [name for name in quant.get("ignore", []) if name not in quantized]
     config["quantization_config"] = quant
     config[ARCHITECTURE_KEY] = {
         "hot_rows": ladder.hot_rows,
@@ -159,6 +185,9 @@ def ladder_export(
         "hot_rows": ladder.hot_rows,
         "upgraded": {o.name: len(m) for o, m in sorted(by_option.items())},
         "dropped_tensors": dropped,
+        "vision": None
+        if vision is None
+        else {"option": vision.name, "modules": len(vision_modules)},
         "source_safetensors_bytes": sum(p.stat().st_size for p in _shards(source)),
         "safetensors_bytes": (output / "model.safetensors").stat().st_size,
     }
