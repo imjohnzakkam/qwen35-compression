@@ -54,7 +54,7 @@
    "model": "4B",
    "title": "Ladder on code and languages",
    "summary": "The English census covers 26.5% of non-English tokens in 8-bit rows; a multilingual census at the same size covers 93.2%. Drift test pending.",
-   "cost": "≈₹33 so far · cap ₹75",
+   "cost": "≈₹39 so far · cap ₹75",
    "details": [
     [
      "Question",
@@ -104,22 +104,18 @@
     },
     {
      "label": "English drift: multilingual ladder",
-     "status": "running"
+     "status": "passed"
     },
     {
      "label": "Domain drift: GPTQ W4A16",
-     "status": "pending"
+     "status": "passed"
     },
     {
      "label": "Domain drift: Blaze-Q",
-     "status": "pending"
+     "status": "passed"
     }
    ],
-   "progress": {
-    "pct": 100,
-    "label": "English drift: multilingual ladder · 914 of 914 answers"
-   },
-   "elapsed": "0h 50m on the GPU"
+   "elapsed": "1h 00m on the GPU"
   },
   {
    "id": "G4",
@@ -577,9 +573,9 @@
   }
  ],
  "spend": {
-  "rupees": 644.36,
-  "dollars": 6.69,
-  "label": "₹644.36 (about $6.69) across all GPU runs"
+  "rupees": 650.89,
+  "dollars": 6.76,
+  "label": "₹650.89 (about $6.76) across all GPU runs"
  },
- "updated": "2026-10-17T08:03:03Z"
+ "updated": "2026-10-17T08:13:08Z"
 }
