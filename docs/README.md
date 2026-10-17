@@ -14,7 +14,7 @@ each record.
 | [5. Glaze v1](experiments/05-glaze-v1.md) | Tuning AutoRound's scales and norms end to end: why it did not beat AutoRound, and what that showed |
 | [6. Glaze v2](experiments/06-glaze-v2.md) | Quantizing from BF16 with in-domain data, Fisher-weighted rounding and byte-neutral mixed precision: MATH-500 within 0.2 points of BF16 at AutoRound's size |
 | [7. Glaze v2 controls](experiments/07-glaze-controls.md) | AutoRound on Glaze v2's calibration data: the data alone gives 7.0 of Glaze v2's 10.0-point MATH-500 gain |
-| [8. Blaze](experiments/08-blaze.md) | Moving the vocabulary table's bytes into the body: the usage census and gates G1-G4 on the 4B (at W4A16's size, 12 of 13 tasks within a point of BF16 and 8.5x below Glaze v2's excess loss), G5 on the 2B, and the 2B's real format served by vLLM |
+| [8. Blaze](experiments/08-blaze.md) | Moving the vocabulary table's bytes into the body: the usage census and gates G1-G4 on the 4B (at W4A16's size, 12 of 13 tasks within a point of BF16 and 8.5x below Glaze v2's excess loss), G5 on the 2B, the real 2B and 4B served by vLLM, and drift on code and 11 languages |
 | [Engineering notes](engineering-notes.md) | Pitfalls when evaluating and quantizing Qwen3.5 with vLLM, lm-eval, VLMEvalKit and llm-compressor |
 
 ## Summary
@@ -44,8 +44,12 @@ mode with greedy decoding and up to 8,192 generated tokens.
   v2, Blaze-Q (a 6/8-bit GPTQ body) reaches excess loss 0.0017, 8.5x below Glaze v2's, and on the
   full suite is within a point of BF16 on 12 of 13 tasks: MMLU-Pro 75.2 (BF16 74.6), MATH-500 83.0
   (83.4), ARC-Challenge 51.0 (51.1), MMMU 68.7 (69.6); MathVista is 79.9 against 81.0 (paired
-  interval −2.6 to +0.5). These 4B scores are from a fake-quantized export; a 6-bit kernel is still
-  needed to serve it. On Qwen3.5-2B at W4A16's size it buys an all-8-bit body: MATH-500 67.8 and
+  interval −2.6 to +0.5). The real 4B checkpoint, 385 KB under GPTQ W4A16's, drifts exactly as
+  the export those scores came from and is served by vLLM 0.29's own 6-bit kernel at 147 tokens per
+  second single stream (GPTQ W4A16 151, BF16 80). On code and math in 11 languages it drifts 15x and
+  13x less than GPTQ W4A16; the ladder's English-only census is its weak spot there, and a census
+  with FineWeb-2 in 30 languages cuts the ladder's multilingual cost 2.6x at the same size. On
+  Qwen3.5-2B at W4A16's size it buys an all-8-bit body: MATH-500 67.8 and
   MMLU-Pro 56.7 against BF16's 64.6 and 56.4 and W4A16's 52.4 and 45.9. That 2B export is served for
   real by vLLM with a small plugin, with the same scores, W4A16's size on disk, and 229 tokens per
   second single stream (W4A16 240, BF16 164).

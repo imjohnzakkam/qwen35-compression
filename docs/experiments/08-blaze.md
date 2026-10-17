@@ -368,6 +368,70 @@ Panel against the same questions: MMLU-Pro (1001) 67.9 (GPTQ 70.1, BF16 73.6), M
   8 bits and 9.3 ms in BF16 (about 105 GB/s against Marlin's 500). A real 4B Blaze-Q needs the
   6-bit path built on Marlin's design.
 
+## The real 4B Blaze-Q, and the ladder outside English
+
+G2b's Blaze-Q (GPTQ 6-bit body on WikiText-2, 23 units at 8 bits, the ladder, an 8-bit vision
+tower) was a fake-quantized export. `scripts/run_blaze_q6.py` builds it in the real format, its
+6-bit groups packed densely as compressed-tensors does (6 bits a weight), and serves it two ways
+with the same codes and scales:
+
+- **native**: vLLM 0.29 picks its bundled Humming kernel for 6-bit groups (Marlin cannot) and
+  Marlin for the 8-bit ones. Humming compiles with NVRTC, whose builtins library the pip CUDA
+  wheels leave off the loader's path; the driver adds `nvidia/cu13/lib` to `LD_LIBRARY_PATH`.
+- **w8**: the plugin repacks the 6-bit groups as 8-bit words at load (`BLAZE_W6_AS_W8=1`,
+  `blaze_vllm/widen.py`), so every body Linear runs on Marlin. It needs its own vLLM compile cache:
+  the cache is keyed on the model, not on the switch, and a graph compiled for one mode fails in
+  the other.
+
+Two runs on one A30: `r_d164352b` (code `27ab90e`; 45 minutes, ₹30.14, about $0.31) measured the
+native mode and stopped when the 8-bit mode hit the shared compile cache; `r_591df322` (code
+`1e9b6dd`; 100 minutes, ₹41.58, about $0.43) reused those results and ran the rest.
+
+| Qwen3.5-4B, one A30 | On disk | GPU weights | One stream | Batched | Excess loss | Flips |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 9.32 GB | 9.21 GB | 80 tok/s | 2,670 tok/s | — | 0.35% |
+| GPTQ W4A16 g128 (published) | 3,780,662,272 B | 3.92 GB | 151 tok/s | 3,128 tok/s | 0.0541 | — |
+| Glaze v2 (published) | 3.77 GB | — | — | — | 0.0143 | — |
+| **Blaze-Q, real, native 6-bit** | **3,780,277,088 B** | 4.34 GB | **147 tok/s** | 2,900 tok/s | **0.00169** | 1.40% |
+| Blaze-Q, real, 6-bit run as 8-bit | 3,780,277,088 B | 4.93 GB | 126 tok/s | 2,539 tok/s | 0.00170 | 1.40% |
+
+- **The equal-size 4B Blaze-Q is servable today.** The real checkpoint drifts exactly as G2b's fake
+  export (0.00169, flips 1.40% against 1.39%), so G3's and G4's scores are its scores.
+- **No new kernel was needed.** On vLLM's own 6-bit kernel it decodes a single stream 3% slower than
+  GPTQ W4A16 and batches 7% slower, against 4.6x slower for this repo's Triton prototype. The 8-bit
+  fallback, for GPUs or vLLM versions without it, is 17% slower and holds 0.6 GB more.
+- **GPU memory is 0.42 GB above GPTQ's,** most of it the vocabulary blocks held twice by the plugin.
+
+### Drift outside English benchmarks
+
+BF16 answered HumanEval (164), MBPP (200) and the first 50 MGSM questions in each of its 11
+languages (`scripts/blaze_domain_answers.py`, greedy, instruct, at most 1,024 tokens): 914 answers,
+343,713 tokens. Each model is scored along them (`drift_scores.py --domains`); excess loss is its
+mean NLL minus BF16's on the same tokens.
+
+| Excess loss vs BF16 | Code | Multilingual | Thai | Japanese | Chinese | English (MGSM) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| English ladder, BF16 body | −0.0003 | 0.0039 | 0.0238 | 0.0049 | 0.0034 | −0.0001 |
+| Multilingual ladder, BF16 body | −0.0001 | **0.0015** | **0.0027** | 0.0027 | 0.0015 | −0.0001 |
+| GPTQ W4A16 (published) | 0.0303 | 0.0655 | 0.1086 | 0.0925 | 0.0546 | 0.0258 |
+| Blaze-Q, real (English ladder) | **0.0020** | **0.0051** | 0.0276 | 0.0081 | 0.0067 | 0.0010 |
+
+Paired 95% intervals (answers resampled): English ladder code −0.0003 (−0.0007 to 0.0000),
+multilingual 0.0039 (0.0026 to 0.0052); multilingual ladder 0.0015 (0.0010 to 0.0018); GPTQ code
+0.0303 (0.0279 to 0.0328), multilingual 0.0655 (0.0610 to 0.0700); Blaze-Q code 0.0020 (0.0014 to
+0.0030), multilingual 0.0051 (0.0037 to 0.0064). BF16 scored on its own answers flips 20–23% of
+tokens in Bengali, Telugu and Thai: answers are stored as text, and re-tokenizing those scripts
+does not always give back the generated tokens. Excess loss compares models on the same tokens and
+stays valid; per-language flip rates there do not.
+
+- **Blaze-Q's lead holds off its census's domains:** 15x below GPTQ W4A16 on code and 13x on
+  multilingual text, at the same file size.
+- **The English census does cost other scripts, and the multilingual census fixes it at no size
+  cost.** At the same 65,536 8-bit rows, the ladder's own multilingual cost falls 2.6x (Thai 9x)
+  while code stays free and English benchmark answers move from 0.00022 (G1) to 0.00030 (flips
+  0.44% against 0.405%). Thai is most of Blaze-Q's remaining multilingual gap, and the ladder is most
+  of Thai's: Blaze-Q should be rebuilt on the multilingual census.
+
 ## The real format, on the 2B
 
 The real export (`blaze/real.py`) stores the body as compressed-tensors groups, as any W8A16
@@ -470,4 +534,11 @@ uv run python scripts/run_blaze_g4.py --plan <G2b run>/plan.json --bf16 <G2 run>
 uv run python scripts/score_vision.py --run-dir <G4 run>/vision
 uv run python scripts/blaze_g4_report.py --g4 <G4 run> --g4-scored <G4 run>/vision-scored \
     --g2b <G2b run> --output g4_report.json
+# Held-out coverage and the multilingual census, on any machine
+uv run python scripts/blaze_domain_coverage.py --census data/blaze/census.json \
+    data/blaze/census_multilingual.json
+uv run python scripts/blaze_census_multilingual.py --tokens 300000
+# The real 4B Blaze-Q, both serving modes, and drift on code and 11 languages
+uv run python scripts/run_blaze_q6.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
+    --pilot-limit 10
 ```
