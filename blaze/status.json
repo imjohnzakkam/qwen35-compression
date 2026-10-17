@@ -17,59 +17,46 @@
    "label": "Next"
   }
  ],
+ "spend": {
+  "rupees": 766.14,
+  "dollars": 7.96,
+  "label": "₹766.14 (about $7.96) across all GPU runs"
+ },
+ "updated": "2026-10-17T23:17:57Z",
  "cards": [
   {
    "id": "V1",
-   "column": "running",
+   "column": "done",
    "model": "plugin",
    "title": "Vocabulary held once",
-   "summary": "Rows exact on vLLM's own Marlin repack at every 2B and 4B block shape. The first end-to-end run stopped on a compile error in the plugin (fixed); drift, memory and speed still to measure.",
-   "cost": "≈₹56 so far · cap ₹60",
+   "summary": "Each vocabulary block is held once: lookups read the Marlin head's own copy. −0.41 GB GPU memory per 4B checkpoint (Blaze-Q 3.92 GB, = GPTQ W4A16; Blaze-S 2.74 GB), same drift and single-stream speed.",
+   "cost": "₹80.35 (two runs; over cap by ₹15.67)",
    "details": [
     [
-     "Measured",
-     "0 of 65,536 + 182,784 rows differ from codes × scales or from vLLM's own lookup, at hidden 2,048 and 2,560. Lookup cost about 10 µs more per block per decode step."
+     "Rows",
+     "Bit-exact against codes × scales and vLLM's own lookup, on vLLM's real Marlin repack, at every 2B and 4B block shape."
     ],
     [
-     "Stopped",
-     "The row kernel was defined lazily inside vLLM's torch.compile trace; it is now defined at import, as vLLM's own lookup kernel is."
+     "Blaze-Q",
+     "GPU weights 4.34 → 3.92 GB; excess 0.00169 → 0.00169; one stream 146.9 → 146.8 tok/s; batched 2,900 → 2,843."
+    ],
+    [
+     "Blaze-S",
+     "GPU weights 3.15 → 2.74 GB; excess 0.0418 → 0.0418; one stream 174.4 → 174.5 tok/s; batched 2,861 → 2,901."
+    ],
+    [
+     "Caveat",
+     "Per-answer losses move by ~0.0003 nats/token (totals equal), the size of switching body kernels; likely torch.compile fusion, not proven."
+    ],
+    [
+     "Cost",
+     "₹4.68 (stopped on a compile error, fixed) + ₹75.67 (watcher hung; over the ₹60 cap). Watcher hardened."
     ],
     [
      "Runs",
-     "r_34835ea9 (17 Oct, stopped), r_a3c04262 (18 Oct)"
+     "r_34835ea9 (17 Oct), r_a3c04262 (18 Oct)"
     ]
-   ],
-   "steps": [
-    {
-     "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
-     "status": "passed"
-    },
-    {
-     "label": "Build real Blaze-Q",
-     "status": "passed"
-    },
-    {
-     "label": "Exact rows on vLLM's Marlin repack",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: Blaze-S, one copy",
-     "status": "passed"
-    },
-    {
-     "label": "Speed and memory: Blaze-S",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: Blaze-Q, one copy",
-     "status": "passed"
-    },
-    {
-     "label": "Speed and memory: Blaze-Q",
-     "status": "passed"
-    }
-   ],
-   "elapsed": "1h 26m on the GPU"
+   ]
   },
   {
    "id": "S2",
@@ -625,11 +612,5 @@
     ]
    ]
   }
- ],
- "spend": {
-  "rupees": 746.72,
-  "dollars": 7.75,
-  "label": "₹746.72 (about $7.75) across all GPU runs"
- },
- "updated": "2026-10-17T22:46:00Z"
+ ]
 }

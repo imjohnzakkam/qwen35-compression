@@ -246,7 +246,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
 
 
       <h2 id="results">Results</h2>
-      <p>Twelve GPU runs on one A30 each, between October 15 and 17. The 4B's benchmark scores come from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The real 4B checkpoint, served by vLLM's own 6-bit kernel, drifts identically. The 2B also ran in its real format.</p>
+      <p>Fourteen GPU runs on one A30 each, between October 15 and 18. The 4B's benchmark scores come from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The real 4B checkpoint, served by vLLM's own 6-bit kernel, drifts identically. The 2B also ran in its real format.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Gate</th><th>Question</th><th>Measured</th><th>Verdict</th><th class="num">Cost</th></tr></thead>
@@ -267,6 +267,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
             <tr><td>Blaze-Q 4/8</td><td>Can today's kernels match the 6-bit body?</td><td>0.0235 at W4A16's size: below GPTQ and AutoRound, above Glaze v2</td><td>No</td><td class="num">in add-on</td></tr>
             <tr><td>Real 4B</td><td>Does the equal-size 6-bit Blaze-Q serve for real?</td><td>0.00169 on vLLM's own 6-bit kernel, 147 tok/s against GPTQ's 151, 385 KB under its size</td><td>Pass</td><td class="num">₹71.72</td></tr>
             <tr><td>Blaze-S, corrected</td><td>With the published AutoRound body, is Blaze-S small, fast and as accurate?</td><td>2.60 GB (−31%), 174 tok/s against 151, excess 0.0418 against AutoRound's 0.0417, MMMU −1.1 (−3.3 to +1.0)</td><td>Pass</td><td class="num">₹32.81</td></tr>
+            <tr><td>Vocabulary once</td><td>Can lookups read the Marlin head's copy, so the table is held once?</td><td>Rows bit-exact; −0.41 GB GPU memory (Blaze-Q 3.92 GB, = GPTQ); drift and single-stream speed unchanged</td><td>Pass</td><td class="num">₹80.35</td></tr>
             <tr><td>Languages</td><td>Does the English-only ladder hurt code or other languages?</td><td>Code free; multilingual 0.0039 (Thai 0.024). A multilingual census at the same size: 0.0015</td><td>Fixed</td><td class="num">in Real 4B</td></tr>
           </tbody>
         </table>
@@ -366,11 +367,26 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
             <tr><td>BF16</td><td class="num">9.32 GB</td><td class="num">9.21 GB</td><td class="num">80 tok/s</td><td class="num">2,670 tok/s</td><td class="num">—</td></tr>
             <tr><td>GPTQ W4A16</td><td class="num">3.781 GB</td><td class="num">3.92 GB</td><td class="num">151 tok/s</td><td class="num">3,128 tok/s</td><td class="num">0.054</td></tr>
             <tr><td>Blaze-Q, real, 6-bit kernel</td><td class="num">3.780 GB</td><td class="num">4.34 GB</td><td class="num">147 tok/s</td><td class="num">2,900 tok/s</td><td class="num">0.0017</td></tr>
+            <tr><td>Blaze-Q, real, vocabulary held once</td><td class="num">3.780 GB</td><td class="num">3.92 GB</td><td class="num">147 tok/s</td><td class="num">2,843 tok/s</td><td class="num">0.0017</td></tr>
             <tr><td>Blaze-Q, real, run as 8-bit</td><td class="num">3.780 GB</td><td class="num">4.93 GB</td><td class="num">126 tok/s</td><td class="num">2,539 tok/s</td><td class="num">0.0017</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="note">One stream reads every weight once per token, so a 6-bit body that reads about 10% more bytes than W4A16's should cost about that much speed; on the A30 it costs 3%. GPU memory sits 0.42 GB above GPTQ's, most of it the vocabulary blocks held twice.</p>
+      <p class="note">One stream reads every weight once per token, so a 6-bit body that reads about 10% more bytes than W4A16's should cost about that much speed; on the A30 it costs 3%. GPU memory sat 0.42 GB above GPTQ's, most of it the vocabulary blocks held twice; since the plugin reads lookups from the Marlin head's own copy, it is 3.92 GB, the same as GPTQ W4A16's.</p>
+
+      <h3><span class="eyebrow">Serving</span>The vocabulary held once</h3>
+      <p>vLLM repacks the LM head into Marlin's tile layout, so lookups used to need a second copy of each block in the stored layout. The plugin now gathers lookup rows straight from Marlin's layout with a small Triton kernel: every row of every block shape the 2B and 4B use is bit-identical to vLLM's own lookup on its real repack. Each 4B checkpoint drops 0.41 GB of GPU memory at the same speed and drift.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Qwen3.5-4B · one A30</th><th class="num">GPU weights</th><th class="num">One stream</th><th class="num">Batched</th><th class="num">Excess loss</th></tr></thead>
+          <tbody>
+            <tr><td>GPTQ W4A16</td><td class="num">3.92 GB</td><td class="num">151 tok/s</td><td class="num">3,128 tok/s</td><td class="num">0.054</td></tr>
+            <tr><td>Blaze-Q, two copies → one</td><td class="num">4.34 → 3.92 GB</td><td class="num">147 → 147 tok/s</td><td class="num">2,900 → 2,843 tok/s</td><td class="num">0.0017 → 0.0017</td></tr>
+            <tr><td>Blaze-S, two copies → one</td><td class="num">3.15 → 2.74 GB</td><td class="num">174 → 175 tok/s</td><td class="num">2,861 → 2,901 tok/s</td><td class="num">0.042 → 0.042</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Totals agree to five decimals, but not every answer is bit-identical: per answer, losses move by about 0.0003 nats per token, the same as switching Blaze-Q's body kernel. The rows are exact, so the difference arises after the lookup, most likely in how torch.compile fuses the first layer; that is not proven. The second check run went over its ₹60 cap (₹75.67) when its watcher hung; the watcher now has time limits and an independent guard.</p>
 
       <h3><span class="eyebrow">Generality</span>Code and other languages</h3>
       <p>The ladder's census is English training text, and held out it puts only 26.5% of non-English tokens in 8-bit rows. BF16 answered HumanEval, MBPP and MGSM in 11 languages (914 answers, 344k tokens), and each model was scored along those answers. A second census adds FineWeb-2 web text in 30 languages and keeps the same 65,536 8-bit rows, so the table's bytes do not change.</p>
@@ -420,7 +436,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
       <ul>
         <li><strong>The vision tower.</strong> At exactly a standard export's size, the whole 6-bit body did not fit with the vision tower in BF16. Storing it at 8 bits, as Glaze v2 already does, freed 324 MB; MMMU moved from Glaze v2's −2.9 to −0.9.</li>
         <li><strong>The market.</strong> Prices measured directly at 6 bits were indistinguishable from noise, so the market that worked (G2b) ranks units by their 4-bit prices and scales them by the measured bits rule. It raised 23 of 64 units to 8 bits: layers 0–6 and layer 31's FFN, which G1 had flagged.</li>
-        <li><strong>Still to do.</strong> Rebuild Blaze-Q on the multilingual census. The single-copy vocabulary head needs a faster kernel. The 9B, with an untied table, is untested.</li>
+        <li><strong>Still to do.</strong> Rebuild Blaze-Q on the multilingual census. The 9B, with an untied table, is untested.</li>
       </ul>
 
       <h2 id="where">Where we started</h2>
