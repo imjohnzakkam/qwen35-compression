@@ -2,10 +2,14 @@
 
 The table is stored in usage order as two compressed-tensors blocks: `hot` (the busiest rows,
 8-bit g128) and `cold` (the rest, 4-bit g128), with `position`, each token id's row in that
-order. Lookups gather and dequantize rows with vLLM's quantized-embedding kernel. Logits run
-both blocks through vLLM's quantized LM head (Marlin), which holds each block a second time in
-its own layout; with `BLAZE_SINGLE_COPY=1` they come instead from the lookup blocks themselves,
-through a dequantizing matmul (`blaze_vllm.head`), so each block is held once.
+order. Logits run both blocks through vLLM's quantized LM head (Marlin), which repacks them
+into its own layout. `BLAZE_VOCAB` picks how lookups find their rows:
+
+- `marlin` (default): gathered and dequantized from the Marlin-repacked head itself
+  (`blaze_vllm.marlin_rows`), so each block is held once, at Marlin's logit speed;
+- `twice`: vLLM's quantized-embedding kernel on a second copy in the stored layout;
+- `packed` (or `BLAZE_SINGLE_COPY=1`): one copy in the stored layout, with logits from a
+  dequantizing Triton matmul (`blaze_vllm.head`), about four times slower.
 
 With `BLAZE_W6_AS_W8=1`, a checkpoint's 6-bit body groups run on the 8-bit kernels with the same
 codes (`blaze_vllm.widen`); without it, vLLM serves them with its own 6-bit kernel.
@@ -25,10 +29,12 @@ from vllm.model_executor.layers.vocab_parallel_embedding import (
 )
 from vllm.model_executor.models.qwen3_5 import Qwen3_5ForConditionalGeneration
 
-from blaze_vllm import widen
+from blaze_vllm import marlin_rows, widen
 
 CONFIG_KEY = "blaze_vocab"
+LAYOUT_ENV = "BLAZE_VOCAB"
 SINGLE_COPY_ENV = "BLAZE_SINGLE_COPY"
+LAYOUTS = ("marlin", "twice", "packed")
 # Logits are written into one output in row chunks, so the two blocks' partial logits never
 # need more than a chunk's memory beside it.
 LOGIT_CHUNK = 1024
@@ -48,7 +54,7 @@ class _TieredHead(QuantizeMethodBase):
         logits = None
         for start in range(0, flat.shape[0], LOGIT_CHUNK):
             rows = flat[start : start + LOGIT_CHUNK]
-            if layer.single_copy:
+            if layer.layout == "packed":
                 from blaze_vllm.head import packed_logits
 
                 hot = packed_logits(
@@ -85,25 +91,30 @@ class TieredVocab(nn.Module):
         prefix: str,
         hot_bits: int = 8,
         cold_bits: int = 4,
-        single_copy: bool = False,
+        layout: str = "marlin",
     ):
         super().__init__()
+        if layout not in LAYOUTS:
+            raise ValueError(f"unknown blaze vocabulary layout {layout!r}; one of {LAYOUTS}")
         self.hot_bits, self.cold_bits = hot_bits, cold_bits
-        self.single_copy = single_copy
+        self.layout = layout
+        self.hidden = hidden
         cold_rows = vocab_size - hot_rows
         self.vocab_size = vocab_size
         self.org_vocab_size = vocab_size
         self.num_embeddings = vocab_size
         self.hot_rows = hot_rows
         self.tp_size = 1
-        self.hot = VocabParallelEmbedding(
-            hot_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.hot"
-        )
-        self.cold = VocabParallelEmbedding(
-            cold_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.cold"
-        )
-        parts = [self.hot, self.cold]
-        if not single_copy:
+        parts = []
+        if layout != "marlin":
+            self.hot = VocabParallelEmbedding(
+                hot_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.hot"
+            )
+            self.cold = VocabParallelEmbedding(
+                cold_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.cold"
+            )
+            parts += [self.hot, self.cold]
+        if layout != "packed":
             self.hot_head = ParallelLMHead(
                 hot_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.hot"
             )
@@ -111,6 +122,10 @@ class TieredVocab(nn.Module):
                 cold_rows, hidden, quant_config=quant_config, prefix=f"{prefix}.cold"
             )
             parts += [self.hot_head, self.cold_head]
+        if layout == "marlin":
+            # Each code's place in a 16 x 64 Marlin block, per bit width.
+            for name, bits in (("hot_table", hot_bits), ("cold_table", cold_bits)):
+                self.register_buffer(name, marlin_rows.position_table(bits), persistent=False)
         for part in parts:
             if part.num_embeddings_padded != part.org_vocab_size:
                 raise ValueError("blaze vocabulary blocks must be multiples of 64 rows")
@@ -121,9 +136,23 @@ class TieredVocab(nn.Module):
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         position = self.position[input_ids]
         is_hot = (position < self.hot_rows).unsqueeze(-1)
-        hot = self.hot(position.clamp(max=self.hot_rows - 1))
-        cold = self.cold((position - self.hot_rows).clamp(min=0))
+        hot_ids = position.clamp(max=self.hot_rows - 1)
+        cold_ids = (position - self.hot_rows).clamp(min=0)
+        if self.layout == "marlin":
+            hot = self._marlin_rows(self.hot_head, self.hot_table, self.hot_bits, hot_ids)
+            cold = self._marlin_rows(self.cold_head, self.cold_table, self.cold_bits, cold_ids)
+        else:
+            hot = self.hot(hot_ids)
+            cold = self.cold(cold_ids)
         return torch.where(is_hot, hot, cold)
+
+    def _marlin_rows(
+        self, head: nn.Module, table: torch.Tensor, bits: int, ids: torch.Tensor
+    ) -> torch.Tensor:
+        rows = marlin_rows.gather(
+            ids, head.weight_packed, head.weight_scale, table, bits, self.hidden
+        )
+        return rows.reshape(*ids.shape, self.hidden)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         params = dict(self.named_parameters())
@@ -136,8 +165,13 @@ class TieredVocab(nn.Module):
             part, rest = name.split(".", 1)
             if part not in ("hot", "cold"):
                 raise KeyError(f"unexpected blaze vocabulary tensor: {name}")
-            # Each block feeds the lookup, and the LM head when it keeps its own copy.
-            for module in (part,) if self.single_copy else (part, f"{part}_head"):
+            # Each block feeds the modules its layout keeps: the lookup, the LM head, or both.
+            modules = {
+                "marlin": (f"{part}_head",),
+                "twice": (part, f"{part}_head"),
+                "packed": (part,),
+            }[self.layout]
+            for module in modules:
                 key = f"{module}.{rest}"
                 param = params[key]
                 param.weight_loader(param, weight)
@@ -172,7 +206,9 @@ class BlazeQwen3_5ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
             prefix=f"{prefix}.language_model.model.embed_tokens".removeprefix("."),
             hot_bits=int(blaze["hot_bits"]),
             cold_bits=int(blaze["cold_bits"]),
-            single_copy=os.environ.get(SINGLE_COPY_ENV) == "1",
+            layout="packed"
+            if os.environ.get(SINGLE_COPY_ENV) == "1"
+            else os.environ.get(LAYOUT_ENV, "marlin"),
         )
         language.model.embed_tokens = vocab
         language.lm_head = vocab

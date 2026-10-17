@@ -111,9 +111,26 @@ def _stub_vllm(bits_by_prefix: dict[str, int]) -> None:
                 def apply(self, layer, x):
                     return x @ outer.table().float().T
 
+                def process_weights_after_loading(self, layer):
+                    # As vLLM's Marlin kernel: repack codes and permute scales in place.
+                    from blaze_vllm import marlin_rows
+
+                    shape = (outer.org_vocab_size, outer.hidden)
+                    codes = unpack(outer.weight_packed.data, outer.bits, shape)
+                    outer.marlin = True
+                    outer.weight_packed.data = marlin_rows.pack_reference(codes, outer.bits)
+                    outer.weight_scale.data = marlin_rows.scales_reference(outer.weight_scale.data)
+
             self.quant_method = Method()
+            self.marlin = False
 
         def table(self) -> torch.Tensor:
+            if self.marlin:
+                from blaze_vllm import marlin_rows
+
+                ids = torch.arange(self.org_vocab_size)
+                packed, scales = self.weight_packed.data, self.weight_scale.data
+                return marlin_rows.gather_reference(ids, packed, scales, self.bits, self.hidden)
             shape = (self.org_vocab_size, self.hidden)
             codes = unpack(self.weight_packed.data, self.bits, shape)
             return dequantize(codes.float(), self.weight_scale.data, Option(self.bits, 128))
@@ -152,7 +169,9 @@ def test_plugin_serves_the_real_table_as_the_fake_one(tmp_path: Path, monkeypatc
     monkeypatch.syspath_prepend("plugins/blaze_vllm")
     try:
         model = importlib.import_module("blaze_vllm.model")
-        vocab = model.TieredVocab(16, 128, 4, None, prefix="language_model.model.embed_tokens")
+        vocab = model.TieredVocab(
+            16, 128, 4, None, prefix="language_model.model.embed_tokens", layout="twice"
+        )
         stored = load_file(str(out / "model.safetensors"))
         prefix = TIED_TABLE.removesuffix("weight")
         weights = [(k.removeprefix(prefix), v) for k, v in stored.items() if k.startswith(prefix)]
@@ -173,7 +192,7 @@ def test_plugin_serves_the_real_table_as_the_fake_one(tmp_path: Path, monkeypatc
         assert torch.allclose(vocab.quant_method.apply(vocab, hidden), logits)
 
         # One copy: logits straight from the lookup blocks, no LM-head modules.
-        single = model.TieredVocab(16, 128, 4, None, prefix="x.embed_tokens", single_copy=True)
+        single = model.TieredVocab(16, 128, 4, None, prefix="x.embed_tokens", layout="packed")
         assert not hasattr(single, "hot_head")
         assert single.load_weights(iter(weights)) == {
             f"{m}.{p}"
@@ -660,3 +679,101 @@ def test_corrected_blaze_s_plan_reuses_the_autoround_body(tmp_path: Path) -> Non
     ]
     pilot = driver.plan(tmp_path / "p", tmp_path / "o", "S", 10, mmmu=True)
     assert list(pilot) == ["export", "score:blaze_s2"]
+
+
+def test_plugin_reads_lookups_from_the_marlin_head_with_one_copy(monkeypatch) -> None:
+    """The default layout keeps only the LM head's Marlin copy and gathers rows from it."""
+    from qwen35_compression.glaze2.export import rtn_quantized
+
+    saved = dict(sys.modules)
+    _stub_vllm({"hot": 8, "cold": 4})
+    monkeypatch.syspath_prepend("plugins/blaze_vllm")
+    try:
+        model = importlib.import_module("blaze_vllm.model")
+        vocab_size, hidden, hot_rows = 192, 256, 64  # blocks of 64 and 128 rows
+        vocab = model.TieredVocab(vocab_size, hidden, hot_rows, None, prefix="x.embed_tokens")
+        assert vocab.layout == "marlin"
+        assert not hasattr(vocab, "hot") and hasattr(vocab, "hot_head")
+        generator = torch.Generator().manual_seed(11)
+        order = torch.randperm(vocab_size, generator=generator)  # rows in stored order
+        table = torch.randn(vocab_size, hidden, generator=generator).to(torch.bfloat16)
+        blocks = {"hot": (order[:hot_rows], 8), "cold": (order[hot_rows:], 4)}
+        weights, expected = [], torch.empty(vocab_size, hidden, dtype=torch.bfloat16)
+        for part, (rows, bits) in blocks.items():
+            item = rtn_quantized(table[rows], Option(bits, 128))
+            weights += [
+                (f"{part}.weight_packed", pack(item.codes, bits)),
+                (f"{part}.weight_scale", item.scales),
+                (f"{part}.weight_shape", torch.tensor([len(rows), hidden])),
+            ]
+            expected[rows] = fake_quantize(table[rows].float(), Option(bits, 128)).to(
+                torch.bfloat16
+            )
+        position = torch.empty(vocab_size, dtype=torch.int32)
+        position[order] = torch.arange(vocab_size, dtype=torch.int32)
+        weights.append(("position", position))
+        loaded = vocab.load_weights(iter(weights))
+        assert loaded == {
+            f"{m}_head.{p}"
+            for m in ("hot", "cold")
+            for p in ("weight_packed", "weight_scale", "weight_shape")
+        } | {"position"}
+        for head in (vocab.hot_head, vocab.cold_head):
+            head.quant_method.process_weights_after_loading(head)
+        vocab.quant_method.process_weights_after_loading(vocab)
+        ids = torch.tensor([[0, 5, 191], [64, 100, 3]])
+        assert torch.equal(vocab(ids), expected[ids])
+        x = torch.randn(4, hidden)
+        assert torch.allclose(vocab.quant_method.apply(vocab, x), x @ expected.float().T, atol=1e-3)
+        with pytest.raises(ValueError, match="unknown blaze vocabulary layout"):
+            model.TieredVocab(vocab_size, hidden, hot_rows, None, prefix="y", layout="three")
+    finally:
+        for name in list(sys.modules):
+            if name not in saved:
+                del sys.modules[name]
+
+
+def test_marlin_rows_reference_layout_round_trips() -> None:
+    sys.path.insert(0, "plugins/blaze_vllm")
+    from blaze_vllm import marlin_rows
+
+    generator = torch.Generator().manual_seed(4)
+    for bits in (4, 8):
+        codes = torch.randint(-(1 << (bits - 1)), 1 << (bits - 1), (128, 384), generator=generator)
+        scales = (torch.rand(128, 3, generator=generator) * 0.01 + 1e-3).to(torch.bfloat16)
+        packed = marlin_rows.pack_reference(codes, bits)
+        permuted = marlin_rows.scales_reference(scales)
+        assert packed.shape == (384 // 16, 128 * 16 * bits // 32)
+        ids = torch.tensor([0, 63, 64, 127, 5])
+        rows = marlin_rows.gather(ids, packed, permuted, None, bits, 384)
+        want = codes[ids].float().reshape(5, 3, 128) * scales[ids].float().unsqueeze(-1)
+        assert torch.equal(rows, want.reshape(5, 384).to(torch.bfloat16))
+        assert sorted(marlin_rows.weight_perm(bits).tolist()) == list(range(1024))
+    with pytest.raises(ValueError, match="not a Marlin-repacked"):
+        marlin_rows.gather(ids, packed.T.contiguous(), permuted, None, 8, 384)
+
+
+def test_vocab_plan_checks_rows_first_and_compares_with_two_copies(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_vocab")
+    plan_file = tmp_path / "plan.json"
+    pilot = driver.plan(tmp_path / "p", tmp_path / "o", "S", plan_file, 10)
+    assert list(pilot) == ["rows", "export:blaze_s2", "score:blaze_s2"]
+    full = driver.plan(tmp_path / "v", tmp_path / "o", "S", plan_file, None)
+    assert list(full) == [
+        "export:blaze_s2",
+        "export:blaze_q6",
+        "rows",
+        "score:blaze_s2",
+        "speed:blaze_s2",
+        "score:blaze_q6",
+        "speed:blaze_q6",
+    ]
+    assert full["score:blaze_q6"][:2] == ["env", "BLAZE_VOCAB=marlin"]
+    assert any(part.startswith("LD_LIBRARY_PATH=") for part in full["speed:blaze_q6"][:4])
+
+    def score(nll: float) -> dict:
+        return {"per_answer": [{"task": "t", "doc_id": 0, "tokens": 10, "nll": nll}]}
+
+    assert driver.per_answer_gap(score(1.0), score(1.0005)) == pytest.approx(5e-5)
+    with pytest.raises(ValueError):
+        driver.per_answer_gap(score(1.0), {"per_answer": []})
