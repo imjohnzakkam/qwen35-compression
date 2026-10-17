@@ -54,7 +54,7 @@
    "model": "4B",
    "title": "Ladder on code and languages",
    "summary": "The English census covers 26.5% of non-English tokens in 8-bit rows; a multilingual census at the same size covers 93.2%. Drift test pending.",
-   "cost": "≈₹7 so far · cap ₹75",
+   "cost": "≈₹13 so far · cap ₹75",
    "details": [
     [
      "Question",
@@ -68,11 +68,11 @@
    "steps": [
     {
      "label": "Build real 6-bit Blaze-Q",
-     "status": "running"
+     "status": "passed"
     },
     {
      "label": "Drift: 6-bit on 8-bit Marlin",
-     "status": "pending"
+     "status": "running"
     },
     {
      "label": "Speed: 6-bit on 8-bit Marlin",
@@ -117,9 +117,9 @@
    ],
    "progress": {
     "pct": 100,
-    "label": "Build real 6-bit Blaze-Q · 723 of 723 loading weights"
+    "label": "Drift: 6-bit on 8-bit Marlin · 723 of 723 loading weights"
    },
-   "elapsed": "0h 10m on the GPU"
+   "elapsed": "0h 20m on the GPU"
   },
   {
    "id": "G4",
@@ -577,9 +577,9 @@
   }
  ],
  "spend": {
-  "rupees": 618.21,
-  "dollars": 6.42,
-  "label": "₹618.21 (about $6.42) across all GPU runs"
+  "rupees": 624.75,
+  "dollars": 6.49,
+  "label": "₹624.75 (about $6.49) across all GPU runs"
  },
- "updated": "2026-10-17T07:22:42Z"
+ "updated": "2026-10-17T07:32:47Z"
 }
