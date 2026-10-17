@@ -401,6 +401,44 @@ to +1.0) and −3.8 against BF16 (−6.3 to −1.3), where AutoRound itself is �
 - **It works on any published 4-bit Qwen3.5 export.** The same command on Glaze v2, which already
   stores its vision tower at 8 bits, gives the ladder add-on (2.91 GB, 0.0144).
 
+## The vocabulary held once
+
+The plugin used to hold each vocabulary block twice on the GPU: in the stored layout for lookups
+(vLLM's quantized-embedding gather) and in Marlin's layout for the LM head. Its default layout
+(`BLAZE_VOCAB=marlin`) now keeps only the Marlin copy and gathers lookup rows straight from it
+(`blaze_vllm/marlin_rows.py`): each code (k, n) sits in Marlin's packed row k // 16 at a position
+fixed by n // 64 and a 64 x 16 table that inverts Marlin's permutation, and each scale in a column
+permuted by an 8x8 transpose. `BLAZE_VOCAB=twice` and `packed` keep the old layouts.
+
+Two runs on one A30, code `56c603b`: `r_34835ea9` checked the rows and stopped when vLLM's
+`torch.compile` met a Triton kernel defined mid-trace (now defined at import), ₹4.68;
+`r_a3c04262` ran the whole check, ₹75.67, over its ₹60 cap: its watcher hung on a remote call and
+held the finished instance for about an hour (the watcher now has time limits and an independent
+guard).
+
+- **Rows are exact.** On vLLM's own `gptq_marlin_repack` and `marlin_permute_scales`, every row of
+  every block shape a real export uses (65,536 rows at 8 bits and 182,784 at 4 bits, hidden 2,048
+  and 2,560) equals codes x scales and vLLM's own lookup, bit for bit (`blaze_vocab_check.py`). The
+  new lookup takes about 10 µs more per block per decode step.
+
+| Qwen3.5-4B, one A30 | GPU weights | One stream | Batched | Excess loss | Flips |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPTQ W4A16 (published) | 3.92 GB | 151 tok/s | 3,128 tok/s | 0.0541 | — |
+| Blaze-Q, two copies | 4.34 GB | 146.9 tok/s | 2,900 tok/s | 0.00169 | 1.40% |
+| **Blaze-Q, one copy** | **3.92 GB** | 146.8 tok/s | 2,843 tok/s | 0.00169 | 1.40% |
+| Blaze-S, two copies | 3.15 GB | 174.4 tok/s | 2,861 tok/s | 0.0418 | 4.97% |
+| **Blaze-S, one copy** | **2.74 GB** | 174.5 tok/s | 2,901 tok/s | 0.0418 | 4.98% |
+
+- **0.41 GB less GPU memory, at the same speed and drift.** Blaze-Q now holds exactly GPTQ
+  W4A16's weight memory (3,923,842,080 bytes); Blaze-S holds 30% less than any W4A16 export.
+- **Not bit-identical end to end.** Per answer, the one-copy runs' losses differ from the two-copy
+  runs' by about 0.0003 nats per token on average (at most 0.003), symmetric, so the totals agree
+  to five decimals. Blaze-Q's 6-bit and 8-bit serving modes, which read the same codes through
+  different body kernels, differ by the same amount. The rows themselves are exact, so the
+  difference arises after the lookup, most likely in how `torch.compile` fuses the first layer
+  around the new kernel; it is not proven. The run's own per-answer check (gap at most 1e-4)
+  therefore failed, and is reported as measured.
+
 ## The real 4B Blaze-Q, and the ladder outside English
 
 G2b's Blaze-Q (GPTQ 6-bit body on WikiText-2, 23 units at 8 bits, the ladder, an 8-bit vision
@@ -433,7 +471,8 @@ native mode and stopped when the 8-bit mode hit the shared compile cache; `r_591
 - **No new kernel was needed.** On vLLM's own 6-bit kernel it decodes a single stream 3% slower than
   GPTQ W4A16 and batches 7% slower, against 4.6x slower for this repo's Triton prototype. The 8-bit
   fallback, for GPUs or vLLM versions without it, is 17% slower and holds 0.6 GB more.
-- **GPU memory is 0.42 GB above GPTQ's,** most of it the vocabulary blocks held twice by the plugin.
+- **GPU memory is 0.42 GB above GPTQ's,** most of it the vocabulary blocks held twice by the plugin;
+  holding them once (below) brings it to GPTQ's.
 
 ### Drift outside English benchmarks
 
@@ -574,6 +613,9 @@ uv run python scripts/blaze_census_multilingual.py --tokens 300000
 # Blaze-S corrected: the AutoRound body, the multilingual ladder, an 8-bit vision tower
 uv run python scripts/run_blaze_s2.py --bf16 <G2 run>/bf16.json --mmmu --pilot-limit 10
 uv run python scripts/score_vision.py --run-dir <S2 run>/mmmu
+# The vocabulary held once: exact rows, then drift, speed and memory against two copies
+uv run python scripts/run_blaze_vocab.py --bf16 <G2 run>/bf16.json --reuse <two-copy results> \
+    --plan <G2b run>/plan.json --blaze-q --pilot-limit 10
 # The real 4B Blaze-Q, both serving modes, and drift on code and 11 languages
 uv run python scripts/run_blaze_q6.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
     --pilot-limit 10

@@ -46,7 +46,8 @@ mode with greedy decoding and up to 8,192 generated tokens.
   (83.4), ARC-Challenge 51.0 (51.1), MMMU 68.7 (69.6); MathVista is 79.9 against 81.0 (paired
   interval −2.6 to +0.5). The real 4B checkpoint, 385 KB under GPTQ W4A16's, drifts exactly as
   the export those scores came from and is served by vLLM 0.29's own 6-bit kernel at 147 tokens per
-  second single stream (GPTQ W4A16 151, BF16 80). On code and math in 11 languages it drifts 15x and
+  second single stream (GPTQ W4A16 151, BF16 80), holding GPTQ W4A16's 3.92 GB of GPU weights now
+  that the plugin keeps its vocabulary once. On code and math in 11 languages it drifts 15x and
   13x less than GPTQ W4A16; the ladder's English-only census is its weak spot there, and a census
   with FineWeb-2 in 30 languages cuts the ladder's multilingual cost 2.6x at the same size. On
   Qwen3.5-2B at W4A16's size it buys an all-8-bit body: MATH-500 67.8 and
@@ -58,8 +59,8 @@ mode with greedy decoding and up to 8,192 generated tokens.
   GB (−23%) with excess loss unchanged to 0.0001, and decodes a single stream 16% faster. Glaze v2's
   quality at 2.91 GB serves today on vLLM with a small plugin. With the vision tower also at 8 bits,
   AutoRound's body becomes Blaze-S: 2.60 GB (−31%), excess loss 0.0418 against AutoRound's 0.0417,
-  174 tokens per second single stream against 151, and MMMU within noise of AutoRound's (−1.1,
-  interval −3.3 to +1.0).
+  174 tokens per second single stream against 151, 2.74 GB of GPU weights against 3.92, and MMMU
+  within noise of AutoRound's (−1.1, interval −3.3 to +1.0).
 
 ## Released artifacts
 
