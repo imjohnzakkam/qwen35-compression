@@ -246,12 +246,12 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
 
 
       <h2 id="results">Results</h2>
-      <p>Nine GPU runs on one A30 each, between October 15 and 16. Every 4B number below comes from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The 2B also ran in its real format.</p>
+      <p>Eleven GPU runs on one A30 each, between October 15 and 17. The 4B's benchmark scores come from a fake-quantized export: the values a real Blaze checkpoint stores, written back in BF16, so stock vLLM scores them exactly. The real 4B checkpoint, served by vLLM's own 6-bit kernel, drifts identically. The 2B also ran in its real format.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Gate</th><th>Question</th><th>Measured</th><th>Verdict</th><th class="num">Cost</th></tr></thead>
           <tbody>
-            <tr><td>G0</td><td>How idle is the vocabulary?</td><td>80,010 of 248,320 rows ever used; the busiest 65,536 hold 99.97% of answer tokens</td><td>Ran on CPU</td><td class="num">₹0</td></tr>
+            <tr><td>G0</td><td>How idle is the vocabulary?</td><td>80,010 of 248,320 rows ever used; the busiest 65,536 hold 99.88% of BF16's benchmark answers (held out)</td><td>Ran on CPU</td><td class="num">₹0</td></tr>
             <tr><td>G1</td><td>Is the ladder free?</td><td>Excess loss 0.0002, flips 0.40% (BF16 0.35%)</td><td>Pass</td><td class="num">₹33.48</td></tr>
             <tr><td>G1</td><td>Does a plain 6-bit body pay?</td><td>0.0048 against a 0.004 mark; FFN prices flat (0.65 against 0.75)</td><td>Narrow miss</td><td class="num">in G1</td></tr>
             <tr><td>G1b</td><td>Does GPTQ at 6 bits pay?</td><td>0.0027 against a 0.003 mark, but 0.4% over W4A16's size</td><td>Pass</td><td class="num">≈₹25</td></tr>
@@ -262,9 +262,11 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
             <tr><td>Real</td><td>Does vLLM serve the real 2B format?</td><td>Same drift as the fake export; W4A16's size on disk</td><td>Pass</td><td class="num">≈₹35</td></tr>
             <tr><td>G4</td><td>Is the full suite within a point?</td><td>12 of 13 tasks; MathVista −1.1 (interval −2.6 to +0.5)</td><td>Narrow miss</td><td class="num">₹196.87</td></tr>
             <tr><td>Blaze-S</td><td>Smaller and faster than GPTQ W4A16, as accurate?</td><td>2.60 GB (−31%), 16% faster one stream; excess 0.090 against 0.054</td><td>Partial</td><td class="num">₹55.62</td></tr>
-            <tr><td>6-bit kernel</td><td>Is a Triton 6-bit matmul fast enough?</td><td>Correct, but 4.6× slower than Marlin 4-bit at batch 1</td><td>Not yet</td><td class="num">in Blaze-S</td></tr>
+            <tr><td>6-bit kernel</td><td>Is a Triton 6-bit matmul fast enough?</td><td>Correct, but 4.6× slower than Marlin 4-bit at batch 1</td><td>No; not needed</td><td class="num">in Blaze-S</td></tr>
             <tr><td>Add-on</td><td>Is the ladder free on published exports?</td><td>GPTQ, AutoRound, Glaze v2: −0.86 GB each, drift +0.0001 at most</td><td>Pass</td><td class="num">₹60.93</td></tr>
             <tr><td>Blaze-Q 4/8</td><td>Can today's kernels match the 6-bit body?</td><td>0.0235 at W4A16's size: below GPTQ and AutoRound, above Glaze v2</td><td>No</td><td class="num">in add-on</td></tr>
+            <tr><td>Real 4B</td><td>Does the equal-size 6-bit Blaze-Q serve for real?</td><td>0.00169 on vLLM's own 6-bit kernel, 147 tok/s against GPTQ's 151, 385 KB under its size</td><td>Pass</td><td class="num">₹71.72</td></tr>
+            <tr><td>Languages</td><td>Does the English-only ladder hurt code or other languages?</td><td>Code free; multilingual 0.0039 (Thai 0.024). A multilingual census at the same size: 0.0015</td><td>Fixed</td><td class="num">in Real 4B</td></tr>
           </tbody>
         </table>
       </div>
@@ -319,7 +321,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
           </tbody>
         </table>
       </div>
-      <p class="note">MATH-500, IFEval and MMMU come from G3; MMLU-Pro is the full 12,032 questions here. All checkpoints are 3.78–3.80 GB except BF16 (9.32 GB). Blaze-Q's scores are from a fake-quantized export.</p>
+      <p class="note">MATH-500, IFEval and MMMU come from G3; MMLU-Pro is the full 12,032 questions here. All checkpoints are 3.78–3.80 GB except BF16 (9.32 GB). Blaze-Q's scores are from a fake-quantized export; the real checkpoint drifts identically (0.00169).</p>
 
 
 
@@ -351,7 +353,37 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
         </table>
       </div>
       <p class="note">Panel, Blaze-S against GPTQ W4A16 on the same questions: MMLU-Pro (1,001) 67.9 against 70.1, MATH-500 74.2 against 75.8, IFEval 75.6 against 80.8. The next Blaze-S keeps the published GPTQ body and changes only the vocabulary and vision bytes.</p>
-      <p>The first 6-bit kernel, a Triton matmul with codes in a 4-bit and a 2-bit plane, is correct to 1e-4 but slow: one decode token's body takes 21.3 ms on the A30, against 4.7 ms for Marlin at 4 bits, 5.9 ms at 8 bits and 9.3 ms in BF16. It reaches about 105 GB/s where Marlin reaches 500. A real 4B Blaze-Q needs the 6-bit path built on Marlin's own design.</p>
+      <p>The first 6-bit kernel, a Triton matmul with codes in a 4-bit and a 2-bit plane, is correct to 1e-4 but slow: one decode token's body takes 21.3 ms on the A30, against 4.7 ms for Marlin at 4 bits, 5.9 ms at 8 bits and 9.3 ms in BF16. It reaches about 105 GB/s where Marlin reaches 500. It turned out not to be needed: vLLM 0.29 ships its own 6-bit kernel.</p>
+
+      <h3><span class="eyebrow">Serving</span>The real 4B Blaze-Q</h3>
+      <p>The real checkpoint stores the 6-bit groups densely, 6 bits a weight, and comes in 385 KB under GPTQ W4A16's file. vLLM 0.29 serves those groups with its bundled Humming kernel and the 8-bit ones with Marlin; the plugin can instead repack the 6-bit codes as 8-bit words at load, for GPUs or versions without Humming. Both modes drift exactly as G2b's fake export did, so G3's and G4's scores are this checkpoint's.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Qwen3.5-4B · one A30</th><th class="num">On disk</th><th class="num">GPU weights</th><th class="num">One stream</th><th class="num">Batched</th><th class="num">Excess loss</th></tr></thead>
+          <tbody>
+            <tr><td>BF16</td><td class="num">9.32 GB</td><td class="num">9.21 GB</td><td class="num">80 tok/s</td><td class="num">2,670 tok/s</td><td class="num">—</td></tr>
+            <tr><td>GPTQ W4A16</td><td class="num">3.781 GB</td><td class="num">3.92 GB</td><td class="num">151 tok/s</td><td class="num">3,128 tok/s</td><td class="num">0.054</td></tr>
+            <tr><td>Blaze-Q, real, 6-bit kernel</td><td class="num">3.780 GB</td><td class="num">4.34 GB</td><td class="num">147 tok/s</td><td class="num">2,900 tok/s</td><td class="num">0.0017</td></tr>
+            <tr><td>Blaze-Q, real, run as 8-bit</td><td class="num">3.780 GB</td><td class="num">4.93 GB</td><td class="num">126 tok/s</td><td class="num">2,539 tok/s</td><td class="num">0.0017</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">One stream reads every weight once per token, so a 6-bit body that reads about 10% more bytes than W4A16's should cost about that much speed; on the A30 it costs 3%. GPU memory sits 0.42 GB above GPTQ's, most of it the vocabulary blocks held twice.</p>
+
+      <h3><span class="eyebrow">Generality</span>Code and other languages</h3>
+      <p>The ladder's census is English training text, and held out it puts only 26.5% of non-English tokens in 8-bit rows. BF16 answered HumanEval, MBPP and MGSM in 11 languages (914 answers, 344k tokens), and each model was scored along those answers. A second census adds FineWeb-2 web text in 30 languages and keeps the same 65,536 8-bit rows, so the table's bytes do not change.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Excess loss against BF16</th><th class="num">Code</th><th class="num">Multilingual</th><th class="num">Thai</th><th class="num">Japanese</th><th class="num">Chinese</th></tr></thead>
+          <tbody>
+            <tr><td>English ladder alone</td><td class="num">−0.0003</td><td class="num">0.0039</td><td class="num">0.0238</td><td class="num">0.0049</td><td class="num">0.0034</td></tr>
+            <tr><td>Multilingual ladder alone</td><td class="num">−0.0001</td><td class="num">0.0015</td><td class="num">0.0027</td><td class="num">0.0027</td><td class="num">0.0015</td></tr>
+            <tr><td>GPTQ W4A16</td><td class="num">0.0303</td><td class="num">0.0655</td><td class="num">0.1086</td><td class="num">0.0925</td><td class="num">0.0546</td></tr>
+            <tr><td>Blaze-Q, real (English ladder)</td><td class="num">0.0020</td><td class="num">0.0051</td><td class="num">0.0276</td><td class="num">0.0081</td><td class="num">0.0067</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Blaze-Q drifts 15× less than GPTQ W4A16 on code and 13× less on other languages. The multilingual census cuts the ladder's multilingual cost 2.6× (Thai 9×) and costs English almost nothing: 0.00030 against 0.00022 on BF16's benchmark answers. Blaze-Q should be rebuilt on it.</p>
 
       <h3><span class="eyebrow">Serving</span>The real format, on the 2B</h3>
       <p>The 2B's real export stores the body as standard 8-bit groups and the vocabulary as two quantized blocks with an index map. A small vLLM plugin serves them with vLLM's own kernels. Its drift matches the fake export's to four decimals, and it fits in W4A16's bytes on disk.</p>
@@ -386,7 +418,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
       <ul>
         <li><strong>The vision tower.</strong> At exactly a standard export's size, the whole 6-bit body did not fit with the vision tower in BF16. Storing it at 8 bits, as Glaze v2 already does, freed 324 MB; MMMU moved from Glaze v2's −2.9 to −0.9.</li>
         <li><strong>The market.</strong> Prices measured directly at 6 bits were indistinguishable from noise, so the market that worked (G2b) ranks units by their 4-bit prices and scales them by the measured bits rule. It raised 23 of 64 units to 8 bits: layers 0–6 and layer 31's FFN, which G1 had flagged.</li>
-        <li><strong>Still to do.</strong> A real 4B export needs a 6-bit kernel, which vLLM does not have. The single-copy vocabulary head needs a faster kernel. The 9B, with an untied table, is untested.</li>
+        <li><strong>Still to do.</strong> Rebuild Blaze-Q on the multilingual census. The single-copy vocabulary head needs a faster kernel. The 9B, with an untied table, is untested.</li>
       </ul>
 
       <h2 id="where">Where we started</h2>

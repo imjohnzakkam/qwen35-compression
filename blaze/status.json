@@ -17,14 +17,20 @@
    "label": "Next"
   }
  ],
+ "spend": {
+  "rupees": 652.98,
+  "dollars": 6.78,
+  "label": "₹652.98 (about $6.78) across all GPU runs"
+ },
+ "updated": "2026-10-17T08:16:37Z",
  "cards": [
   {
    "id": "Q6",
    "column": "done",
    "model": "4B",
    "title": "Real 6-bit Blaze-Q",
-   "summary": "Servable at W4A16's size on vLLM's own 6-bit kernel: drift 0.00169 (= G2b), one stream 147 tok/s against GPTQ's 151, batched 2,900 against 3,126.",
-   "cost": "₹30.14 (stopped early)",
+   "summary": "Servable at W4A16's size on vLLM's own 6-bit kernel: drift 0.00169 (= G2b), one stream 147 tok/s against GPTQ's 151. On 8-bit Marlin: 0.00170, 126 tok/s.",
+   "cost": "₹71.72 (two runs)",
    "details": [
     [
      "Question",
@@ -39,83 +45,54 @@
      "vLLM 0.29 picks Humming for the 6-bit groups and Marlin for the 8-bit ones; Humming needed NVRTC's builtins on the library path."
     ],
     [
-     "Not measured",
-     "The 8-bit fallback crashed on vLLM's compile cache (fixed in code); the code and multilingual drift never started."
+     "Fallback",
+     "BLAZE_W6_AS_W8=1 repacks the 6-bit codes for 8-bit Marlin: 0.00170, flips 1.40%, 126 tok/s one stream, 2,539 batched, 4.93 GB."
     ],
     [
-     "Run",
-     "r_d164352b, 17 Oct 04:34–05:19 UTC"
+     "Runs",
+     "r_d164352b (04:34–05:19 UTC, ₹30.14) and r_591df322 (07:12–08:14 UTC, ₹41.58), 17 Oct"
     ]
    ]
   },
   {
    "id": "LANG",
-   "column": "running",
+   "column": "done",
    "model": "4B",
    "title": "Ladder on code and languages",
-   "summary": "The English census covers 26.5% of non-English tokens in 8-bit rows; a multilingual census at the same size covers 93.2%. Drift test pending.",
-   "cost": "≈₹39 so far · cap ₹75",
+   "summary": "Code is free; other languages cost the English ladder 0.0039 (Thai 0.024). A multilingual census at the same size: 0.0015 (Thai 0.0027), English unchanged. Blaze-Q beats GPTQ 15× on code, 13× on other languages.",
+   "cost": "in Q6",
    "details": [
     [
      "Question",
-     "Does the English-only ladder hurt code or other languages, and does the multilingual census fix it without hurting English?"
+     "Does the English-only ladder hurt code or other languages?"
     ],
     [
-     "Run",
-     "r_591df322 on A30 539036, 17 Oct; also the 8-bit fallback"
+     "Measured",
+     "Along BF16's answers to HumanEval, MBPP and MGSM in 11 languages (914 answers): English ladder code −0.0003, multilingual 0.0039; multilingual ladder −0.0001 and 0.0015; GPTQ W4A16 0.0303 and 0.0655; Blaze-Q 0.0020 and 0.0051."
+    ],
+    [
+     "English cost",
+     "Multilingual ladder on BF16's 1,501 English benchmark answers: 0.00030 (English ladder 0.00022)."
+    ],
+    [
+     "Next",
+     "Rebuild Blaze-Q on the multilingual census."
     ]
-   ],
-   "steps": [
-    {
-     "label": "Build real 6-bit Blaze-Q",
-     "status": "passed"
-    },
-    {
-     "label": "Drift: 6-bit on 8-bit Marlin",
-     "status": "passed"
-    },
-    {
-     "label": "Speed: 6-bit on 8-bit Marlin",
-     "status": "passed"
-    },
-    {
-     "label": "BF16 answers: code + 11 languages",
-     "status": "passed"
-    },
-    {
-     "label": "Domain drift: BF16",
-     "status": "passed"
-    },
-    {
-     "label": "Build English ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Domain drift: English ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Build multilingual ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Domain drift: multilingual ladder",
-     "status": "passed"
-    },
-    {
-     "label": "English drift: multilingual ladder",
-     "status": "passed"
-    },
-    {
-     "label": "Domain drift: GPTQ W4A16",
-     "status": "passed"
-    },
-    {
-     "label": "Domain drift: Blaze-Q",
-     "status": "passed"
-    }
-   ],
-   "elapsed": "1h 00m on the GPU"
+   ]
+  },
+  {
+   "id": "MLQ",
+   "column": "next",
+   "model": "4B",
+   "title": "Blaze-Q, multilingual ladder",
+   "summary": "Rebuild the real 4B Blaze-Q on the multilingual census, then one drift check (English and other languages) before publishing.",
+   "cost": "est. ₹40",
+   "details": [
+    [
+     "Why",
+     "Thai is most of Blaze-Q's multilingual gap, and the English ladder is most of Thai's."
+    ]
+   ]
   },
   {
    "id": "G4",
@@ -571,11 +548,5 @@
     ]
    ]
   }
- ],
- "spend": {
-  "rupees": 650.89,
-  "dollars": 6.76,
-  "label": "₹650.89 (about $6.76) across all GPU runs"
- },
- "updated": "2026-10-17T08:13:08Z"
+ ]
 }
