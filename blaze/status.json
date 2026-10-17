@@ -17,12 +17,6 @@
    "label": "Next"
   }
  ],
- "spend": {
-  "rupees": 611.4,
-  "dollars": 6.35,
-  "label": "₹611.40 (about $6.35) across all GPU runs"
- },
- "updated": "2026-10-17T05:20:25Z",
  "cards": [
   {
    "id": "Q6",
@@ -56,17 +50,76 @@
   },
   {
    "id": "LANG",
-   "column": "next",
+   "column": "running",
    "model": "4B",
    "title": "Ladder on code and languages",
    "summary": "The English census covers 26.5% of non-English tokens in 8-bit rows; a multilingual census at the same size covers 93.2%. Drift test pending.",
-   "cost": "est. ₹45–52",
+   "cost": "≈₹0 so far · cap ₹75",
    "details": [
     [
      "Question",
      "Does the English-only ladder hurt code or other languages, and does the multilingual census fix it without hurting English?"
+    ],
+    [
+     "Run",
+     "r_591df322 on A30 539036, 17 Oct; also the 8-bit fallback"
     ]
-   ]
+   ],
+   "steps": [
+    {
+     "label": "Build real 6-bit Blaze-Q",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: 6-bit on 8-bit Marlin",
+     "status": "pending"
+    },
+    {
+     "label": "Speed: 6-bit on 8-bit Marlin",
+     "status": "pending"
+    },
+    {
+     "label": "BF16 answers: code + 11 languages",
+     "status": "pending"
+    },
+    {
+     "label": "Domain drift: BF16",
+     "status": "pending"
+    },
+    {
+     "label": "Build English ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Domain drift: English ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Build multilingual ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Domain drift: multilingual ladder",
+     "status": "pending"
+    },
+    {
+     "label": "English drift: multilingual ladder",
+     "status": "pending"
+    },
+    {
+     "label": "Domain drift: GPTQ W4A16",
+     "status": "pending"
+    },
+    {
+     "label": "Domain drift: Blaze-Q",
+     "status": "pending"
+    }
+   ],
+   "progress": {
+    "pct": null,
+    "label": "Setting up the GPU"
+   },
+   "elapsed": "0h 00m on the GPU"
   },
   {
    "id": "G4",
@@ -522,5 +575,11 @@
     ]
    ]
   }
- ]
+ ],
+ "spend": {
+  "rupees": 611.69,
+  "dollars": 6.35,
+  "label": "₹611.69 (about $6.35) across all GPU runs"
+ },
+ "updated": "2026-10-17T07:12:39Z"
 }
