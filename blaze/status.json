@@ -17,59 +17,34 @@
    "label": "Next"
   }
  ],
+ "spend": {
+  "rupees": 690.47,
+  "dollars": 7.17,
+  "label": "₹690.47 (about $7.17) across all GPU runs"
+ },
+ "updated": "2026-10-17T17:16:46Z",
  "cards": [
   {
    "id": "V1",
-   "column": "running",
+   "column": "next",
    "model": "plugin",
    "title": "Vocabulary held once",
-   "summary": "Lookups read straight from the Marlin LM head, so each vocabulary block is held once: about 0.41 GB less GPU memory on the 4B. Checking exact rows, drift, memory and speed.",
-   "cost": "≈₹0 so far · cap ₹60",
+   "summary": "Rows exact on vLLM's own Marlin repack at every 2B and 4B block shape. The first end-to-end run stopped on a compile error in the plugin (fixed); drift, memory and speed still to measure.",
+   "cost": "₹4.68 so far",
    "details": [
     [
-     "Question",
-     "Does the one-copy layout give bit-identical rows and the same drift, with less memory and the same speed?"
+     "Measured",
+     "0 of 65,536 + 182,784 rows differ from codes × scales or from vLLM's own lookup, at hidden 2,048 and 2,560. Lookup cost about 10 µs more per block per decode step."
+    ],
+    [
+     "Stopped",
+     "The row kernel was defined lazily inside vLLM's torch.compile trace; it is now defined at import, as vLLM's own lookup kernel is."
     ],
     [
      "Run",
-     "r_34835ea9 on A30 539333, 17 Oct"
+     "r_34835ea9, 17 Oct, 6 minutes"
     ]
-   ],
-   "steps": [
-    {
-     "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
-     "status": "pending"
-    },
-    {
-     "label": "Build real Blaze-Q",
-     "status": "pending"
-    },
-    {
-     "label": "Exact rows on vLLM's Marlin repack",
-     "status": "pending"
-    },
-    {
-     "label": "Drift: Blaze-S, one copy",
-     "status": "pending"
-    },
-    {
-     "label": "Speed and memory: Blaze-S",
-     "status": "pending"
-    },
-    {
-     "label": "Drift: Blaze-Q, one copy",
-     "status": "pending"
-    },
-    {
-     "label": "Speed and memory: Blaze-Q",
-     "status": "pending"
-    }
-   ],
-   "progress": {
-    "pct": null,
-    "label": "Setting up the GPU"
-   },
-   "elapsed": "0h 00m on the GPU"
+   ]
   },
   {
    "id": "S2",
@@ -625,11 +600,5 @@
     ]
    ]
   }
- ],
- "spend": {
-  "rupees": 686.22,
-  "dollars": 7.13,
-  "label": "₹686.22 (about $7.13) across all GPU runs"
- },
- "updated": "2026-10-17T17:08:33Z"
+ ]
 }
