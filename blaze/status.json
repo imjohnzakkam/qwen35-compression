@@ -17,20 +17,14 @@
    "label": "Next"
   }
  ],
- "spend": {
-  "rupees": 690.47,
-  "dollars": 7.17,
-  "label": "₹690.47 (about $7.17) across all GPU runs"
- },
- "updated": "2026-10-17T17:16:46Z",
  "cards": [
   {
    "id": "V1",
-   "column": "next",
+   "column": "running",
    "model": "plugin",
    "title": "Vocabulary held once",
    "summary": "Rows exact on vLLM's own Marlin repack at every 2B and 4B block shape. The first end-to-end run stopped on a compile error in the plugin (fixed); drift, memory and speed still to measure.",
-   "cost": "₹4.68 so far",
+   "cost": "≈₹0 so far · cap ₹60",
    "details": [
     [
      "Measured",
@@ -41,10 +35,45 @@
      "The row kernel was defined lazily inside vLLM's torch.compile trace; it is now defined at import, as vLLM's own lookup kernel is."
     ],
     [
-     "Run",
-     "r_34835ea9, 17 Oct, 6 minutes"
+     "Runs",
+     "r_34835ea9 (17 Oct, stopped), r_a3c04262 (18 Oct)"
     ]
-   ]
+   ],
+   "steps": [
+    {
+     "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
+     "status": "pending"
+    },
+    {
+     "label": "Build real Blaze-Q",
+     "status": "pending"
+    },
+    {
+     "label": "Exact rows on vLLM's Marlin repack",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-S, one copy",
+     "status": "pending"
+    },
+    {
+     "label": "Speed and memory: Blaze-S",
+     "status": "pending"
+    },
+    {
+     "label": "Drift: Blaze-Q, one copy",
+     "status": "pending"
+    },
+    {
+     "label": "Speed and memory: Blaze-Q",
+     "status": "pending"
+    }
+   ],
+   "progress": {
+    "pct": null,
+    "label": "Setting up the GPU"
+   },
+   "elapsed": "0h 00m on the GPU"
   },
   {
    "id": "S2",
@@ -600,5 +629,11 @@
     ]
    ]
   }
- ]
+ ],
+ "spend": {
+  "rupees": 690.91,
+  "dollars": 7.17,
+  "label": "₹690.91 (about $7.17) across all GPU runs"
+ },
+ "updated": "2026-10-17T21:19:52Z"
 }
