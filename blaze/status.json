@@ -85,7 +85,7 @@
     "pct": null,
     "label": "Setting up the GPU"
    },
-   "elapsed": "11h 49m on the GPU"
+   "elapsed": "13h 24m on the GPU"
   },
   {
    "id": "S2",
@@ -647,5 +647,5 @@
   "dollars": 7.79,
   "label": "₹750.47 (about $7.79) across all GPU runs"
  },
- "updated": "2026-10-18T09:08:20Z"
+ "updated": "2026-10-18T10:43:59Z"
 }
