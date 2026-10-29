@@ -835,3 +835,84 @@ def test_vocab_plan_checks_rows_first_and_compares_with_two_copies(tmp_path: Pat
     assert driver.per_answer_gap(score(1.0), score(1.0005)) == pytest.approx(5e-5)
     with pytest.raises(ValueError):
         driver.per_answer_gap(score(1.0), {"per_answer": []})
+
+
+def test_task_scores_extract_code_and_check_answers() -> None:
+    scores = _load_script("blaze_task_scores")
+    answer = (
+        "Here:\n```python\ndef helper():\n    pass\n```\n"
+        "and\n```python\ndef add(a, b):\n    return a + b\n```"
+    )
+    assert scores.extract_code(answer, "add").startswith("def add")
+    assert scores.extract_code("no block at all", "add") == "no block at all"
+    row = {
+        "prompt": "def add(a, b):\n",
+        "entry_point": "add",
+        "test": "def check(f):\n    assert f(2, 3) == 5\n",
+    }
+    assert scores.passes(scores.humaneval_program(row, "```python\n    return a + b\n```"))
+    assert not scores.passes(scores.humaneval_program(row, "```python\n    return a - b\n```"))
+    assert not scores.passes("while True:\n    pass\n", timeout=1)
+    mbpp = {"test_list": ["assert add(1, 1) == 2"], "test_setup_code": ""}
+    assert scores.passes(
+        scores.mbpp_program(mbpp, "```python\ndef add(a, b):\n    return a + b\n```")
+    )
+    # MGSM: the last number counts, commas dropped, any script's digits read.
+    assert scores.mgsm_correct("2 + 3 = 5, so the answer is 1,250.", 1250)
+    assert scores.mgsm_correct("উত্তর ১৮", 18)
+    assert not scores.mgsm_correct("The answer is 18 apples, not 20", 18)
+    assert not scores.mgsm_correct("no number", 3)
+    per_file = {"domain_ml_en": {0: 1.0, 1: 0.0}, "domain_ml_th": {0: 1.0}}
+    summary = scores.summarize(per_file)
+    assert summary["mgsm"]["accuracy"] == pytest.approx(200 / 3)
+    assert summary["mgsm_non_english"] == {"accuracy": 100.0, "questions": 1}
+
+
+def test_long_context_reads_vllms_cache_report() -> None:
+    long = _load_script("blaze_long_context")
+    report = long.kv_report(
+        [
+            "GPU KV cache size: 437,712 tokens",
+            "Maximum concurrency for 32,768 tokens per request: 13.36x",
+            "something else",
+        ]
+    )
+    assert report == {
+        "kv_cache_tokens": 437712,
+        "max_concurrency": [{"tokens_per_request": 32768, "requests": 13.36}],
+    }
+    assert long.kv_report([]) == {"kv_cache_tokens": None, "max_concurrency": []}
+
+
+def test_tasks_driver_answers_scores_and_times_each_model(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_tasks")
+    plan_file = tmp_path / "plan.json"
+    full = driver.plan(tmp_path / "t", tmp_path / "o", "S", plan_file, None)
+    assert list(full) == [
+        "export:blaze_s2",
+        "export:blaze_q6_ml",
+        "answers:gptq_w4a16_g128",
+        "answers:blaze_q6_ml",
+        "answers:blaze_s2",
+        "tasks:bf16",
+        "tasks:gptq_w4a16_g128",
+        "tasks:blaze_q6_ml",
+        "tasks:blaze_s2",
+        "panel:blaze_s2",
+        "long:bf16",
+        "long:gptq_w4a16_g128",
+        "long:blaze_q6_ml",
+        "long:blaze_s2",
+    ]
+    q = full["export:blaze_q6_ml"]
+    assert q[q.index("--census") + 1] == "data/blaze/census_multilingual.json"
+    assert full["answers:blaze_q6_ml"][1].startswith("LD_LIBRARY_PATH=")  # vLLM's 6-bit kernel
+    assert full["answers:gptq_w4a16_g128"][0] != "env"
+    assert "--model" in full["panel:blaze_s2"] or any(
+        "blaze_s2" in a for a in full["panel:blaze_s2"]
+    )
+    pilot = driver.plan(tmp_path / "p", tmp_path / "o", "S", plan_file, 10)
+    assert [k for k in pilot if k.startswith("long:")] == ["long:blaze_s2"]
+    assert pilot["long:blaze_s2"][-6:] == driver.PILOT_LONG
+    assert pilot["answers:blaze_s2"][-2:] == ["--limit", "2"]
+    assert pilot["export:blaze_q6_ml"][-2:] == ["--layers", "0,1"]
