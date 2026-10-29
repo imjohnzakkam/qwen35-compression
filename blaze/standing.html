@@ -81,11 +81,11 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
 </head>
 <body>
 <div class="shell">
-  <header class="topbar"><span><b>Kiln</b> · Qwen3.5 compression</span><span>Status · 17 Oct 2026</span></header>
+  <header class="topbar"><span><b>Kiln</b> · Qwen3.5 compression</span><span>Status · 30 Oct 2026</span></header>
   <main>
     <h1>Where Blaze stands</h1>
     <p class="dek">The idea holds: a 4-bit Qwen3.5 checkpoint wastes a quarter of its bytes on vocabulary rows it rarely uses. Moving those bytes is free, and spending them on a 6-bit body brings the 4B to BF16's level at a standard 4-bit file's size. As of 17 October all of it serves on stock vLLM, using vLLM's own 6-bit kernel.</p>
-    <div class="meta">Seventeen A30 runs, 15–30 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">scorecard</a></div>
+    <div class="meta">Seventeen A30 runs, 15–30 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">scorecard</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/models.html">Blaze-Q and Blaze-S</a></div>
 
     <div class="verdicts">
       <div class="verdict proven"><b>Proven</b><p>The vocabulary ladder costs nothing (0.0002 excess loss). At W4A16's 3.78 GB, a 6-bit Blaze-Q drifts 8.5× less than Glaze v2 and is within a point of BF16 on 12 of 13 tasks.</p></div>
@@ -249,13 +249,14 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
     <h2>Decisions waiting on you</h2>
     <ul>
       
-      <li><strong>Publish Blaze on Hugging Face</strong> as its own model and collection, later: the multilingual 4B Blaze-Q, Glaze v2 + ladder at 2.91 GB, and the real 2B Blaze-Q.</li>
+      <li><strong>Publish Blaze on Hugging Face</strong> as its own collection: <code>Qwen3.5-4B-Blaze-Q</code> and <code>Qwen3.5-4B-Blaze-S</code>, plugin bundled and on PyPI, private first, then a smoke test from the Hub. The plan is drafted; the 2B follows later.</li>
+      <li><strong>Write the arXiv paper</strong> on equal file size as the yardstick, with bits per layer reported alongside.</li>
       <li><strong>Confirm the yardstick:</strong> every comparison here holds checkpoint size equal, not bits per weight.</li>
       <li><strong>Review and merge</strong> PR #34 (Blaze) and PR #33 (the Glaze README).</li>
       <li><strong>The 9B check</strong> stays on hold, as asked.</li>
     </ul>
   </main>
-  <footer><span>Blaze · status 17 Oct 2026</span><span>Measured unless labeled</span></footer>
+  <footer><span>Blaze · status 30 Oct 2026</span><span>Measured unless labeled</span></footer>
 </div>
 
 <script>

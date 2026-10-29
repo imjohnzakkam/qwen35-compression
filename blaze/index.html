@@ -209,6 +209,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
   <div class="tabs" role="tablist" aria-label="Page views">
     <button type="button" role="tab" id="tab-report" aria-selected="true" aria-controls="panel-report">Report</button>
     <button type="button" role="tab" id="tab-experiments" aria-selected="false" aria-controls="panel-experiments">Experiments <span class="tab-live">live</span></button>
+    <a class="tab-link" href="https://imjohnzakkam.github.io/qwen35-compression/blaze/models.html">Blaze-Q and Blaze-S →</a>
     <a class="tab-link" href="https://imjohnzakkam.github.io/qwen35-compression/blaze/standing.html">Where we stand →</a>
     <a class="tab-link" href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">Scorecard →</a>
   </div>
@@ -240,8 +241,8 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
         <div><dt>Where the bytes are</dt><dd>The vocabulary table is 34% of Glaze v2's 3.77 GB. 68% of its 248,320 rows never appeared in the ladder's 42M-token census of training text and model answers.</dd></div>
         <div><dt>The method</dt><dd>A usage ladder (busy rows 8-bit, the rest 4-bit), a byte market that prices every body unit by measured KL, and stock Marlin kernels.</dd></div>
         <div><dt>What was predicted</dt><dd>On the 4B at a 4-bit export's size: excess loss of 0.0011–0.002 with a 6-bit option, 7–13× below Glaze v2's 0.014, or about 1.1–1.4% flips against 3.29%.</dd></div>
-        <div><dt>What was measured</dt><dd>On the 4B at W4A16's size: excess loss <b>0.0017</b> and <b>1.39%</b> flips, inside the prediction, and every panel task within a point of BF16. On the 2B: <b>0.0005</b> against standard W4A16's 0.073, served for real by vLLM at W4A16's size. Full suite on the 4B: 12 of 13 tasks within a point of BF16; MathVista is −1.1, with an interval that includes zero.</dd></div>
-        <div><dt>Shippable today</dt><dd>The ladder alone, added to the published GPTQ, AutoRound and Glaze v2 checkpoints, cuts each by 0.86 GB (−23%) with drift unchanged to 0.0001: Glaze v2's quality at <b>2.91 GB</b>, served by vLLM with a small plugin.</dd></div>
+        <div><dt>What was measured</dt><dd>On the 4B at W4A16's size: excess loss <b>0.0017</b> and <b>1.39%</b> flips, inside the prediction, and every panel task within a point of BF16. On the 2B: <b>0.0005</b> against standard W4A16's 0.073, served for real by vLLM at W4A16's size. Full suite on the 4B: 12 of 13 tasks within a point of BF16; MathVista is −1.1, with an interval that includes zero. Rebuilt on a multilingual census at the same size, Blaze-Q drifts 0.0023 on 11 languages and matches BF16 on code and on MGSM in 10 other languages, where GPTQ W4A16 loses 6.2 points.</dd></div>
+        <div><dt>Shippable today</dt><dd>The ladder alone, added to the published GPTQ, AutoRound and Glaze v2 checkpoints, cuts each by 0.86 GB (−23%) with drift unchanged to 0.0001: Glaze v2's quality at <b>2.91 GB</b>, served by vLLM with a small plugin. Blaze-S, AutoRound's body with the ladder and an 8-bit vision tower, is 2.60 GB, scores at or above AutoRound on the reasoning panel, and leaves 11% more KV cache than GPTQ W4A16.</dd></div>
         <div><dt>Cost</dt><dd>₹881.31 (about $9.15) for seventeen A30 runs, the full suite included.</dd></div>
       </dl>
 
