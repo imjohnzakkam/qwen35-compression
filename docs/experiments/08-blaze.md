@@ -10,8 +10,13 @@ in-domain answers are needed.
 vision tower at 8 bits as Glaze v2 stores it, Blaze-Q's excess loss is 0.0017, 8.5x below Glaze
 v2's, and on the full suite it is within a point of BF16 on 12 of 13 tasks; MathVista is 1.1
 below (paired interval −2.6 to +0.5). On the 2B it matches BF16 where W4A16 loses 10-12 points,
-and its real format reproduces the fake-quantized scores exactly. The 4B's numbers are
-fake-quantized: its 6-bit body needs a kernel vLLM does not have.
+and its real format reproduces the fake-quantized scores exactly. The real 4B Blaze-Q serves on
+vLLM 0.29's own 6-bit kernel with the same drift, at 147 tokens a second against GPTQ's 151, in
+GPTQ's GPU memory once the vocabulary is held once. Rebuilt on a multilingual census at the same
+size, it drifts 0.0023 on 11 languages (Thai 0.0070) against the English ladder's 0.0051 (0.0276)
+and GPTQ W4A16's 0.0655, for +0.00008 on English. The ladder alone, added to published GPTQ,
+AutoRound and Glaze v2 exports, cuts each by 0.86 GB at unchanged drift. Fifteen A30 runs,
+₹800.96 (about $8.32).
 
 ## Why bytes rather than rounding
 
@@ -502,7 +507,37 @@ stays valid; per-language flip rates there do not.
   cost.** At the same 65,536 8-bit rows, the ladder's own multilingual cost falls 2.6x (Thai 9x)
   while code stays free and English benchmark answers move from 0.00022 (G1) to 0.00030 (flips
   0.44% against 0.405%). Thai is most of Blaze-Q's remaining multilingual gap, and the ladder is most
-  of Thai's: Blaze-Q should be rebuilt on the multilingual census.
+  of Thai's: Blaze-Q should be rebuilt on the multilingual census (done, next section).
+
+### Blaze-Q on the multilingual census
+
+`scripts/run_blaze_mlq.py` rebuilds the real 4B Blaze-Q with the multilingual census at the English
+ladder's 65,536 8-bit rows (`blaze_gptq.py --cover 1e-9`). The body is G2b's plan, GPTQ data and
+options as before; only which rows sit in the 8-bit rung changes. It is scored as the English
+Blaze-Q was: BF16's 1,501 answers on vLLM's 6-bit kernel, and BF16's 914 code and multilingual
+answers (reused from the run above) with the 6-bit groups run as 8-bit. Speed is not measured: the
+bytes and kernels are the English Blaze-Q's.
+
+Run `r_2b4d13b6` on one A30, code `8e7d3f0`: 50 minutes, ₹34.82 (about $0.36).
+
+| Excess loss vs BF16 | File | English (1,501) | Code | Multilingual | Thai | Japanese | Chinese |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| GPTQ W4A16 (published) | 3,780,662,272 B | 0.0541 | 0.0303 | 0.0655 | 0.1086 | 0.0925 | 0.0546 |
+| Blaze-Q, English ladder | 3,780,277,088 B | 0.00169 | 0.0020 | 0.0051 | 0.0276 | 0.0081 | 0.0067 |
+| **Blaze-Q, multilingual ladder** | 3,780,277,088 B | 0.00177 | 0.0021 | **0.0023** | **0.0070** | **0.0058** | **0.0050** |
+
+Paired 95% intervals (answers resampled), multilingual against English ladder: multilingual
+−0.0027 (−0.0037 to −0.0017), Thai −0.0205 (−0.0257 to −0.0163), Japanese −0.0023 (−0.0031 to
+−0.0016), Chinese −0.0017 (−0.0023 to −0.0012), code +0.0001 (0.0000 to 0.0002), English benchmark
+answers +0.00008 (0.00006 to 0.00011; flips 1.42% against 1.40%).
+
+- **The multilingual ladder halves Blaze-Q's drift outside English at no size cost.** Multilingual
+  excess falls 2.2x and Thai 3.9x; the file is byte for byte the English Blaze-Q's size, still under
+  GPTQ W4A16's. Blaze-Q now drifts 28x less than GPTQ W4A16 on the 11 languages (13x before).
+- **English pays what the ladder alone predicted.** The rise, +0.00008, equals the multilingual
+  ladder's own English cost with a BF16 body (0.00030 against 0.00022); code does not move.
+- **This is the checkpoint to publish.** All three checks pass (equal size, English within 0.0002 of
+  0.00169, multilingual below 0.0051); the export was kept for publishing.
 
 ## The real format, on the 2B
 
@@ -583,7 +618,8 @@ rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
 | Code (G4) | `scripts/run_blaze_g4.py`, `scripts/blaze_g4_report.py`, `configs/evaluation/blaze_g4_text.yaml`, `blaze_g4_vision.yaml` |
 | Code (add-on) | `src/qwen35_compression/blaze/addon.py`, `scripts/blaze_addon.py`, `scripts/run_blaze_addon.py` |
 | Code (Blaze-S, 6-bit kernel) | `scripts/run_blaze_s.py`, `blaze_gptq.py --real`, `plugins/blaze_vllm/blaze_vllm/w6.py`, `scripts/blaze_kernel_bench.py` |
-| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; the add-on run ₹60.93; ₹581.26 in all (about $6.04) at ₹38.88 per A30 hour and ₹96.3 per dollar |
+| Code (multilingual Blaze-Q) | `scripts/run_blaze_mlq.py`, `blaze_gptq.py --cover` |
+| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; the add-on run ₹60.93; the real 4B Blaze-Q ₹71.72; Blaze-S corrected ₹32.81; the vocabulary held once ₹80.35; the multilingual Blaze-Q ₹34.82; ₹800.96 in all (about $8.32) over fifteen A30 runs, at ₹38.88 per A30 hour and ₹96.3 per dollar |
 
 ## Reproduce
 
@@ -619,4 +655,7 @@ uv run python scripts/run_blaze_vocab.py --bf16 <G2 run>/bf16.json --reuse <two-
 # The real 4B Blaze-Q, both serving modes, and drift on code and 11 languages
 uv run python scripts/run_blaze_q6.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
     --pilot-limit 10
+# Blaze-Q on the multilingual census, reusing BF16's code and multilingual answers from the Q6 run
+uv run python scripts/run_blaze_mlq.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
+    --domain-traces <Q6 run>/domain_traces --domain-bf16 <Q6 run>/domain_bf16.json --pilot-limit 10
 ```
