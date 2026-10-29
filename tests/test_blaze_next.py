@@ -634,6 +634,61 @@ def test_q6_plan_serves_both_ways_and_scores_domains(tmp_path: Path) -> None:
     assert scores.groups("minerva_math500") == ("math500", "both")
 
 
+def test_multilingual_blaze_q_rebuilds_the_body_with_the_multilingual_ladder(
+    tmp_path: Path,
+) -> None:
+    driver = _load_script("run_blaze_mlq")
+    plan_file = tmp_path / "plan.json"
+    full = driver.plan(tmp_path / "m", tmp_path / "e", "S", plan_file, None)
+    assert list(full) == ["export", "score", "domain"]
+    export = full["export"]
+    assert export[export.index("--census") + 1] == "data/blaze/census_multilingual.json"
+    assert export[export.index("--cover") + 1] == "1e-9"  # the English ladder's 65,536 rows
+    assert export[export.index("--bits") + 1] == "6" and "--real" in export
+    assert export[export.index("--plan") + 1] == str(plan_file)
+    assert full["score"][1].startswith("LD_LIBRARY_PATH=")  # vLLM's 6-bit kernel, as Q6 scored
+    assert full["domain"][:2] == ["env", "BLAZE_W6_AS_W8=1"] and full["domain"][-1] == "--domains"
+    pilot = driver.plan(tmp_path / "p", tmp_path / "e", "S", plan_file, 10)
+    assert pilot["export"][-2:] == ["--layers", "0,1"]
+    assert pilot["domain"][pilot["domain"].index("--limit") + 1] == "2"
+    # The English Blaze-Q keeps its census and the default cover.
+    english = _load_script("run_blaze_q6").export_command(tmp_path / "x", plan_file, None)
+    assert english[english.index("--census") + 1] == "data/blaze/census.json"
+    assert "--cover" not in english
+
+
+def test_multilingual_blaze_q_report_compares_with_the_english_one(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_mlq")
+    export = tmp_path / "export"
+    export.mkdir()
+    (export / "model.safetensors").write_bytes(b"0" * 10)
+
+    def score(nll: float) -> dict:
+        point = {"answers": 1, "mean_nll": nll, "flip_rate": 0.01, "tokens": 100}
+        return {"scores": {"both": {"all": point}}}
+
+    def domain(nll: dict[str, float]) -> dict:
+        return {
+            "scores": {
+                g: {"all": {"mean_nll": v, "flip_rate": 0.1, "tokens": 50}} for g, v in nll.items()
+            }
+        }
+
+    write = lambda name, data: (tmp_path / f"{name}.json").write_text(json.dumps(data))  # noqa: E731
+    write("blaze_q6_ml", score(0.1285))
+    write("domain_bf16", domain({"code": 0.3, "ml": 0.5}))
+    write("domain_blaze_q6_ml", domain({"code": 0.302, "ml": 0.503}))
+    report = driver.mlq_report(tmp_path, score(0.127), export)
+    assert report["english"]["excess_loss"] == pytest.approx(0.0015)
+    assert report["domains"]["ml"]["excess_loss"] == pytest.approx(0.003)
+    assert report["checks"] == {
+        "equal_size": True,
+        "english_kept": True,
+        "multilingual_better": True,
+    }
+    assert report["decision"].startswith("go")
+
+
 def test_ladder_add_on_can_store_the_vision_tower_at_8_bits(tmp_path: Path) -> None:
     from safetensors.torch import load_file
 

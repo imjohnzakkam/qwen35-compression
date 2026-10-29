@@ -58,6 +58,12 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--census", type=Path, default=Path("data/blaze/census.json"))
     parser.add_argument("--ladder", action="store_true", help="Ladder the vocabulary table")
+    parser.add_argument(
+        "--cover",
+        type=float,
+        default=DEFAULT_COVER,
+        help="Ladder cover; 1e-9 keeps the 65,536-row floor (the multilingual census's size)",
+    )
     parser.add_argument("--bits", type=int, default=6)
     parser.add_argument("--group", type=int, default=128)
     parser.add_argument("--blocks", type=int, default=128)
@@ -115,9 +121,7 @@ def main() -> None:
         torch.cuda.empty_cache()
 
     ladder = (
-        plan_ladder(load_census(args.census), DEFAULT_COVER, DEFAULT_AT_LEAST)
-        if args.ladder
-        else None
+        plan_ladder(load_census(args.census), args.cover, DEFAULT_AT_LEAST) if args.ladder else None
     )
     device = "cuda" if torch.cuda.is_available() else "cpu"
     vision = Option(args.vision_bits, 128) if args.vision_bits else None

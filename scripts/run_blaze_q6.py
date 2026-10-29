@@ -103,13 +103,20 @@ def with_env(mode: str, command: list[str]) -> list[str]:
     return ["env", *(f"{k}={v}" for k, v in env.items()), *command] if env else command
 
 
-def export_command(export: Path, plan_file: Path, limit: int | None) -> list[str]:
+def export_command(
+    export: Path,
+    plan_file: Path,
+    limit: int | None,
+    census: Path = CENSUS,
+    cover: str | None = None,
+) -> list[str]:
     return [
         sys.executable,
         "scripts/blaze_gptq.py",
         "--census",
-        str(CENSUS),
+        str(census),
         "--ladder",
+        *(["--cover", cover] if cover else []),
         "--bits",
         "6",
         "--plan",
