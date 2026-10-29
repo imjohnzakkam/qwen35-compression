@@ -18,28 +18,16 @@ for _name in ("brotli", "brotlicffi"):
 
 import argparse  # noqa: E402
 import json  # noqa: E402
-import logging  # noqa: E402
-import os  # noqa: E402
 import re  # noqa: E402
+import subprocess  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-# Keep the engine in this process so its start-up log (the KV cache size) reaches our handler.
-os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")
-
 _CACHE = re.compile(r"GPU KV cache size: ([\d,]+) tokens")
 _CONCURRENCY = re.compile(r"Maximum concurrency for ([\d,]+) tokens per request: ([\d.]+)x")
+_MEMORY = re.compile(r"Available KV cache memory: ([\d.]+) GiB")
 # Token ids drawn from ordinary vocabulary, clear of the special tokens at the table's end.
 TOKEN_RANGE = (1_000, 150_000)
-
-
-class _Lines(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__()
-        self.lines: list[str] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.lines.append(record.getMessage())
 
 
 def kv_report(lines: list[str]) -> dict:
@@ -49,7 +37,30 @@ def kv_report(lines: list[str]) -> dict:
         for line in lines
         if (m := _CONCURRENCY.search(line))
     ]
-    return {"kv_cache_tokens": min(sizes) if sizes else None, "max_concurrency": concurrency}
+    memory = [float(m.group(1)) for line in lines if (m := _MEMORY.search(line))]
+    return {
+        "kv_cache_tokens": min(sizes) if sizes else None,
+        "kv_cache_gib": min(memory) if memory else None,
+        "max_concurrency": concurrency,
+    }
+
+
+def run_and_read_log(argv: list[str]) -> list[str]:
+    """Run the measurement in a child process and keep its output: vLLM's engine logs the KV
+    cache size from its own process, where no handler of ours can see it."""
+    child = subprocess.Popen(
+        [sys.executable, __file__, *argv, "--child"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    lines = []
+    for line in child.stdout:
+        sys.stdout.write(line)
+        lines.append(line)
+    if child.wait():
+        raise subprocess.CalledProcessError(child.returncode, child.args)
+    return lines
 
 
 def main() -> None:
@@ -61,13 +72,19 @@ def main() -> None:
     parser.add_argument("--new-tokens", type=int, default=128)
     parser.add_argument("--requests", type=int, default=64)
     parser.add_argument("--max-model-len", type=int, default=32_768)
+    parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if not args.child:
+        kv = kv_report(run_and_read_log(sys.argv[1:]))
+        result = json.loads(args.output.read_text(encoding="utf-8"))
+        per_request = args.prompt_tokens + args.new_tokens
+        tokens = kv["kv_cache_tokens"]
+        result.update(kv, requests_that_fit=None if tokens is None else tokens // per_request)
+        args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(result, indent=2), flush=True)
+        return
 
     import numpy as np
-
-    lines = _Lines()
-    logging.getLogger("vllm").addHandler(lines)
-
     from vllm import LLM, SamplingParams
     from vllm.inputs import TokensPrompt
 
@@ -79,7 +96,6 @@ def main() -> None:
         seed=0,
         limit_mm_per_prompt={"image": 0, "video": 0},
     )
-    kv = kv_report(lines.lines)
     rng = np.random.default_rng(0)
     prompts = [
         TokensPrompt(prompt_token_ids=rng.integers(*TOKEN_RANGE, args.prompt_tokens).tolist())
@@ -92,7 +108,6 @@ def main() -> None:
     seconds = time.perf_counter() - started
     generated = sum(len(o.outputs[0].token_ids) for o in outputs)
     prompt_tokens = args.requests * args.prompt_tokens
-    per_request = args.prompt_tokens + args.new_tokens
     result = {
         "name": args.name,
         "model": str(args.model),
@@ -103,10 +118,6 @@ def main() -> None:
             "max_model_len": args.max_model_len,
             "gpu_memory_utilization": 0.85,
         },
-        **kv,
-        "requests_that_fit": None
-        if kv["kv_cache_tokens"] is None
-        else kv["kv_cache_tokens"] // per_request,
         "seconds": round(seconds, 2),
         "prompt_tokens_per_second": round(prompt_tokens / seconds, 1),
         "generated_tokens_per_second": round(generated / seconds, 1),
@@ -114,7 +125,6 @@ def main() -> None:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(result, indent=2), flush=True)
 
 
 if __name__ == "__main__":

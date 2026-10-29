@@ -872,16 +872,19 @@ def test_long_context_reads_vllms_cache_report() -> None:
     long = _load_script("blaze_long_context")
     report = long.kv_report(
         [
-            "GPU KV cache size: 437,712 tokens",
-            "Maximum concurrency for 32,768 tokens per request: 13.36x",
+            "INFO [gpu_worker.py:625] Available KV cache memory: 15.02 GiB",
+            # vLLM 0.29 logs both on one line, from the engine's own process.
+            "INFO [kv_cache_utils.py:2032] GPU KV cache size: 347,042 tokens, "
+            "Maximum concurrency for 4,096 tokens per request: 84.73x",
             "something else",
         ]
     )
     assert report == {
-        "kv_cache_tokens": 437712,
-        "max_concurrency": [{"tokens_per_request": 32768, "requests": 13.36}],
+        "kv_cache_tokens": 347042,
+        "kv_cache_gib": 15.02,
+        "max_concurrency": [{"tokens_per_request": 4096, "requests": 84.73}],
     }
-    assert long.kv_report([]) == {"kv_cache_tokens": None, "max_concurrency": []}
+    assert long.kv_report([])["kv_cache_tokens"] is None
 
 
 def test_tasks_driver_answers_scores_and_times_each_model(tmp_path: Path) -> None:
