@@ -19,12 +19,42 @@
  ],
  "cards": [
   {
+   "id": "MLQ",
+   "column": "done",
+   "model": "4B",
+   "title": "Blaze-Q, multilingual ladder",
+   "summary": "Rebuilt on the 30-language census at the same 3.78 GB: multilingual drift halves (0.0051 → 0.0023), Thai falls 3.9× (0.0276 → 0.0070), English moves +0.00008.",
+   "cost": "₹34.82",
+   "details": [
+    [
+     "English",
+     "0.00169 → 0.00177 on BF16's 1,501 answers (+0.00008, the ladder's own cost); flips 1.40% → 1.42%."
+    ],
+    [
+     "Other languages",
+     "Multilingual 0.0051 → 0.0023, Thai 0.0276 → 0.0070, Japanese 0.0081 → 0.0058, Chinese 0.0067 → 0.0050; GPTQ W4A16 0.0655 / 0.1086."
+    ],
+    [
+     "Code",
+     "0.0020 → 0.0021 (GPTQ W4A16 0.0303)."
+    ],
+    [
+     "Size",
+     "3,780,277,088 bytes, the English Blaze-Q's exactly, under GPTQ W4A16's."
+    ],
+    [
+     "Run",
+     "r_2b4d13b6 (29 Oct), code 8e7d3f0, 50 minutes."
+    ]
+   ]
+  },
+  {
    "id": "V1",
    "column": "done",
    "model": "plugin",
    "title": "Vocabulary held once",
    "summary": "Each vocabulary block is held once: lookups read the Marlin head's own copy. −0.41 GB GPU memory per 4B checkpoint (Blaze-Q 3.92 GB, = GPTQ W4A16; Blaze-S 2.74 GB), same drift and single-stream speed.",
-   "cost": "≈₹60 so far · cap ₹60",
+   "cost": "₹80.35 (two runs)",
    "details": [
     [
      "Rows",
@@ -54,38 +84,33 @@
    "steps": [
     {
      "label": "Pilot: exact rows, Blaze-S drift on 10 answers",
-     "status": "pending"
+     "status": "done"
     },
     {
      "label": "Build real Blaze-Q",
-     "status": "pending"
+     "status": "done"
     },
     {
      "label": "Exact rows on vLLM's Marlin repack",
-     "status": "pending"
+     "status": "done"
     },
     {
      "label": "Drift: Blaze-S, one copy",
-     "status": "pending"
+     "status": "done"
     },
     {
      "label": "Speed and memory: Blaze-S",
-     "status": "pending"
+     "status": "done"
     },
     {
      "label": "Drift: Blaze-Q, one copy",
-     "status": "pending"
+     "status": "done"
     },
     {
      "label": "Speed and memory: Blaze-Q",
-     "status": "pending"
+     "status": "done"
     }
-   ],
-   "progress": {
-    "pct": null,
-    "label": "Setting up the GPU"
-   },
-   "elapsed": "21h 05m on the GPU"
+   ]
   },
   {
    "id": "S2",
@@ -170,20 +195,6 @@
     [
      "Next",
      "Rebuild Blaze-Q on the multilingual census."
-    ]
-   ]
-  },
-  {
-   "id": "MLQ",
-   "column": "next",
-   "model": "4B",
-   "title": "Blaze-Q, multilingual ladder",
-   "summary": "Rebuild the real 4B Blaze-Q on the multilingual census, then one drift check (English and other languages) before publishing.",
-   "cost": "est. ₹40",
-   "details": [
-    [
-     "Why",
-     "Thai is most of Blaze-Q's multilingual gap, and the English ladder is most of Thai's."
     ]
    ]
   },
@@ -487,8 +498,8 @@
    "id": "G9B",
    "column": "next",
    "model": "9B",
-   "title": "Untied 9B check",
-   "summary": "Tests the method on a model with separate input and output tables.",
+   "title": "Untied 9B check (on hold)",
+   "summary": "Tests the method on a model with separate input and output tables. On hold, as asked.",
    "cost": "≈₹150+",
    "details": [
     [
@@ -500,14 +511,14 @@
   {
    "id": "HF",
    "column": "next",
-   "model": "2B",
-   "title": "Publish the 2B",
-   "summary": "Glaze v2 + ladder (2.91 GB) and the real 2B Blaze-Q as private Kiln repos with the vLLM plugin.",
+   "model": "4B, 2B",
+   "title": "Publish Blaze",
+   "summary": "The multilingual 4B Blaze-Q, Glaze v2 + ladder and the 2B Blaze-Q as a separate Blaze model and collection on Hugging Face, with the vLLM plugin.",
    "cost": "free",
    "details": [
     [
      "Why",
-     "Both are real, servable today, and keep their quality at fewer bytes."
+     "All three are real, servable today, and measured; publishing is planned for later."
     ]
    ]
   },
@@ -643,9 +654,9 @@
   }
  ],
  "spend": {
-  "rupees": 750.47,
-  "dollars": 7.79,
-  "label": "₹750.47 (about $7.79) across all GPU runs"
+  "rupees": 800.96,
+  "dollars": 8.32,
+  "label": "₹800.96 (about $8.32) across all GPU runs"
  },
- "updated": "2026-10-18T18:24:36Z"
+ "updated": "2026-10-29T17:40:00Z"
 }

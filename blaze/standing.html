@@ -85,13 +85,13 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
   <main>
     <h1>Where Blaze stands</h1>
     <p class="dek">The idea holds: a 4-bit Qwen3.5 checkpoint wastes a quarter of its bytes on vocabulary rows it rarely uses. Moving those bytes is free, and spending them on a 6-bit body brings the 4B to BF16's level at a standard 4-bit file's size. As of 17 October all of it serves on stock vLLM, using vLLM's own 6-bit kernel.</p>
-    <div class="meta">Fourteen A30 runs, 15–18 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">scorecard</a></div>
+    <div class="meta">Fifteen A30 runs, 15–29 October 2026 · Qwen3.5-4B and 2B · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">full research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/#experiments">experiment board</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">scorecard</a></div>
 
     <div class="verdicts">
       <div class="verdict proven"><b>Proven</b><p>The vocabulary ladder costs nothing (0.0002 excess loss). At W4A16's 3.78 GB, a 6-bit Blaze-Q drifts 8.5× less than Glaze v2 and is within a point of BF16 on 12 of 13 tasks.</p></div>
       <div class="verdict ship"><b>Ships today</b><p>Glaze v2, GPTQ and AutoRound with the ladder: 23% smaller (2.91–2.92 GB) at unchanged quality, 16% faster for one user. Blaze-S on AutoRound's body: 2.60 GB at AutoRound's quality, 174 tok/s, 2.74 GB of GPU memory against W4A16's 3.92. The 2B Blaze-Q matches BF16 at W4A16's size, served for real.</p></div>
-      <div class="verdict ship"><b>Unblocked</b><p>The real 4B Blaze-Q, 385 KB under GPTQ W4A16's file, runs on vLLM 0.29's bundled 6-bit kernel with the same 0.0017 drift, at 147 tokens a second for one user against GPTQ's 151, in GPTQ's 3.92 GB of GPU memory. No custom kernel was needed.</p></div>
-      <div class="verdict spend"><b>Spent</b><p>₹766.14 (about $7.96) of GPU time across every gate, the full suite and eight follow-ups, including one run that overshot its cap by ₹15.67. ₹530 left; nothing is running.</p></div>
+      <div class="verdict ship"><b>Unblocked</b><p>The real 4B Blaze-Q, 385 KB under GPTQ W4A16's file, runs on vLLM 0.29's bundled 6-bit kernel with the same 0.0017 drift, at 147 tokens a second for one user against GPTQ's 151, in GPTQ's 3.92 GB of GPU memory. No custom kernel was needed. Rebuilt on a 30-language census at the same size, it drifts 0.0023 on 11 languages (Thai 0.0070) against GPTQ's 0.0655.</p></div>
+      <div class="verdict spend"><b>Spent</b><p>₹800.96 (about $8.32) of GPU time across every gate, the full suite and nine follow-ups, including one run that overshot its cap by ₹15.67. ₹494.73 left; nothing is running.</p></div>
     </div>
 
     <h2>Quality, against BF16</h2>
@@ -233,7 +233,7 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
           <tr><td>AutoRound + ladder (4B)</td><td class="num">2.92 GB</td><td class="num">0.0417</td><td class="num">≈175 tok/s*</td><td><span class="tag ok">Ready</span></td></tr>
           <tr><td>GPTQ + ladder (4B)</td><td class="num">2.92 GB</td><td class="num">0.0542</td><td class="num">175 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
           <tr><td>Blaze-Q, 8-bit body (2B)</td><td class="num">2.39 GB</td><td class="num">0.0005</td><td class="num">229 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
-          <tr><td>Blaze-Q, 6-bit body (4B)</td><td class="num">3.78 GB</td><td class="num">0.0017</td><td class="num">147 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
+          <tr><td>Blaze-Q, 6-bit body, multilingual ladder (4B)</td><td class="num">3.78 GB</td><td class="num">0.0018</td><td class="num">147 tok/s</td><td><span class="tag ok">Ready</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -241,15 +241,15 @@ footer { border-top: 1px solid var(--line); padding-block: 26px; font-family: va
 
     <h2>What is in the way</h2>
     <ul>
-      <li><strong>The English census.</strong> The ladder's 8-bit rows hold 26.5% of non-English tokens, and Blaze-Q's drift on Thai is 0.028 (GPTQ W4A16: 0.109). A census with FineWeb-2 in 30 languages, at the same size, cuts the ladder's multilingual cost 2.6× and Thai's 9×; Blaze-Q has not been rebuilt on it yet.</li>
+      <li><strong>The English census.</strong> The ladder's 8-bit rows hold 26.5% of non-English tokens, and Blaze-Q's drift on Thai is 0.028 (GPTQ W4A16: 0.109). A census with FineWeb-2 in 30 languages, at the same size, cuts the ladder's multilingual cost 2.6× and Thai's 9×. Fixed on 29 October: Blaze-Q rebuilt on it drifts 0.0023 on other languages (was 0.0051) and 0.0070 on Thai (was 0.028), for +0.00008 on English.</li>
       <li><strong>Blaze's own 4-bit GPTQ.</strong> It barely beats plain rounding at 4 bits, which is why Blaze-S lost accuracy. Reusing the published bodies, as the add-on does, sidesteps it.</li>
       <li><strong>One MathVista point.</strong> The full suite missed its 1-point rule on MathVista alone (−1.1, interval −2.6 to +0.5), within noise.</li>
     </ul>
 
     <h2>Decisions waiting on you</h2>
     <ul>
-      <li><strong>Rebuild Blaze-Q on the multilingual census</strong> (CPU, then one drift check) before publishing it.</li>
-      <li><strong>Publish to Hugging Face</strong>, private first: the real 4B Blaze-Q, Glaze v2 + ladder at 2.91 GB, and the real 2B Blaze-Q.</li>
+      
+      <li><strong>Publish Blaze on Hugging Face</strong> as its own model and collection, later: the multilingual 4B Blaze-Q, Glaze v2 + ladder at 2.91 GB, and the real 2B Blaze-Q.</li>
       <li><strong>Confirm the yardstick:</strong> every comparison here holds checkpoint size equal, not bits per weight.</li>
       <li><strong>Review and merge</strong> PR #34 (Blaze) and PR #33 (the Glaze README).</li>
       <li><strong>The 9B check</strong> stays on hold, as asked.</li>

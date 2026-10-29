@@ -123,7 +123,7 @@ td.sum { color: var(--heading); }
     <div class="read">
       <h1>Blaze scorecard</h1>
       <p class="dek">Every Qwen3.5-4B checkpoint we measured, on every measure we have, with the gaps left visible. A dash is a number nobody has measured; an italic ≈ is inferred from an identical format, never measured.</p>
-      <div class="meta">Fourteen A30 runs, 15–18 October 2026 · vLLM 0.29 · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/standing.html">where Blaze stands</a></div>
+      <div class="meta">Fifteen A30 runs, 15–29 October 2026 · vLLM 0.29 · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/standing.html">where Blaze stands</a></div>
     </div>
 
     <div class="picks">
@@ -320,7 +320,8 @@ td.sum { color: var(--heading); }
 <tr class=""><td><b>AWQ W4A16</b><span class="sub">published</span></td><td class="num">3.79</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td><td class="num">0.050</td><td class="num">5.42%</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td></tr>
 <tr class=""><td><b>AutoRound W4A16</b><span class="sub">published</span></td><td class="num">3.78</td><td class="num inf" title="inferred from an identical format, not measured">≈3.92</td><td class="num inf" title="inferred from an identical format, not measured">≈151</td><td class="num inf" title="inferred from an identical format, not measured">≈3,128</td><td class="num">0.0417</td><td class="num">4.96%</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td></tr>
 <tr class=""><td><b>Glaze v2</b><span class="sub">our previous best</span></td><td class="num">3.77</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td><td class="num">0.0143</td><td class="num">3.29%</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td></tr>
-<tr class="hl"><td><b>Blaze-Q</b><span class="sub">6-bit body + ladder</span></td><td class="num">3.78</td><td class="num">3.92</td><td class="num">147</td><td class="num">2,843</td><td class="num">0.0017</td><td class="num">1.40%</td><td class="num">0.0020</td><td class="num">0.0051</td></tr>
+<tr class=""><td><b>Blaze-Q</b><span class="sub">6-bit body + ladder</span></td><td class="num">3.78</td><td class="num">3.92</td><td class="num">147</td><td class="num">2,843</td><td class="num">0.0017</td><td class="num">1.40%</td><td class="num">0.0020</td><td class="num">0.0051</td></tr>
+<tr class="hl"><td><b>Blaze-Q, multilingual ladder</b><span class="sub">same body and bytes, 30-language census</span></td><td class="num">3.78</td><td class="num inf" title="inferred from an identical format, not measured">≈3.92</td><td class="num inf" title="inferred from an identical format, not measured">≈147</td><td class="num inf" title="inferred from an identical format, not measured">≈2,843</td><td class="num">0.0018</td><td class="num">1.42%</td><td class="num">0.0021</td><td class="num">0.0023</td></tr>
 <tr class=""><td><b>Blaze-Q 4/8</b><span class="sub">4/8-bit kernels</span></td><td class="num">3.77</td><td class="num inf" title="inferred from an identical format, not measured">≈3.91</td><td class="num">147</td><td class="num">2,791</td><td class="num">0.0235</td><td class="num">3.85%</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td></tr>
 <tr class=""><td><b>GPTQ + ladder</b><span class="sub">add-on</span></td><td class="num">2.92</td><td class="num inf" title="inferred from an identical format, not measured">≈3.06</td><td class="num">175</td><td class="num">2,912</td><td class="num">0.0542</td><td class="num">5.70%</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td></tr>
 <tr class=""><td><b>AutoRound + ladder</b><span class="sub">add-on</span></td><td class="num">2.92</td><td class="num inf" title="inferred from an identical format, not measured">≈3.06</td><td class="num inf" title="inferred from an identical format, not measured">≈175</td><td class="num inf" title="inferred from an identical format, not measured">≈2,912</td><td class="num">0.0417</td><td class="num">4.96%</td><td class="num nm" title="not measured">—</td><td class="num nm" title="not measured">—</td></tr>
@@ -350,7 +351,6 @@ td.sum { color: var(--heading); }
       <table>
         <thead><tr><th>Evaluation</th><th>Expected</th><th class="num">Cost</th><th>Priority</th></tr></thead>
         <tbody>
-<tr><td><b>Blaze-Q on the multilingual census</b><span class="sub">Thai is most of Blaze-Q's multilingual drift (0.028), and the English ladder is most of Thai's.</span></td><td>Multilingual drift from 0.0051 to about 0.003; English unchanged (0.0002 → 0.0003 for the ladder alone).</td><td class="num">≈₹40</td><td><span class="tag hi">High</span></td></tr>
 <tr><td><b>Blaze-S on the reasoning panel</b><span class="sub">Only its drift and MMMU are measured; MMLU-Pro, MATH-500 and IFEval are not.</span></td><td>AutoRound's scores (71.4, 73.2, 80.6): its drift is AutoRound's to 0.0001.</td><td class="num">≈₹27</td><td><span class="tag mid">Medium</span></td></tr>
 <tr><td><b>Code and multilingual task accuracy</b><span class="sub">Drift says Blaze-Q stays close to BF16 off-English; pass@1 on HumanEval/MBPP and MGSM accuracy would show it in scores.</span></td><td>Blaze-Q within noise of BF16; GPTQ visibly lower on MGSM's non-Latin scripts.</td><td class="num">≈₹60</td><td><span class="tag mid">Medium</span></td></tr>
 <tr><td><b>Glaze v2 + ladder, served</b><span class="sub">Its speed and GPU memory are not measured (Glaze v2 mixes 4- and 8-bit units, so GPTQ's do not carry over); its MMMU with the ladder is not measured.</span></td><td>Somewhat below GPTQ + ladder's 175 tok/s; MMMU ≈66.7.</td><td class="num">≈₹30</td><td><span class="tag lo">Low</span></td></tr>
@@ -361,7 +361,7 @@ td.sum { color: var(--heading); }
         </tbody>
       </table>
     </div>
-    <p class="note read">₹766.14 (about $7.96) spent so far across fourteen runs; ₹530 left on the account.</p>
+    <p class="note read">₹800.96 (about $8.32) spent so far across fifteen runs; ₹494.73 left on the account. Blaze-Q on the multilingual census, measured 29 October: multilingual drift 0.0051 → 0.0023, Thai 0.0276 → 0.0070, English +0.00008, at the same 3.78 GB.</p>
   </main>
   <footer><span>Blaze · scorecard 18 Oct 2026</span><span>Measured unless marked</span></footer>
 </div>
