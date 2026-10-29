@@ -916,3 +916,14 @@ def test_tasks_driver_answers_scores_and_times_each_model(tmp_path: Path) -> Non
     assert pilot["long:blaze_s2"][-6:] == driver.PILOT_LONG
     assert pilot["answers:blaze_s2"][-2:] == ["--limit", "2"]
     assert pilot["export:blaze_q6_ml"][-2:] == ["--layers", "0,1"]
+
+
+def test_tasks_driver_reuses_both_kinds_of_finished_export(tmp_path: Path) -> None:
+    driver = _load_script("run_blaze_tasks")
+    gptq, addon, empty = (tmp_path / n for n in ("gptq", "addon", "empty"))
+    for folder in (gptq, addon, empty):
+        folder.mkdir()
+    (gptq / "blaze_manifest.json").write_text("{}")
+    (addon / "blaze_addon.json").write_text("{}")  # what blaze_addon.py writes (Blaze-S)
+    assert driver.export_done(gptq) and driver.export_done(addon)
+    assert not driver.export_done(empty)

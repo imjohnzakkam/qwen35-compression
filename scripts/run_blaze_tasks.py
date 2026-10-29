@@ -37,6 +37,7 @@ import run_blaze_q6 as q6  # noqa: E402
 import run_blaze_s as s  # noqa: E402
 import run_blaze_s2 as s2  # noqa: E402
 
+from qwen35_compression.blaze.addon import MANIFEST as ADDON_MANIFEST  # noqa: E402
 from qwen35_compression.blaze.export import MANIFEST  # noqa: E402
 from qwen35_compression.blaze.gates import cost  # noqa: E402
 from qwen35_compression.blaze.runs import GateRun, bootstrap_text  # noqa: E402
@@ -136,6 +137,12 @@ def plan(
             ],
         )
     return steps
+
+
+def export_done(export: Path) -> bool:
+    """A finished export: GPTQ exports write MANIFEST, ladder add-ons ADDON_MANIFEST (the pilot
+    builds Blaze-S whole, and the full run must reuse it, not rebuild over it)."""
+    return (export / MANIFEST).exists() or (export / ADDON_MANIFEST).exists()
 
 
 def tasks_table(output: Path) -> dict[str, Any]:
@@ -239,7 +246,7 @@ def run_gate(args: argparse.Namespace, output: Path, limit: int | None) -> dict[
     failed: list[str] = []
     for name, command in plan(output, outputs, snapshot, args.plan, limit).items():
         target = command[command.index("--output") + 1] if "--output" in command else None
-        if name.startswith("export:") and target and (Path(target) / MANIFEST).exists():
+        if name.startswith("export:") and target and export_done(Path(target)):
             run.reuse(name)
             continue
         if target and target.endswith(".json") and Path(target).exists():
