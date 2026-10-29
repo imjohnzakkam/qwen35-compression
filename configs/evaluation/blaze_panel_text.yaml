@@ -1,0 +1,22 @@
+# The reasoning panel's text tasks (feature1_panel.yaml without MMMU): MMLU-Pro's fixed
+# 1001-question subset, MATH-500 and IFEval, with the instruct track's settings. Blaze's G5 runs
+# it on Qwen3.5-2B; BF16's MATH-500 and MMLU-Pro answers are also the 2B's drift traces.
+text_tasks:
+  - mmlu_pro
+  - minerva_math500
+  - ifeval
+
+vision_tasks: []
+
+fewshot: 0
+text_backend: vllm
+batch_size: "auto"
+max_model_len: 12288
+gpu_memory_utilization: 0.85
+limit: null
+samples_path: feature1_thinking_samples.json
+seed: 42
+enable_thinking: false
+generation:
+  do_sample: false
+  max_gen_toks: 8192
