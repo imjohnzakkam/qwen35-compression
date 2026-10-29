@@ -19,6 +19,68 @@
  ],
  "cards": [
   {
+   "id": "TASK",
+   "column": "done",
+   "model": "4B",
+   "title": "Scores off English",
+   "summary": "Blaze-Q matches BF16 on HumanEval, MBPP and MGSM in 10 other languages (65.2 against 65.2) where GPTQ W4A16 drops to 59.0 (−6.2, interval −9.8 to −2.4).",
+   "cost": "₹80.35 with the panel and long requests (two runs)",
+   "details": [
+    [
+     "HumanEval",
+     "BF16 82.3 · GPTQ 83.5 · Blaze-Q 82.9 · Blaze-S 85.4 (all within noise)"
+    ],
+    [
+     "MBPP",
+     "BF16 61.5 · GPTQ 63.0 · Blaze-Q 62.5 · Blaze-S 59.0 (all within noise)"
+    ],
+    [
+     "MGSM, 10 languages",
+     "BF16 65.2 · GPTQ 59.0 · Blaze-Q 65.2 · Blaze-S 60.0 (500 questions, paired against BF16)"
+    ],
+    [
+     "Runs",
+     "r_9d752284 (stopped by a driver bug after its pilot passed, ₹20.76), r_e83fd68d (30 Oct, ₹59.59)"
+    ]
+   ]
+  },
+  {
+   "id": "SPANEL",
+   "column": "done",
+   "model": "4B",
+   "title": "Blaze-S reasoning panel",
+   "summary": "At 2.60 GB Blaze-S scores at or above AutoRound on every panel task: MMLU-Pro 72.4 (71.4), MATH-500 76.4 (73.2), IFEval 80.6 (80.6).",
+   "cost": "in the tasks run",
+   "details": [
+    [
+     "vs AutoRound",
+     "MMLU-Pro +1.0 (−0.7 to +2.8), MATH-500 +3.2 (0.0 to +6.4), IFEval 0.0 (−2.0 to +1.8)"
+    ],
+    [
+     "vs BF16",
+     "MMLU-Pro −1.2, MATH-500 −7.0, IFEval −1.7: AutoRound's body's gap, not the ladder's"
+    ]
+   ]
+  },
+  {
+   "id": "LONG",
+   "column": "done",
+   "model": "4B",
+   "title": "Long requests",
+   "summary": "At 0.85 of an A30, Blaze-S leaves 15.02 GiB of KV cache against GPTQ W4A16's 13.53 (+11%): 14.1 32k-token requests at once against 12.7.",
+   "cost": "in the tasks run",
+   "details": [
+    [
+     "KV tokens",
+     "BF16 271k · GPTQ 417k · Blaze-Q 429k · Blaze-S 463k"
+    ],
+    [
+     "64 × 16k prompts",
+     "BF16 114 s, every 4- and 6-bit checkpoint about 130 s: prefill-bound, so the extra cache adds concurrency, not batch speed"
+    ]
+   ]
+  },
+  {
    "id": "MLQ",
    "column": "done",
    "model": "4B",
@@ -654,9 +716,9 @@
   }
  ],
  "spend": {
-  "rupees": 800.96,
-  "dollars": 8.32,
-  "label": "₹800.96 (about $8.32) across all GPU runs"
+  "rupees": 881.31,
+  "dollars": 9.15,
+  "label": "₹881.31 (about $9.15) across all GPU runs"
  },
- "updated": "2026-10-29T17:40:00Z"
+ "updated": "2026-10-30T20:20:00Z"
 }
