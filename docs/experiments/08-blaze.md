@@ -14,9 +14,11 @@ and its real format reproduces the fake-quantized scores exactly. The real 4B Bl
 vLLM 0.29's own 6-bit kernel with the same drift, at 147 tokens a second against GPTQ's 151, in
 GPTQ's GPU memory once the vocabulary is held once. Rebuilt on a multilingual census at the same
 size, it drifts 0.0023 on 11 languages (Thai 0.0070) against the English ladder's 0.0051 (0.0276)
-and GPTQ W4A16's 0.0655, for +0.00008 on English. The ladder alone, added to published GPTQ,
-AutoRound and Glaze v2 exports, cuts each by 0.86 GB at unchanged drift. Fifteen A30 runs,
-₹800.96 (about $8.32).
+and GPTQ W4A16's 0.0655, for +0.00008 on English; in scores, it matches BF16 on HumanEval, MBPP
+and MGSM in 10 other languages, where GPTQ W4A16 loses 6.2 points on MGSM. The ladder alone,
+added to published GPTQ, AutoRound and Glaze v2 exports, cuts each by 0.86 GB at unchanged drift;
+Blaze-S (AutoRound's body, 2.60 GB) scores at or above AutoRound on the reasoning panel and leaves
+11% more KV cache than GPTQ W4A16. Seventeen A30 runs, ₹881.31 (about $9.15).
 
 ## Why bytes rather than rounding
 
@@ -539,6 +541,76 @@ answers +0.00008 (0.00006 to 0.00011; flips 1.42% against 1.40%).
 - **This is the checkpoint to publish.** All three checks pass (equal size, English within 0.0002 of
   0.00169, multilingual below 0.0051); the export was kept for publishing.
 
+## Task accuracy off English, Blaze-S's panel and long requests
+
+`scripts/run_blaze_tasks.py` measures what drift alone could not, on one A30. The first launch,
+`r_9d752284` (code `3b688f1`, 30 minutes, ₹20.76, about $0.22), passed its 10-question pilot and
+stopped at the full run's first step: its reuse check looked for the GPTQ exports' manifest, not
+the add-on's, and the Blaze-S export the pilot had built was rebuilt into its own folder (fixed in
+`cc51b8f`). The pilot also showed that vLLM logs the KV cache size from its engine's own process
+(fixed in `3a5e368`: the script runs the measurement as a child and reads its output). The
+relaunch, `r_e83fd68d` (code `3a5e368`, no pilot, 88 minutes, ₹59.59, about $0.62), passed every
+step.
+
+### Task accuracy on code and 11 languages
+
+Every model answers the 914 domain prompts the drift above was measured along (greedy, instruct,
+at most 1,024 tokens; BF16's answers are the Q6 run's). `scripts/blaze_task_scores.py` runs each
+code answer with its problem's own tests (10-second limit, on the GPU instance) and counts an MGSM
+answer when its last number equals the gold answer. Intervals are paired bootstraps against BF16.
+
+| Accuracy (%) | HumanEval (164) | MBPP (200) | MGSM, 10 other languages (500) | MGSM English (50) |
+| --- | ---: | ---: | ---: | ---: |
+| BF16 | 82.3 | 61.5 | 65.2 | 86.0 |
+| GPTQ W4A16 (published) | 83.5 (+1.2, −4.3 to +6.7) | 63.0 (+1.5, −4.5 to +7.5) | **59.0 (−6.2, −9.8 to −2.4)** | 84.0 |
+| **Blaze-Q, multilingual ladder** | 82.9 (+0.6, −4.3 to +4.9) | 62.5 (+1.0, −2.0 to +4.0) | **65.2 (0.0, −3.2 to +3.0)** | 88.0 |
+| Blaze-S (AutoRound body) | 85.4 (+3.0, −2.4 to +8.5) | 59.0 (−2.5, −7.5 to +2.5) | 60.0 (−5.2, −8.4 to −1.8) | 84.0 |
+
+- **Blaze-Q's low drift shows up in scores.** On MGSM in 10 other languages it equals BF16 to the
+  question count, where GPTQ W4A16 at the same file size loses 6.2 points, an interval wholly below
+  zero. Code is within noise for every model.
+- **Blaze-S loses on non-English math like the 4-bit body it keeps** (−5.2, against GPTQ's −6.2);
+  its ladder is the multilingual one, so the loss is the 4-bit body's. AutoRound itself was not
+  scored here.
+- MGSM's 50 questions a language give wide per-language intervals; the 500-question pool is the
+  number to read. BF16's English MGSM is 86.0 (instruct mode, 1,024-token cap).
+
+### Blaze-S on the reasoning panel
+
+The corrected Blaze-S (AutoRound's published body, the multilingual ladder, an 8-bit vision tower;
+2.60 GB) on the panel, paired against the published BF16, GPTQ W4A16 and AutoRound answers to the
+same questions.
+
+| Panel | BF16 | GPTQ W4A16 | AutoRound | **Blaze-S** | vs AutoRound | vs GPTQ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MMLU-Pro (1,001) | 73.6 | 70.1 | 71.4 | **72.4** | +1.0 (−0.7 to +2.8) | +2.3 (0.0 to +4.7) |
+| MATH-500 | 83.4 | 75.8 | 73.2 | **76.4** | +3.2 (0.0 to +6.4) | +0.6 (−3.4 to +4.2) |
+| IFEval | 82.3 | 80.8 | 80.6 | **80.6** | 0.0 (−2.0 to +1.8) | −0.2 (−3.1 to +2.8) |
+
+- **Blaze-S keeps AutoRound's quality at 31% fewer bytes**, as its drift (0.0418 against 0.0417)
+  said it would; no panel task is below AutoRound's. Its MATH-500 is 7.0 below BF16, AutoRound's
+  body's gap, not the ladder's.
+
+### Long requests at a fixed memory budget
+
+`scripts/blaze_long_context.py` starts each checkpoint at 0.85 of the A30 with a 32,768-token
+context, records the KV cache vLLM allocates, and serves 64 requests of 16,384 random prompt
+tokens and 128 generated tokens (prefix caching off).
+
+| Qwen3.5-4B, one A30 | KV cache | KV tokens | 32k requests at once | 16.5k requests at once | 64 x 16k requests |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 8.81 GiB | 271,080 | 8.3 | 16 | 114 s |
+| GPTQ W4A16 | 13.53 GiB | 416,550 | 12.7 | 25 | 130 s |
+| Blaze-Q, multilingual | 13.92 GiB | 428,962 | 13.1 | 25 | 131 s |
+| **Blaze-S** | **15.02 GiB** | **462,723** | **14.1** | **28** | 131 s |
+
+- **Blaze-S holds 11% more context than GPTQ W4A16** (1.49 GiB more KV cache), and Blaze-Q 3%
+  more, at GPTQ's quality and better. BF16 holds 35% less than GPTQ.
+- **The batch time does not follow.** Serving 64 long prompts is prefill-bound: BF16, which needs
+  no dequantization, is the fastest (9,165 prompt tokens a second against about 8,000 for every
+  4-bit and 6-bit checkpoint), and the extra cache does not shorten a batch that is already
+  compute-bound. The gain is concurrency: more long requests in flight before the scheduler queues.
+
 ## The real format, on the 2B
 
 The real export (`blaze/real.py`) stores the body as compressed-tensors groups, as any W8A16
@@ -619,7 +691,8 @@ rate) and the per-token likelihood of BF16's tokens (exp of minus the mean NLL).
 | Code (add-on) | `src/qwen35_compression/blaze/addon.py`, `scripts/blaze_addon.py`, `scripts/run_blaze_addon.py` |
 | Code (Blaze-S, 6-bit kernel) | `scripts/run_blaze_s.py`, `blaze_gptq.py --real`, `plugins/blaze_vllm/blaze_vllm/w6.py`, `scripts/blaze_kernel_bench.py` |
 | Code (multilingual Blaze-Q) | `scripts/run_blaze_mlq.py`, `blaze_gptq.py --cover` |
-| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; the add-on run ₹60.93; the real 4B Blaze-Q ₹71.72; Blaze-S corrected ₹32.81; the vocabulary held once ₹80.35; the multilingual Blaze-Q ₹34.82; ₹800.96 in all (about $8.32) over fifteen A30 runs, at ₹38.88 per A30 hour and ₹96.3 per dollar |
+| Code (task accuracy, panel, long requests) | `scripts/run_blaze_tasks.py`, `blaze_task_scores.py`, `blaze_long_context.py` |
+| Spend | G1, G1b and G5 ₹125.89; G2 and the real 2B run ₹68.97; G2b, G3 and the single-copy run ₹72.98; G4 ₹196.87; Blaze-S ₹55.62; the add-on run ₹60.93; the real 4B Blaze-Q ₹71.72; Blaze-S corrected ₹32.81; the vocabulary held once ₹80.35; the multilingual Blaze-Q ₹34.82; task accuracy, Blaze-S's panel and long requests ₹80.35 (two runs); ₹881.31 in all (about $9.15) over seventeen A30 runs, at ₹38.88 per A30 hour and ₹96.3 per dollar |
 
 ## Reproduce
 
@@ -658,4 +731,7 @@ uv run python scripts/run_blaze_q6.py --plan <G2b run>/plan.json --bf16 <G2 run>
 # Blaze-Q on the multilingual census, reusing BF16's code and multilingual answers from the Q6 run
 uv run python scripts/run_blaze_mlq.py --plan <G2b run>/plan.json --bf16 <G2 run>/bf16.json \
     --domain-traces <Q6 run>/domain_traces --domain-bf16 <Q6 run>/domain_bf16.json --pilot-limit 10
+# Task accuracy on code and 11 languages, Blaze-S's panel, and long requests at a fixed memory budget
+uv run python scripts/run_blaze_tasks.py --plan <G2b run>/plan.json \
+    --bf16-answers <Q6 run>/domain_traces --pilot-limit 10
 ```
