@@ -102,7 +102,7 @@ td.best { color: var(--heading); font-weight: 600; }
   <main>
     <h1>Blaze-Q and Blaze-S</h1>
     <p class="dek">One method, two Qwen3.5-4B checkpoints. Blaze-Q spends the vocabulary's idle bytes on a 6-bit body and reaches BF16's level at a standard 4-bit file's size. Blaze-S banks them instead: 31% smaller than a 4-bit export, at AutoRound's quality. Both serve on stock vLLM 0.29 with a small plugin.</p>
-    <div class="meta">Seventeen A30 runs, 15–30 October 2026 · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/standing.html">where Blaze stands</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">scorecard</a></div>
+    <div class="meta">Seventeen A30 runs, 15–30 October 2026 · instruct mode, greedy decoding · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/">research page</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/standing.html">where Blaze stands</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/blaze/scorecard.html">scorecard</a> · <a href="https://imjohnzakkam.github.io/qwen35-compression/tech-report/">technical report</a></div>
 
     <div class="two">
       <div class="card"><span class="size">3.78 GB · same size as GPTQ W4A16</span><h3>Blaze-Q</h3><p>A 6-bit GPTQ body with 23 of 64 units at 8 bits, the multilingual vocabulary ladder and an 8-bit vision tower. Drift 0.0018, within a point of BF16 on 12 of 13 tasks, BF16's scores on code and 10 other languages, 147 tokens a second.</p></div>
