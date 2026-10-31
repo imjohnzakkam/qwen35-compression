@@ -90,6 +90,8 @@ figure { margin: 36px 0; }
 .fig-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .fig-svg { display: block; width: 100%; min-width: 560px; height: auto; }
 .fig-svg text { font-family: var(--mono); }
+.fig-svg text.sans { font-family: var(--sans); }
+.cell { transition: fill 420ms ease, stroke 420ms ease; }
 figcaption { margin: 14px 0 0; padding-inline: 4px; font-size: 14px; line-height: 23px; color: var(--text); }
 figcaption b { color: #dedede; font-weight: 600; }
 .seg { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 20px 0; }
@@ -181,13 +183,16 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
 
       <figure>
         <div class="fig-box">
-          <div class="seg" role="group" aria-label="Figure 1 view">
-            <button type="button" data-f1="split" aria-pressed="true">Qwen3.5-4B at 3.78 GB</button>
+          <div class="seg" role="group" aria-label="Choose how the checkpoint's bytes are spent">
+            <button type="button" data-f1="std" aria-pressed="true">Standard 4-bit</button>
+            <button type="button" data-f1="glaze" aria-pressed="false">Glaze v2</button>
+            <button type="button" data-f1="q" aria-pressed="false">Blaze-Q · same size</button>
+            <button type="button" data-f1="s" aria-pressed="false">Blaze-S · same quality</button>
             <button type="button" data-f1="family" aria-pressed="false">Across the family</button>
           </div>
-          <div class="fig-scroll"><svg class="fig-svg" id="f1" viewBox="0 0 680 250" role="img" aria-label="Byte composition of 4-bit exports"></svg></div>
+          <div class="fig-scroll"><svg class="fig-svg" id="f1" viewBox="0 0 680 330" role="img" aria-label="Where the bytes of a 4-bit Qwen3.5-4B checkpoint go"></svg></div>
         </div>
-        <figcaption><b>Figure 1: Same bytes, different split.</b> A W4A16 export of Qwen3.5-4B spends 1.27 GB of its 3.78 GB on a BF16 vocabulary table. Blaze-Q ladders the table, stores the vision tower at 8 bits and spends what that frees on a 6/8-bit body at the same size. Blaze-S keeps the 4-bit body and banks the bytes. Across the family the table takes 27–53% of a standard export; the 9B and 27B store two tables. Blaze splits are approximate.</figcaption>
+        <figcaption><b>Figure 1: The vocabulary is the largest thing in a 4-bit checkpoint.</b> Each cell is 10 MB. In a standard W4A16 export of Qwen3.5-4B, the BF16 vocabulary takes 127 of 378 cells. Glaze v2 moved 32 cells from the vision tower into the body. Blaze-Q ladders the table and moves 118 cells into the body at the same size; Blaze-S keeps the 4-bit body and drops those 118 cells instead. Across the family the table takes 27–53% of a standard export; the 9B and 27B store two tables. Splits are rounded to 10 MB.</figcaption>
       </figure>
 
       <h2 id="idle">The vocabulary is mostly idle</h2>
@@ -544,11 +549,6 @@ vllm serve blaze-2b</pre>
   }
 
   /* ---------- Data, from paper/data/results.json ---------- */
-  var composition = [
-    { name: "W4A16 export", parts: [["Body, 4-bit", 1.84, C.base], ["Vision tower, BF16", 0.67, C.base2], ["Vocabulary, BF16", 1.27, C.ref]] },
-    { name: "Blaze-Q", parts: [["Body, 6/8-bit", 3.022, C.accent], ["Vision, 8-bit", 0.346, C.base2], ["Vocabulary, laddered", 0.412, C.dim]] },
-    { name: "Blaze-S", parts: [["Body, 4-bit", 1.84, C.base], ["Vision, 8-bit", 0.346, C.base2], ["Vocabulary, laddered", 0.412, C.dim]] }
-  ];
   var family = [["Qwen3.5-0.8B", 0.526, 0.97, true], ["Qwen3.5-2B", 0.426, 2.39, true], ["Qwen3.5-4B", 0.336, 3.78, true], ["Qwen3.5-9B", 0.476, 8.55, false], ["Qwen3.5-27B", 0.274, 18.56, false]];
   var coverage = {
     k: [1, 2, 4, 8, 16, 32, 64],
@@ -595,53 +595,82 @@ vllm serve blaze-2b</pre>
   ];
   var kindColor = { base: C.base, ref: C.ref, abl: C.dim, blaze: C.accent };
 
-  /* ---------- Figure 1: byte composition ---------- */
+  /* ---------- Figure 1: where the bytes go, one cell per 10 MB ---------- */
   var f1 = document.getElementById("f1");
-  function drawF1(view) {
-    clear(f1);
-    if (view === "split") {
-      var x0 = 130, x1 = 650, sx = linScale(0, 4, x0, x1);
-      [0, 1, 2, 3, 4].forEach(function (g) {
-        el("line", { x1: sx(g), x2: sx(g), y1: 28, y2: 196, stroke: C.grid }, f1);
-        txt(f1, sx(g), 214, g + " GB", { anchor: "middle", fill: C.faint });
-      });
-      composition.forEach(function (row, i) {
-        var y = 40 + i * 54, x = x0;
-        txt(f1, 16, y + 18, row.name, { fill: i ? C.heading : C.text, size: 12, base: "middle" });
-        var total = 0;
-        row.parts.forEach(function (p) {
-          var w = sx(p[1]) - x0;
-          el("rect", { x: x, y: y, width: Math.max(1, w - 2), height: 36, rx: 3, fill: p[2] }, f1);
-          if (w > 70) txt(f1, x + 8, y + 15, p[0], { fill: "#f2f2f2", size: 10.5 });
-          if (w > 70) txt(f1, x + 8, y + 29, p[1].toFixed(2) + " GB", { fill: "#e0e0e0", size: 10.5 });
-          x += w; total += p[1];
-        });
-        txt(f1, x + 8, y + 22, total.toFixed(2) + " GB", { fill: C.faint, size: 11 });
-      });
-      var keys = [["Body, 4-bit", C.base], ["Body, 6/8-bit", C.accent], ["Vision tower", C.base2], ["Vocabulary, BF16", C.ref], ["Vocabulary, laddered", C.dim]];
-      var lx = 16;
-      keys.forEach(function (k) {
-        el("rect", { x: lx, y: 230, width: 10, height: 10, rx: 2, fill: k[1] }, f1);
-        txt(f1, lx + 16, 239, k[0], { fill: C.text, size: 10.5 });
-        lx += 30 + k[0].length * 6.4;
-      });
-    } else {
-      var bx0 = 140, bx1 = 600, s = linScale(0, 0.6, bx0, bx1);
-      [0, 0.2, 0.4, 0.6].forEach(function (g) {
-        el("line", { x1: s(g), x2: s(g), y1: 20, y2: 206, stroke: C.grid }, f1);
-        txt(f1, s(g), 224, Math.round(g * 100) + "%", { anchor: "middle", fill: C.faint });
-      });
-      family.forEach(function (r, i) {
-        var y = 26 + i * 36;
-        txt(f1, 16, y + 13, r[0], { fill: C.heading, size: 12, base: "middle" });
-        el("rect", { x: bx0, y: y, width: s(r[1]) - bx0, height: 26, rx: 3, fill: r[3] ? C.ref : C.base }, f1);
-        txt(f1, s(r[1]) + 8, y + 13, pct(r[1], 1) + " of " + r[2] + " GB" + (r[3] ? ", tied" : ", two tables"), { base: "middle", fill: C.text });
-      });
-      txt(f1, 16, 244, "Vocabulary share of a standard W4A16 export", { fill: C.faint, size: 10 });
-    }
+  var reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  var CELL = { body: "#5a5751", move: C.accent, vision: "#34322f", vocab: "#e8e6df", ladder: "#a29e95", empty: "#141416", emptyLine: "#2a2a2e" };
+  var KIND = {
+    body:   { fill: CELL.body, label: "body, 4-bit" },
+    move:   { fill: CELL.move, label: "moved into the body", ink: true },
+    vision: { fill: CELL.vision, label: "vision tower" },
+    vocab:  { fill: CELL.vocab, label: "vocabulary, BF16" },
+    ladder: { fill: CELL.ladder, label: "vocabulary ladder" },
+    empty:  { fill: CELL.empty, stroke: CELL.emptyLine, label: "not stored" }
+  };
+  var STATES = {
+    std:   { name: "Standard 4-bit export (GPTQ W4A16)", note: "3.78 GB · body 4.12 bits/weight · excess loss 0.054, measured", parts: [["body", 184], ["vision", 67], ["vocab", 127]] },
+    glaze: { name: "Glaze v2, in-domain calibration", note: "3.80 GB · body 4.83 bits/weight · excess loss 0.014, measured", parts: [["body", 184], ["move", 32], ["vision", 34], ["vocab", 127], ["empty", 1]] },
+    q:     { name: "Blaze-Q, same size", note: "3.78 GB · body 6.8 bits/weight · excess loss 0.0018, measured", parts: [["body", 184], ["move", 118], ["vision", 35], ["ladder", 41]] },
+    s:     { name: "Blaze-S, same quality as AutoRound", note: "2.60 GB · AutoRound's 4.12-bit body · excess loss 0.042, measured", parts: [["body", 184], ["vision", 35], ["ladder", 41], ["empty", 118]] }
+  };
+  var grid = el("g", {}, f1), fam = el("g", {}, f1);
+  txt(grid, 16, 30, "what a 4-bit Qwen3.5-4B checkpoint stores", { fill: C.heading, size: 13, weight: 600 }).setAttribute("class", "sans");
+  txt(grid, 16, 48, "each cell is 10 MB · 378 cells is the 3.78 GB standard export", { fill: C.faint, size: 10.5 });
+  var f1Name = txt(grid, 16, 80, "", { fill: C.heading, size: 12, weight: 600 });
+  f1Name.setAttribute("class", "sans");
+  var f1Note = txt(grid, 16, 97, "", { fill: C.text, size: 10.5 });
+  var COLS = 54, CW = 9.6, CGX = 1.6, CH = 14, CGY = 3, CX0 = 16, CY0 = 110, cells = [];
+  for (var ci = 0; ci < 378; ci++) {
+    var cc = ci % COLS, cr = Math.floor(ci / COLS);
+    var cell = el("rect", { x: CX0 + cc * (CW + CGX), y: CY0 + cr * (CH + CGY), width: CW, height: CH, rx: 1, "class": "cell" }, grid);
+    cell.style.fill = CELL.body;
+    if (!reduceMotion) cell.style.transitionDelay = (ci * 1.1) + "ms";
+    cells.push(cell);
+  }
+  var f1Leg = el("g", {}, grid);
+  txt(grid, 16, 318, "the vocabulary table doubles as the LM head, so all of it is read for every generated token", { fill: C.faint, size: 10.5 });
+
+  function drawFamily() {
+    clear(fam);
+    txt(fam, 16, 30, "vocabulary share of a standard W4A16 export", { fill: C.heading, size: 13, weight: 600 }).setAttribute("class", "sans");
+    txt(fam, 16, 48, "tied models store one table; the 9B and 27B store two", { fill: C.faint, size: 10.5 });
+    var bx0 = 140, bx1 = 480, s = linScale(0, 0.6, bx0, bx1);
+    [0, 0.2, 0.4, 0.6].forEach(function (g) {
+      el("line", { x1: s(g), x2: s(g), y1: 72, y2: 270, stroke: C.grid }, fam);
+      txt(fam, s(g), 288, Math.round(g * 100) + "%", { anchor: "middle", fill: C.faint });
+    });
+    family.forEach(function (r, i) {
+      var y = 80 + i * 38;
+      txt(fam, 16, y + 13, r[0], { fill: C.heading, size: 12, base: "middle" });
+      el("rect", { x: bx0, y: y, width: s(r[1]) - bx0, height: 26, rx: 3, fill: r[3] ? CELL.vocab : CELL.ladder }, fam);
+      txt(fam, s(r[1]) + 8, y + 13, pct(r[1], 1) + " of " + r[2] + " GB" + (r[3] ? ", tied" : ", two tables"), { base: "middle", fill: C.text });
+    });
+  }
+  function drawF1(key) {
+    var family_ = key === "family";
+    grid.style.display = family_ ? "none" : "";
+    fam.style.display = family_ ? "" : "none";
+    if (family_) { drawFamily(); return; }
+    var st = STATES[key];
+    f1Name.textContent = st.name;
+    f1Note.textContent = st.note;
+    var idx = 0;
+    st.parts.forEach(function (part) {
+      var K = KIND[part[0]];
+      for (var j = 0; j < part[1]; j++, idx++) {
+        cells[idx].style.fill = K.fill;
+        cells[idx].style.stroke = K.stroke || "none";
+      }
+    });
+    clear(f1Leg);
+    st.parts.filter(function (p) { return !(p[0] === "empty" && p[1] < 2); }).forEach(function (part, n) {
+      var K = KIND[part[0]], col = n % 3, row = Math.floor(n / 3), lx = 16 + col * 210, ly = 252 + row * 20;
+      el("rect", { x: lx, y: ly - 9, width: 10, height: 10, rx: 1.5, fill: K.fill, stroke: K.stroke || "none" }, f1Leg);
+      txt(f1Leg, lx + 16, ly, K.label + " · " + (part[1] / 100).toFixed(2) + " GB", { fill: K.ink ? C.heading : C.text, size: 10.5 });
+    });
   }
   segGroup("f1", drawF1);
-  drawF1("split");
+  drawF1("std");
 
   /* ---------- Figure 2: coverage ---------- */
   var f2 = document.getElementById("f2"), tip2 = tipper(document.getElementById("f2box"));
