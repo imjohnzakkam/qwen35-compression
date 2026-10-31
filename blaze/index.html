@@ -232,7 +232,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px; font-family: va
           </div>
           <div class="fig-scroll" id="fig-hero"></div>
         </div>
-        <figcaption><b>The vocabulary is the largest thing in a 4-bit checkpoint.</b> In the standard export it takes 127 of 378 cells, as many as all 32 FFNs. Glaze v2 moved 32 cells from the vision tower into the body. Blaze-Q moves 118, and Blaze-S keeps the smaller file instead.</figcaption>
+        <figcaption><b>The vocabulary is the largest thing in a 4-bit checkpoint.</b> In the standard export it takes 127 of 378 cells, as many as all 32 FFNs. Glaze v2 moved 32 cells from the vision tower into the body. Blaze-Q moves 118 at the same size, and Blaze-S keeps AutoRound's 4-bit body and drops those 118 cells instead. All four are measured.</figcaption>
       </figure>
 
       <h2 id="tldr">TL;DR</h2>
@@ -888,10 +888,10 @@ export(quantize(model, choice), vocab)</pre>
       empty:  { fill: C.empty, stroke: C.emptyLine, label: "not stored" }
     };
     var STATES = {
-      std:   { name: "Standard 4-bit export (AutoRound)", note: "3.78 GB · body 4.12 bits/weight · excess loss 0.042, measured", parts: [["body", 184], ["vision", 67], ["vocab", 127]] },
-      glaze: { name: "Glaze v2", note: "3.77 GB · body 4.83 bits/weight · excess loss 0.014, measured", parts: [["body", 184], ["move", 32], ["vision", 34], ["vocab", 127], ["empty", 1]] },
-      q:     { name: "Blaze-Q, same size", note: "3.77 GB · body ~6.8 bits/weight · excess 0.001–0.012, predicted", parts: [["body", 184], ["move", 118], ["vision", 34], ["ladder", 41], ["empty", 1]] },
-      s:     { name: "Blaze-S, same quality", note: "2.91 GB · body 4.83 bits/weight · excess ~0.016, predicted", parts: [["body", 184], ["move", 32], ["vision", 34], ["ladder", 41], ["empty", 87]] }
+      std:   { name: "Standard 4-bit export (GPTQ W4A16)", note: "3.78 GB · body 4.12 bits/weight · excess loss 0.054, measured", parts: [["body", 184], ["vision", 67], ["vocab", 127]] },
+      glaze: { name: "Glaze v2", note: "3.80 GB · body 4.83 bits/weight · excess loss 0.014, measured", parts: [["body", 184], ["move", 32], ["vision", 34], ["vocab", 127], ["empty", 1]] },
+      q:     { name: "Blaze-Q, same size", note: "3.78 GB · body 6.8 bits/weight · excess loss 0.0018, measured", parts: [["body", 184], ["move", 118], ["vision", 35], ["ladder", 41]] },
+      s:     { name: "Blaze-S, same quality as AutoRound", note: "2.60 GB · AutoRound's 4.12-bit body · excess loss 0.042, measured", parts: [["body", 184], ["vision", 35], ["ladder", 41], ["empty", 118]] }
     };
     var leg = S("g", null, svg);
     T(svg, 40, 306, "the vocabulary table doubles as the LM head, so all of it is read for every generated token", { size: 10 });
